@@ -59,8 +59,10 @@ def get_tool_usage(db: Session = Depends(get_db)):
 
         results.append(ToolUsageResponse(
             tool_name=tool.tool_name,
+            vendor=tool.vendor,
             total_events=event_count,
             total_cost=Decimal(str(total_cost)),
+            total_tokens=Decimal(str(token_qty)),
             total_tokens_in=Decimal(str(token_qty)),
             total_tokens_out=Decimal("0"),
         ))

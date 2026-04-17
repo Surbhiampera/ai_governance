@@ -40,15 +40,15 @@ ai_governance/
 
 ## Database Tables (PostgreSQL — already created)
 
-| Table | Purpose |
-|-------|---------|
-| `telemetry_events` | Universal event log (heart of system) |
-| `cost_breakdown` | LLM + external + infra cost split per event |
-| `tool_registry` | Registry of all tools/models/vendors |
-| `execution_pipeline` | Pipeline stage tracking |
-| `alerts` | Cost, usage, latency, PII alerts |
-| `data_security_logs` | PII detection & risk scoring per event |
-| `daily_org_summary` | Pre-aggregated daily stats for fast dashboards |
+| Table                | Purpose                                        |
+| -------------------- | ---------------------------------------------- |
+| `telemetry_events`   | Universal event log (heart of system)          |
+| `cost_breakdown`     | LLM + external + infra cost split per event    |
+| `tool_registry`      | Registry of all tools/models/vendors           |
+| `execution_pipeline` | Pipeline stage tracking                        |
+| `alerts`             | Cost, usage, latency, PII alerts               |
+| `data_security_logs` | PII detection & risk scoring per event         |
+| `daily_org_summary`  | Pre-aggregated daily stats for fast dashboards |
 
 ## Quick Start
 
@@ -81,13 +81,22 @@ ANY TOOL → POST /telemetry/event → telemetry_events
                                  → upsert daily_org_summary
 ```
 
+## New Governance Capabilities
+
+- Live per-tool daily cost monitoring including LLM token spend and infrastructure cost
+- Same-day spend-cap alerts for token volume and cost thresholds
+- Data security tracking for data-out MB and PII detection with critical alerts
+- Super-admin log access via `/telemetry/logs` for cross-tool audit and root-cause analysis
+- Multi-vendor tool registry with pluggable tool onboarding and vendor-aware usage metrics
+- Pilot-ready design for Royal Sundaram with client isolation and enterprise deployment in mind
+
 ## Cost Engine
 
-| Cost Type | Calculation |
-|-----------|-------------|
-| LLM | `(input_tokens + output_tokens) / 1000 × rate` (from tool_registry or default $0.002) |
-| External | Sum of `external_tools[].cost` |
-| Infra | `latency_ms × $0.0001` |
+| Cost Type | Calculation                                                                           |
+| --------- | ------------------------------------------------------------------------------------- |
+| LLM       | `(input_tokens + output_tokens) / 1000 × rate` (from tool_registry or default $0.002) |
+| External  | Sum of `external_tools[].cost`                                                        |
+| Infra     | `latency_ms × $0.0001`                                                                |
 
 ## Sample Telemetry Event
 
@@ -102,8 +111,8 @@ ANY TOOL → POST /telemetry/event → telemetry_events
   "org_id": "default",
   "input_data_size_mb": 0.2,
   "output_data_size_mb": 1.5,
-  "tokens": {"input": 1200, "output": 300},
-  "external_tools": [{"name": "serpapi", "cost": 0.01}],
+  "tokens": { "input": 1200, "output": 300 },
+  "external_tools": [{ "name": "serpapi", "cost": 0.01 }],
   "latency_ms": 450
 }
 ```

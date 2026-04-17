@@ -119,6 +119,7 @@ class DailySummaryResponse(BaseModel):
     ml_cost: Decimal
     infra_cost: Decimal
     external_cost: Decimal
+    total_tokens: Optional[Decimal] = None
     avg_latency_ms: int = 0
     success_count: int = 0
     failure_count: int = 0
@@ -134,8 +135,10 @@ class TodaySummaryResponse(BaseModel):
 
 class ToolUsageResponse(BaseModel):
     tool_name: str
+    vendor: Optional[str] = None
     total_events: int
     total_cost: Decimal
+    total_tokens: Decimal = Decimal("0")
     total_tokens_in: Decimal
     total_tokens_out: Decimal
 
@@ -257,6 +260,7 @@ class MonthlySummaryResponse(BaseModel):
     ml_cost: Decimal
     infra_cost: Decimal
     external_cost: Decimal
+    total_tokens: Optional[Decimal] = None
     avg_latency_ms: int = 0
     success_count: int = 0
     failure_count: int = 0

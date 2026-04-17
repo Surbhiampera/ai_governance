@@ -133,6 +133,32 @@ function Dashboard() {
       })()
     : [];
 
+  const dailyToolCostData = Array.isArray(dailyData)
+    ? (() => {
+        const byTool = {};
+        dailyData.forEach((d) => {
+          const name = d.tool_name || "Unknown";
+          if (!byTool[name]) {
+            byTool[name] = {
+              tool_name: name,
+              llm: 0,
+              infra: 0,
+              external: 0,
+              total_tokens: 0,
+            };
+          }
+          byTool[name].llm += Number(d.llm_cost || 0);
+          byTool[name].infra += Number(d.infra_cost || 0);
+          byTool[name].external += Number(d.external_cost || 0);
+          byTool[name].total_tokens += Number(d.total_tokens || 0);
+        });
+        return Object.values(byTool).sort(
+          (a, b) =>
+            b.llm + b.infra + b.external - (a.llm + a.infra + a.external),
+        );
+      })()
+    : [];
+
   const monthlyCostBreakdown = Array.isArray(monthlyData)
     ? monthlyData.map((m) => ({
         month: m.month,
@@ -265,6 +291,53 @@ function Dashboard() {
             </ResponsiveContainer>
           ) : (
             <div className="empty-state">No daily data available</div>
+          )}
+        </div>
+      </div>
+
+      <div className="charts-grid">
+        <div className="card">
+          <div className="card-title">
+            Daily Token & Infrastructure Cost by Tool
+          </div>
+          {dailyToolCostData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart
+                data={dailyToolCostData}
+                margin={{ left: 40, right: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis
+                  dataKey="tool_name"
+                  tick={{ fontSize: 11 }}
+                  interval={0}
+                  angle={-30}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+                />
+                <Tooltip formatter={(v, name) => `$${Number(v).toFixed(4)}`} />
+                <Legend />
+                <Bar dataKey="llm" stackId="a" fill="#6c5ce7" name="LLM Cost" />
+                <Bar
+                  dataKey="infra"
+                  stackId="a"
+                  fill="#0984e3"
+                  name="Infra Cost"
+                />
+                <Bar
+                  dataKey="external"
+                  stackId="a"
+                  fill="#00b894"
+                  name="External Cost"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty-state">No tool cost data available</div>
           )}
         </div>
       </div>

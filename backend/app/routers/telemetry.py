@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, date
 from decimal import Decimal
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -180,3 +181,24 @@ def create_event(event_data: TelemetryEventCreate, db: Session = Depends(get_db)
         created_at=telemetry.created_at,
         cost_breakdown=breakdown_responses,
     )
+
+
+@router.get("/logs", response_model=list[TelemetryEventResponse])
+def list_telemetry_logs(
+    org_id: Optional[str] = Query(None),
+    tool_name: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(TelemetryEvent)
+    if org_id:
+        query = query.filter(TelemetryEvent.org_id == org_id)
+    if tool_name:
+        query = query.filter(TelemetryEvent.tool_name == tool_name)
+    if start_date:
+        query = query.filter(TelemetryEvent.created_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date:
+        query = query.filter(TelemetryEvent.created_at <= datetime.combine(end_date, datetime.max.time()))
+    rows = query.order_by(TelemetryEvent.created_at.desc()).all()
+    return [TelemetryEventResponse.model_validate(r) for r in rows]
