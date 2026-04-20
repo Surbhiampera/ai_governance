@@ -1,17 +1,19 @@
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.dialects.postgresql import insert
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import CostBreakdown, DataSecurityLog, DailyOrgSummary, TelemetryEvent
+from app.models import CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent
 from app.schemas import (
+    BatchTelemetryIngest,
     CostBreakdownResponse,
     TelemetryEventCreate,
     TelemetryEventResponse,
+    TraceDetailResponse,
 )
 from app.services.alert_engine import AlertEngine
 from app.services.cost_engine import CostEngine
@@ -26,169 +28,29 @@ alert_engine = AlertEngine()
 
 @router.post("/event", response_model=TelemetryEventResponse)
 def create_event(event_data: TelemetryEventCreate, db: Session = Depends(get_db)):
-    now = datetime.utcnow()
-    end_time = now + timedelta(milliseconds=event_data.latency_ms)
-
-    # 1. Save telemetry event
-    telemetry = TelemetryEvent(
-        event_id=event_data.event_id,
-        org_id=event_data.org_id,
-        project_id=event_data.project_id,
-        user_id=event_data.user_id,
-        tool_name=event_data.tool_name,
-        service_type=event_data.service_type,
-        component_name=event_data.component_name,
-        execution_type=event_data.execution_type,
-        status=event_data.status,
-        input_data_size_mb=event_data.input_data_size_mb,
-        output_data_size_mb=event_data.output_data_size_mb,
-        start_time=now,
-        end_time=end_time,
-        latency_ms=event_data.latency_ms,
-    )
-    db.add(telemetry)
-    db.flush()
-
-    # 2. Calculate costs
-    cost_summary = cost_engine.calculate(event_data, db)
-
-    # 3. Insert cost_breakdown rows
-    cost_rows = []
-
-    if cost_summary.llm_cost > 0:
-        token_qty = Decimal("0")
-        if event_data.tokens:
-            token_qty = Decimal(str(event_data.tokens.input + event_data.tokens.output))
-        row = CostBreakdown(
-            event_id=event_data.event_id,
-            cost_type="llm",
-            component_name=event_data.component_name,
-            unit_cost=cost_summary.llm_cost / token_qty * Decimal("1000") if token_qty > 0 else Decimal("0"),
-            quantity=token_qty,
-            total_cost=cost_summary.llm_cost,
-        )
-        db.add(row)
-        cost_rows.append(row)
-
-    if cost_summary.external_cost > 0:
-        row = CostBreakdown(
-            event_id=event_data.event_id,
-            cost_type="external",
-            component_name="external_tools",
-            unit_cost=cost_summary.external_cost,
-            quantity=Decimal(str(len(event_data.external_tools))),
-            total_cost=cost_summary.external_cost,
-        )
-        db.add(row)
-        cost_rows.append(row)
-
-    if cost_summary.infra_cost > 0:
-        row = CostBreakdown(
-            event_id=event_data.event_id,
-            cost_type="infra",
-            component_name="compute",
-            unit_cost=Decimal("0.0001"),
-            quantity=Decimal(str(event_data.latency_ms)),
-            total_cost=cost_summary.infra_cost,
-        )
-        db.add(row)
-        cost_rows.append(row)
-
-    db.flush()
-
-    # 4. Security analysis
-    security_result = security_engine.analyze(event_data)
-    security_log = DataSecurityLog(
-        event_id=event_data.event_id,
-        pii_detected=security_result["pii_detected"],
-        pii_type=security_result["pii_type"],
-        masking_applied=security_result["masking_applied"],
-        risk_score=security_result["risk_score"],
-        data_in_mb=event_data.input_data_size_mb,
-        data_out_mb=event_data.output_data_size_mb,
-    )
-    db.add(security_log)
-    db.flush()
-
-    # 5. Alert evaluation
-    alert_engine.evaluate(db, event_data, cost_summary, security_result)
-
-    # 6. Upsert daily_org_summary
-    today = date.today()
-    is_success = 1 if event_data.status == "success" else 0
-    is_failure = 1 if event_data.status != "success" else 0
-    stmt = insert(DailyOrgSummary).values(
-        org_id=event_data.org_id,
-        project_id=event_data.project_id,
-        tool_name=event_data.tool_name,
-        date=today,
-        total_events=1,
-        total_cost=cost_summary.total_cost,
-        llm_cost=cost_summary.llm_cost,
-        ml_cost=Decimal("0"),
-        infra_cost=cost_summary.infra_cost,
-        external_cost=cost_summary.external_cost,
-        avg_latency_ms=event_data.latency_ms,
-        success_count=is_success,
-        failure_count=is_failure,
-        total_input_mb=event_data.input_data_size_mb,
-        total_output_mb=event_data.output_data_size_mb,
-    ).on_conflict_do_update(
-        index_elements=["org_id", "project_id", "tool_name", "date"],
-        set_={
-            "total_events": DailyOrgSummary.total_events + 1,
-            "total_cost": DailyOrgSummary.total_cost + cost_summary.total_cost,
-            "llm_cost": DailyOrgSummary.llm_cost + cost_summary.llm_cost,
-            "infra_cost": DailyOrgSummary.infra_cost + cost_summary.infra_cost,
-            "external_cost": DailyOrgSummary.external_cost + cost_summary.external_cost,
-            "success_count": DailyOrgSummary.success_count + is_success,
-            "failure_count": DailyOrgSummary.failure_count + is_failure,
-            "total_input_mb": DailyOrgSummary.total_input_mb + event_data.input_data_size_mb,
-            "total_output_mb": DailyOrgSummary.total_output_mb + event_data.output_data_size_mb,
-        },
-    )
-    db.execute(stmt)
+    event = _ingest_event(db, event_data)
     db.commit()
-    db.refresh(telemetry)
+    return _build_event_response(db, event)
 
-    # 7. Build response
-    breakdown_responses = [
-        CostBreakdownResponse(
-            cost_type=r.cost_type,
-            component_name=r.component_name,
-            unit_cost=r.unit_cost,
-            quantity=r.quantity,
-            total_cost=r.total_cost,
-        )
-        for r in cost_rows
-    ]
 
-    return TelemetryEventResponse(
-        event_id=telemetry.event_id,
-        org_id=telemetry.org_id,
-        project_id=telemetry.project_id,
-        user_id=telemetry.user_id,
-        tool_name=telemetry.tool_name,
-        service_type=telemetry.service_type,
-        component_name=telemetry.component_name,
-        execution_type=telemetry.execution_type,
-        status=telemetry.status,
-        input_data_size_mb=telemetry.input_data_size_mb,
-        output_data_size_mb=telemetry.output_data_size_mb,
-        start_time=telemetry.start_time,
-        end_time=telemetry.end_time,
-        latency_ms=telemetry.latency_ms,
-        created_at=telemetry.created_at,
-        cost_breakdown=breakdown_responses,
-    )
+@router.post("/events/batch")
+def ingest_events_batch(batch: BatchTelemetryIngest, db: Session = Depends(get_db)):
+    ingested = []
+    for event_data in batch.events:
+        event = _ingest_event(db, event_data)
+        ingested.append(event.event_id)
+    db.commit()
+    return {"status": "completed", "ingested_count": len(ingested), "event_ids": ingested}
 
 
 @router.get("/logs", response_model=list[TelemetryEventResponse])
 def list_telemetry_logs(
     org_id: Optional[str] = Query(None),
     tool_name: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
 ):
     query = db.query(TelemetryEvent)
@@ -196,9 +58,305 @@ def list_telemetry_logs(
         query = query.filter(TelemetryEvent.org_id == org_id)
     if tool_name:
         query = query.filter(TelemetryEvent.tool_name == tool_name)
+    if status:
+        query = query.filter(TelemetryEvent.status == status)
     if start_date:
         query = query.filter(TelemetryEvent.created_at >= datetime.combine(start_date, datetime.min.time()))
     if end_date:
         query = query.filter(TelemetryEvent.created_at <= datetime.combine(end_date, datetime.max.time()))
-    rows = query.order_by(TelemetryEvent.created_at.desc()).all()
-    return [TelemetryEventResponse.model_validate(r) for r in rows]
+
+    rows = query.order_by(TelemetryEvent.created_at.desc()).limit(limit).all()
+    return [_build_event_response(db, row) for row in rows]
+
+
+@router.get("/traces/{event_id}", response_model=TraceDetailResponse)
+def get_event_trace(event_id: str, db: Session = Depends(get_db)):
+    event = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    security = db.query(DataSecurityLog).filter(DataSecurityLog.event_id == event_id).first()
+    return TraceDetailResponse(event=_build_event_response(db, event), security=security)
+
+
+def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEvent:
+    existing = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_data.event_id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="event_id already exists")
+
+    started_at = event_data.started_at or datetime.utcnow()
+    completed_at = event_data.completed_at or (started_at + timedelta(milliseconds=event_data.latency_ms))
+    total_tokens = event_data.prompt_tokens + event_data.completion_tokens
+
+    cost_summary = cost_engine.calculate(event_data, db)
+    security_result = security_engine.analyze(event_data)
+    anomaly_score, abnormal_usage_spike = _detect_event_spike(db, event_data)
+
+    telemetry = TelemetryEvent(
+        event_id=event_data.event_id,
+        request_id=event_data.request_id,
+        trace_id=event_data.trace_id or event_data.event_id,
+        org_id=event_data.org_id,
+        project_id=event_data.project_id,
+        user_id=event_data.user_id,
+        api_key_id=event_data.api_key_id,
+        tool_name=event_data.tool_name,
+        provider=event_data.provider,
+        model_name=event_data.model_name,
+        service_type=event_data.service_type,
+        component_name=event_data.component_name,
+        execution_type=event_data.execution_type,
+        status=event_data.status,
+        input_data_size_mb=event_data.input_data_size_mb,
+        output_data_size_mb=event_data.output_data_size_mb,
+        prompt_tokens=event_data.prompt_tokens,
+        completion_tokens=event_data.completion_tokens,
+        total_tokens=total_tokens,
+        llm_cost=cost_summary.llm_cost,
+        infra_cost=cost_summary.infra_cost,
+        external_cost=cost_summary.external_cost,
+        total_cost=cost_summary.total_cost,
+        risk_score=security_result["risk_score"],
+        anomaly_score=anomaly_score,
+        misuse_detected=security_result["misuse_pattern_detected"],
+        abnormal_usage_spike=abnormal_usage_spike,
+        started_at=started_at,
+        completed_at=completed_at,
+        latency_ms=event_data.latency_ms,
+        tags=event_data.tags,
+        metadata_json=event_data.metadata_json,
+    )
+    db.add(telemetry)
+    db.flush()
+
+    _save_cost_breakdown(db, event_data, cost_summary)
+    _save_pipeline_stages(db, event_data)
+    _save_security_log(db, event_data, security_result, abnormal_usage_spike)
+    _upsert_daily_summary(db, telemetry)
+    alert_engine.evaluate(db, event_data, cost_summary, security_result, anomaly_score, abnormal_usage_spike)
+    db.flush()
+    return telemetry
+
+
+def _save_cost_breakdown(db: Session, event_data: TelemetryEventCreate, cost_summary) -> None:
+    total_tokens = Decimal(str(event_data.prompt_tokens + event_data.completion_tokens))
+    if total_tokens > 0:
+        db.add(
+            CostBreakdown(
+                event_id=event_data.event_id,
+                cost_type="llm",
+                component_name=event_data.model_name or event_data.component_name or event_data.tool_name,
+                unit_cost=(cost_summary.llm_cost / total_tokens).quantize(Decimal("0.000001")),
+                quantity=total_tokens,
+                total_cost=cost_summary.llm_cost,
+            )
+        )
+    if cost_summary.infra_cost > 0:
+        db.add(
+            CostBreakdown(
+                event_id=event_data.event_id,
+                cost_type="infra",
+                component_name="compute",
+                unit_cost=Decimal("0.000080"),
+                quantity=Decimal(str(max(event_data.latency_ms, 1))),
+                total_cost=cost_summary.infra_cost,
+            )
+        )
+    for item in event_data.external_tools:
+        db.add(
+            CostBreakdown(
+                event_id=event_data.event_id,
+                cost_type="external",
+                component_name=item.name,
+                unit_cost=Decimal(str(item.cost)),
+                quantity=Decimal("1"),
+                total_cost=Decimal(str(item.cost)),
+            )
+        )
+
+
+def _save_pipeline_stages(db: Session, event_data: TelemetryEventCreate) -> None:
+    for index, stage in enumerate(event_data.stages):
+        db.add(
+            ExecutionPipeline(
+                event_id=event_data.event_id,
+                stage_order=stage.stage_order if stage.stage_order is not None else index,
+                stage_name=stage.stage_name,
+                system_name=stage.system_name,
+                status=stage.status,
+                stage_latency_ms=stage.stage_latency_ms,
+                retry_count=stage.retry_count,
+                details=stage.details,
+            )
+        )
+
+
+def _save_security_log(
+    db: Session,
+    event_data: TelemetryEventCreate,
+    security_result: dict,
+    abnormal_usage_spike: bool,
+) -> None:
+    db.add(
+        DataSecurityLog(
+            event_id=event_data.event_id,
+            pii_detected=security_result["pii_detected"],
+            pii_type=security_result["pii_type"],
+            data_out_violation=security_result["data_out_violation"],
+            misuse_pattern_detected=security_result["misuse_pattern_detected"],
+            abnormal_usage_spike=abnormal_usage_spike,
+            masking_applied=security_result["masking_applied"],
+            risk_score=security_result["risk_score"],
+            data_in_mb=event_data.input_data_size_mb,
+            data_out_mb=event_data.output_data_size_mb,
+        )
+    )
+
+
+def _upsert_daily_summary(db: Session, event: TelemetryEvent) -> None:
+    summary_date = (event.completed_at or event.created_at or datetime.utcnow()).date()
+    summary = (
+        db.query(DailyOrgSummary)
+        .filter(
+            DailyOrgSummary.org_id == event.org_id,
+            DailyOrgSummary.project_id == event.project_id,
+            DailyOrgSummary.tool_name == event.tool_name,
+            DailyOrgSummary.date == summary_date,
+        )
+        .first()
+    )
+
+    success_count = 1 if (event.status or "").lower() in {"success", "completed"} else 0
+    failure_count = 0 if success_count else 1
+    anomaly_count = 1 if event.abnormal_usage_spike else 0
+    misuse_count = 1 if event.misuse_detected else 0
+
+    if not summary:
+        summary = DailyOrgSummary(
+            org_id=event.org_id,
+            project_id=event.project_id,
+            tool_name=event.tool_name,
+            date=summary_date,
+            total_events=1,
+            total_cost=event.total_cost,
+            llm_cost=event.llm_cost,
+            infra_cost=event.infra_cost,
+            external_cost=event.external_cost,
+            total_prompt_tokens=event.prompt_tokens,
+            total_completion_tokens=event.completion_tokens,
+            total_tokens=event.total_tokens,
+            avg_latency_ms=event.latency_ms,
+            success_count=success_count,
+            failure_count=failure_count,
+            anomaly_count=anomaly_count,
+            misuse_count=misuse_count,
+            total_input_mb=event.input_data_size_mb,
+            total_output_mb=event.output_data_size_mb,
+            avg_risk_score=event.risk_score,
+        )
+        db.add(summary)
+        return
+
+    previous_events = summary.total_events or 0
+    summary.total_events = previous_events + 1
+    summary.total_cost = Decimal(str(summary.total_cost or 0)) + Decimal(str(event.total_cost or 0))
+    summary.llm_cost = Decimal(str(summary.llm_cost or 0)) + Decimal(str(event.llm_cost or 0))
+    summary.infra_cost = Decimal(str(summary.infra_cost or 0)) + Decimal(str(event.infra_cost or 0))
+    summary.external_cost = Decimal(str(summary.external_cost or 0)) + Decimal(str(event.external_cost or 0))
+    summary.total_prompt_tokens = (summary.total_prompt_tokens or 0) + (event.prompt_tokens or 0)
+    summary.total_completion_tokens = (summary.total_completion_tokens or 0) + (event.completion_tokens or 0)
+    summary.total_tokens = (summary.total_tokens or 0) + (event.total_tokens or 0)
+    summary.avg_latency_ms = int(
+        (((summary.avg_latency_ms or 0) * previous_events) + (event.latency_ms or 0)) / (previous_events + 1)
+    )
+    summary.success_count = (summary.success_count or 0) + success_count
+    summary.failure_count = (summary.failure_count or 0) + failure_count
+    summary.anomaly_count = (summary.anomaly_count or 0) + anomaly_count
+    summary.misuse_count = (summary.misuse_count or 0) + misuse_count
+    summary.total_input_mb = Decimal(str(summary.total_input_mb or 0)) + Decimal(str(event.input_data_size_mb or 0))
+    summary.total_output_mb = Decimal(str(summary.total_output_mb or 0)) + Decimal(str(event.output_data_size_mb or 0))
+    summary.avg_risk_score = Decimal(
+        str((((Decimal(str(summary.avg_risk_score or 0)) * previous_events) + Decimal(str(event.risk_score or 0))) / (previous_events + 1)))
+    ).quantize(Decimal("0.01"))
+
+
+def _detect_event_spike(db: Session, event_data: TelemetryEventCreate) -> tuple[Decimal, bool]:
+    today = date.today()
+    recent_counts = (
+        db.query(func.date(TelemetryEvent.created_at), func.count(TelemetryEvent.id))
+        .filter(
+            TelemetryEvent.org_id == event_data.org_id,
+            TelemetryEvent.tool_name == event_data.tool_name,
+            TelemetryEvent.created_at >= datetime.combine(today - timedelta(days=7), datetime.min.time()),
+            TelemetryEvent.created_at < datetime.combine(today, datetime.min.time()),
+        )
+        .group_by(func.date(TelemetryEvent.created_at))
+        .all()
+    )
+    baseline = Decimal(str(sum(row[1] for row in recent_counts) / len(recent_counts))) if recent_counts else Decimal("1")
+    today_count = (
+        db.query(func.count(TelemetryEvent.id))
+        .filter(
+            TelemetryEvent.org_id == event_data.org_id,
+            TelemetryEvent.tool_name == event_data.tool_name,
+            func.date(TelemetryEvent.created_at) == today,
+        )
+        .scalar()
+        or 0
+    )
+    observed = Decimal(str(today_count + 1))
+    anomaly_ratio = observed / baseline if baseline > 0 else Decimal("1")
+    abnormal_usage_spike = anomaly_ratio >= Decimal("1.5")
+    return anomaly_ratio.quantize(Decimal("0.01")), abnormal_usage_spike
+
+
+def _build_event_response(db: Session, event: TelemetryEvent) -> TelemetryEventResponse:
+    breakdown = (
+        db.query(CostBreakdown)
+        .filter(CostBreakdown.event_id == event.event_id)
+        .order_by(CostBreakdown.id.asc())
+        .all()
+    )
+    stages = (
+        db.query(ExecutionPipeline)
+        .filter(ExecutionPipeline.event_id == event.event_id)
+        .order_by(ExecutionPipeline.stage_order.asc(), ExecutionPipeline.id.asc())
+        .all()
+    )
+    return TelemetryEventResponse(
+        event_id=event.event_id,
+        request_id=event.request_id,
+        trace_id=event.trace_id,
+        org_id=event.org_id,
+        project_id=event.project_id,
+        user_id=event.user_id,
+        api_key_id=event.api_key_id,
+        tool_name=event.tool_name,
+        provider=event.provider,
+        model_name=event.model_name,
+        service_type=event.service_type,
+        component_name=event.component_name,
+        execution_type=event.execution_type,
+        status=event.status,
+        input_data_size_mb=Decimal(str(event.input_data_size_mb or 0)),
+        output_data_size_mb=Decimal(str(event.output_data_size_mb or 0)),
+        prompt_tokens=event.prompt_tokens or 0,
+        completion_tokens=event.completion_tokens or 0,
+        total_tokens=event.total_tokens or 0,
+        llm_cost=Decimal(str(event.llm_cost or 0)),
+        infra_cost=Decimal(str(event.infra_cost or 0)),
+        external_cost=Decimal(str(event.external_cost or 0)),
+        total_cost=Decimal(str(event.total_cost or 0)),
+        risk_score=Decimal(str(event.risk_score or 0)),
+        anomaly_score=Decimal(str(event.anomaly_score or 0)),
+        misuse_detected=bool(event.misuse_detected),
+        abnormal_usage_spike=bool(event.abnormal_usage_spike),
+        started_at=event.started_at,
+        completed_at=event.completed_at,
+        latency_ms=event.latency_ms or 0,
+        tags=event.tags or [],
+        metadata_json=event.metadata_json or {},
+        created_at=event.created_at,
+        cost_breakdown=[CostBreakdownResponse.model_validate(item) for item in breakdown],
+        stages=stages,
+    )

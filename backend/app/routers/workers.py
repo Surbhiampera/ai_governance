@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.workers.tasks import run_daily_aggregation, run_monthly_aggregation
+from app.workers.tasks import run_alert_scan, run_anomaly_detection, run_daily_aggregation, run_monthly_aggregation
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -26,4 +26,28 @@ def trigger_daily_aggregation_sync():
 @router.post("/monthly-aggregation/sync")
 def trigger_monthly_aggregation_sync():
     result = run_monthly_aggregation()
+    return {"status": "completed", "result": result}
+
+
+@router.post("/anomaly-detection")
+def trigger_anomaly_detection():
+    run_anomaly_detection.delay()
+    return {"status": "queued", "task": "anomaly_detection"}
+
+
+@router.post("/anomaly-detection/sync")
+def trigger_anomaly_detection_sync():
+    result = run_anomaly_detection()
+    return {"status": "completed", "result": result}
+
+
+@router.post("/alert-scan")
+def trigger_alert_scan():
+    run_alert_scan.delay()
+    return {"status": "queued", "task": "alert_scan"}
+
+
+@router.post("/alert-scan/sync")
+def trigger_alert_scan_sync():
+    result = run_alert_scan()
     return {"status": "completed", "result": result}

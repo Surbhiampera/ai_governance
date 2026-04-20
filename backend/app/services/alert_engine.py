@@ -1,11 +1,10 @@
-import os
 from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Alert, Budget, CostBreakdown, DailyOrgSummary, TelemetryEvent
+from app.models import Alert, Budget, DailyOrgSummary, GovernanceRule, TelemetryEvent, UsageAnomaly
 from app.schemas import CostSummary, TelemetryEventCreate
 
 
@@ -16,131 +15,224 @@ class AlertEngine:
         event_data: TelemetryEventCreate,
         cost_summary: CostSummary,
         security_result: dict,
+        anomaly_score: Decimal,
+        abnormal_usage_spike: bool,
     ) -> None:
-        cost_threshold = Decimal(os.getenv("ALERT_COST_THRESHOLD", "50.0"))
-        data_out_threshold = float(os.getenv("ALERT_DATA_OUT_THRESHOLD_MB", "10.0"))
-        spike_percent = float(os.getenv("ALERT_USAGE_SPIKE_PERCENT", "30.0"))
-        token_threshold = float(os.getenv("ALERT_TOKEN_THRESHOLD", "10000"))
+        event_metrics = {
+            "total_cost": Decimal(str(cost_summary.total_cost)),
+            "risk_score": Decimal(str(security_result["risk_score"])),
+            "latency_ms": Decimal(str(event_data.latency_ms)),
+            "prompt_tokens": Decimal(str(event_data.prompt_tokens)),
+            "completion_tokens": Decimal(str(event_data.completion_tokens)),
+            "total_tokens": Decimal(str(event_data.prompt_tokens + event_data.completion_tokens)),
+            "data_out_mb": Decimal(str(event_data.output_data_size_mb)),
+            "anomaly_score": Decimal(str(anomaly_score)),
+        }
 
-        # Same-day total cost threshold check for the tool
-        today = date.today()
-        total_cost_today = float(db.query(func.coalesce(func.sum(CostBreakdown.total_cost), 0)).join(
-            TelemetryEvent, CostBreakdown.event_id == TelemetryEvent.event_id
-        ).filter(
-            TelemetryEvent.org_id == event_data.org_id,
-            TelemetryEvent.tool_name == event_data.tool_name,
-            func.date(TelemetryEvent.created_at) == today,
-        ).scalar() or 0)
-
-        if total_cost_today > float(cost_threshold):
-            db.add(Alert(
+        if security_result["pii_detected"]:
+            self._create_alert(
+                db=db,
                 org_id=event_data.org_id,
                 tool_name=event_data.tool_name,
-                alert_type="daily_cost_threshold",
-                severity="high",
-                message=f"Same-day cost ${total_cost_today:.2f} exceeded daily threshold ${cost_threshold:.2f}",
-                threshold_value=cost_threshold,
-                actual_value=Decimal(str(total_cost_today)),
-            ))
-
-        # Token volume threshold check for the tool
-        today_token_quantity = float(db.query(func.coalesce(func.sum(CostBreakdown.quantity), 0)).join(
-            TelemetryEvent, CostBreakdown.event_id == TelemetryEvent.event_id
-        ).filter(
-            TelemetryEvent.org_id == event_data.org_id,
-            TelemetryEvent.tool_name == event_data.tool_name,
-            func.date(TelemetryEvent.created_at) == today,
-            CostBreakdown.cost_type == "llm",
-        ).scalar() or 0)
-
-        if today_token_quantity > token_threshold:
-            db.add(Alert(
-                org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                alert_type="token_volume_threshold",
-                severity="high",
-                message=f"Daily token usage {today_token_quantity:.0f} exceeded threshold {token_threshold:.0f}",
-                threshold_value=Decimal(str(token_threshold)),
-                actual_value=Decimal(str(today_token_quantity)),
-            ))
-
-        # Data output spike / external data exposure check
-        if float(event_data.output_data_size_mb) > data_out_threshold:
-            db.add(Alert(
-                org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                alert_type="data_out_threshold",
-                severity="medium",
-                message=f"Output data {event_data.output_data_size_mb} MB exceeds threshold {data_out_threshold} MB",
-                threshold_value=Decimal(str(data_out_threshold)),
-                actual_value=Decimal(str(event_data.output_data_size_mb)),
-            ))
-
-        if security_result.get("pii_detected"):
-            db.add(Alert(
-                org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
+                event_id=event_data.event_id,
                 alert_type="pii_detected",
                 severity="critical",
-                message=f"Sensitive/PII data detected and blocked with risk score {security_result['risk_score']}",
-                threshold_value=Decimal("50"),
-                actual_value=Decimal(str(security_result["risk_score"])),
-            ))
+                message=f"PII detected for event {event_data.event_id} with risk score {security_result['risk_score']}.",
+                threshold=Decimal("50"),
+                actual=Decimal(str(security_result["risk_score"])),
+            )
 
-        # Usage spike: compare today vs yesterday event count
-        yesterday = today - timedelta(days=1)
+        if security_result["data_out_violation"]:
+            self._create_alert(
+                db=db,
+                org_id=event_data.org_id,
+                tool_name=event_data.tool_name,
+                event_id=event_data.event_id,
+                alert_type="data_out_violation",
+                severity="high",
+                message=f"Data out policy threshold exceeded for {event_data.event_id}.",
+                threshold=Decimal("12"),
+                actual=Decimal(str(event_data.output_data_size_mb)),
+            )
 
-        today_count = db.query(func.count(TelemetryEvent.event_id)).filter(
-            TelemetryEvent.tool_name == event_data.tool_name,
-            func.date(TelemetryEvent.created_at) == today,
-        ).scalar() or 0
+        if security_result["misuse_pattern_detected"]:
+            self._create_alert(
+                db=db,
+                org_id=event_data.org_id,
+                tool_name=event_data.tool_name,
+                event_id=event_data.event_id,
+                alert_type="misuse_pattern",
+                severity="critical",
+                message=f"Potential misuse pattern detected for event {event_data.event_id}.",
+                threshold=Decimal("1"),
+                actual=Decimal("1"),
+            )
 
-        yesterday_count = db.query(func.count(TelemetryEvent.event_id)).filter(
-            TelemetryEvent.tool_name == event_data.tool_name,
-            func.date(TelemetryEvent.created_at) == yesterday,
-        ).scalar() or 0
+        if abnormal_usage_spike:
+            self._create_alert(
+                db=db,
+                org_id=event_data.org_id,
+                tool_name=event_data.tool_name,
+                event_id=event_data.event_id,
+                alert_type="usage_spike",
+                severity="high",
+                message=f"Abnormal usage spike detected for {event_data.tool_name}.",
+                threshold=Decimal("1.50"),
+                actual=Decimal(str(anomaly_score)),
+            )
 
-        if yesterday_count > 0:
-            increase_pct = ((today_count - yesterday_count) / yesterday_count) * 100
-            if increase_pct > spike_percent:
-                db.add(Alert(
+        self._evaluate_budgets(db, event_data.org_id, event_data.project_id, event_data.tool_name)
+        self._evaluate_custom_rules(db, event_data, event_metrics)
+        db.flush()
+
+    def _evaluate_budgets(self, db: Session, org_id: str, project_id: str | None, tool_name: str) -> None:
+        today = date.today()
+        budgets = db.query(Budget).filter(Budget.org_id == org_id).all()
+        for budget in budgets:
+            spent_query = db.query(func.coalesce(func.sum(DailyOrgSummary.total_cost), 0)).filter(
+                DailyOrgSummary.org_id == org_id
+            )
+            if budget.project_id:
+                spent_query = spent_query.filter(DailyOrgSummary.project_id == budget.project_id)
+
+            if budget.budget_type == "daily":
+                spent_query = spent_query.filter(DailyOrgSummary.date == today)
+            else:
+                spent_query = spent_query.filter(DailyOrgSummary.date >= today.replace(day=1))
+
+            spent = Decimal(str(spent_query.scalar() or 0))
+            limit_amount = Decimal(str(budget.limit_amount or 0))
+            threshold_percent = Decimal(str(budget.alert_threshold_percent or 80))
+            if limit_amount <= 0:
+                continue
+            percentage = (spent / limit_amount) * Decimal("100")
+            if percentage >= threshold_percent:
+                self._create_alert(
+                    db=db,
+                    org_id=org_id,
+                    tool_name=tool_name,
+                    event_id=None,
+                    alert_type="budget_threshold",
+                    severity="high",
+                    message=f"{budget.budget_type.capitalize()} budget is at {percentage:.1f}% of limit.",
+                    threshold=limit_amount,
+                    actual=spent,
+                )
+
+    def _evaluate_custom_rules(
+        self,
+        db: Session,
+        event_data: TelemetryEventCreate,
+        metrics: dict[str, Decimal],
+    ) -> None:
+        rules = db.query(GovernanceRule).filter(GovernanceRule.is_active.is_(True)).all()
+        for rule in rules:
+            metric_value = metrics.get(rule.metric_name)
+            if metric_value is None:
+                continue
+
+            if rule.scope_level == "tool" and rule.scope_reference and rule.scope_reference != event_data.tool_name:
+                continue
+            if rule.scope_level == "project" and rule.scope_reference and rule.scope_reference != event_data.project_id:
+                continue
+            if rule.scope_level == "organization" and rule.scope_reference and rule.scope_reference != event_data.org_id:
+                continue
+
+            if self._compare(metric_value, Decimal(str(rule.threshold_value)), rule.operator):
+                self._create_alert(
+                    db=db,
                     org_id=event_data.org_id,
                     tool_name=event_data.tool_name,
-                    alert_type="usage_spike",
-                    severity="medium",
-                    message=f"Usage spike: {increase_pct:.1f}% increase vs yesterday",
-                    threshold_value=Decimal(str(spike_percent)),
-                    actual_value=Decimal(str(increase_pct)),
-                ))
+                    event_id=event_data.event_id,
+                    alert_type=f"rule:{rule.metric_name}",
+                    severity=rule.severity,
+                    message=f"Rule '{rule.rule_name}' triggered on {rule.metric_name}.",
+                    threshold=Decimal(str(rule.threshold_value)),
+                    actual=metric_value,
+                    rule_id=rule.id,
+                    source="rule_engine",
+                )
 
-        # Budget threshold check
-        budgets = db.query(Budget).filter(Budget.org_id == event_data.org_id).all()
-        for budget in budgets:
-            if budget.budget_type == "daily":
-                spent = db.query(func.coalesce(func.sum(DailyOrgSummary.total_cost), 0)).filter(
-                    DailyOrgSummary.org_id == event_data.org_id,
-                    DailyOrgSummary.date == today,
-                ).scalar()
-            else:  # monthly
-                month_start = today.replace(day=1)
-                spent = db.query(func.coalesce(func.sum(DailyOrgSummary.total_cost), 0)).filter(
-                    DailyOrgSummary.org_id == event_data.org_id,
-                    DailyOrgSummary.date >= month_start,
-                ).scalar()
-
-            spent = float(spent or 0)
-            limit_val = float(budget.limit_amount or 0)
-            if limit_val > 0:
-                pct = (spent / limit_val) * 100
-                if pct >= (budget.alert_threshold_percent or 80):
-                    db.add(Alert(
-                        org_id=event_data.org_id,
-                        tool_name=event_data.tool_name,
-                        alert_type="budget_threshold",
-                        severity="high",
-                        message=f"Budget {budget.budget_type} threshold reached: {pct:.1f}% of ${limit_val:.2f} limit (spent ${spent:.2f})",
-                        threshold_value=Decimal(str(limit_val)),
-                        actual_value=Decimal(str(spent)),
-                    ))
-
+    def create_daily_anomaly_alerts(self, db: Session) -> int:
+        recent = (
+            db.query(UsageAnomaly)
+            .filter(UsageAnomaly.status == "open")
+            .order_by(UsageAnomaly.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        created = 0
+        for anomaly in recent:
+            self._create_alert(
+                db=db,
+                org_id=anomaly.org_id,
+                tool_name=anomaly.tool_name,
+                event_id=anomaly.event_id,
+                alert_type=anomaly.anomaly_type,
+                severity=anomaly.severity,
+                message=anomaly.message or "Anomaly detected during scheduled scan.",
+                threshold=Decimal(str(anomaly.baseline_value)),
+                actual=Decimal(str(anomaly.observed_value)),
+                source="anomaly_scan",
+            )
+            created += 1
         db.flush()
+        return created
+
+    def _compare(self, left: Decimal, right: Decimal, operator: str) -> bool:
+        if operator == ">":
+            return left > right
+        if operator == ">=":
+            return left >= right
+        if operator == "<":
+            return left < right
+        if operator == "<=":
+            return left <= right
+        if operator == "=":
+            return left == right
+        return False
+
+    def _create_alert(
+        self,
+        db: Session,
+        org_id: str | None,
+        tool_name: str | None,
+        event_id: str | None,
+        alert_type: str,
+        severity: str,
+        message: str,
+        threshold: Decimal | None,
+        actual: Decimal | None,
+        rule_id: int | None = None,
+        source: str = "system",
+    ) -> None:
+        recent_cutoff = date.today() - timedelta(days=1)
+        existing = (
+            db.query(Alert)
+            .filter(
+                Alert.org_id == org_id,
+                Alert.tool_name == tool_name,
+                Alert.alert_type == alert_type,
+                Alert.status == "active",
+                func.date(Alert.created_at) >= recent_cutoff,
+            )
+            .first()
+        )
+        if existing:
+            return
+
+        db.add(
+            Alert(
+                org_id=org_id,
+                tool_name=tool_name,
+                event_id=event_id,
+                rule_id=rule_id,
+                alert_type=alert_type,
+                severity=severity,
+                source=source,
+                message=message,
+                threshold_value=threshold,
+                actual_value=actual,
+                status="active",
+            )
+        )

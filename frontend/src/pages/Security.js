@@ -1,141 +1,142 @@
-import React, { useState, useEffect } from 'react';
-import { getSecuritySummary, getSecurityLogs } from '../api';
+import React, { useEffect, useState } from "react";
+import { getSecurityLogs, getSecuritySummary, getUsageAnomalies } from "../api";
 
 function Security() {
-  const [data, setData] = useState(null);
+  const [summary, setSummary] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [piiFilter, setPiiFilter] = useState('');
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [summaryRes, logsRes] = await Promise.allSettled([
+  useEffect(() => {
+    const load = async () => {
+      const [summaryRes, logsRes, anomaliesRes] = await Promise.all([
         getSecuritySummary(),
-        getSecurityLogs(piiFilter === '' ? undefined : piiFilter === 'true'),
+        getSecurityLogs(),
+        getUsageAnomalies("open"),
       ]);
-      if (summaryRes.status === 'fulfilled') setData(summaryRes.value.data);
-      if (logsRes.status === 'fulfilled') setLogs(logsRes.value.data || []);
-    } catch (err) {
-      setError(err.code === 'ECONNABORTED' || err.message?.includes('Network')
-        ? 'Cannot connect to backend. Make sure the server is running on port 8000.'
-        : err.response?.data?.detail || err.message);
-    } finally {
+      setSummary(summaryRes.data);
+      setLogs(logsRes.data || []);
+      setAnomalies(anomaliesRes.data || []);
       setLoading(false);
-    }
-  };
+    };
 
-  useEffect(() => { fetchData(); }, [piiFilter]);
+    load().catch(() => setLoading(false));
+  }, []);
 
-  if (loading) return <div className="loading">Loading security data...</div>;
-  if (error) return <div className="error-message">Error: {error}</div>;
-
-  const totalScanned = data?.total_events ?? 0;
-  const piiCount = data?.total_with_pii ?? 0;
-  const avgRisk = Number(data?.average_risk_score) || 0;
-
-  const riskColor = avgRisk > 70 ? '#d63031' : avgRisk > 40 ? '#fdcb6e' : '#00b894';
-  const riskLabel = avgRisk > 70 ? 'High Risk' : avgRisk > 40 ? 'Medium Risk' : 'Low Risk';
+  if (loading) {
+    return <div className="loading">Loading security layer...</div>;
+  }
 
   return (
-    <div>
-      <h1 className="page-title">Security</h1>
+    <div className="page-shell">
+      <section className="hero">
+        <div className="hero-card">
+          <h2>Security monitoring for risky prompts, PII exposure, and misuse patterns.</h2>
+          <p>
+            Risk scores are attached to each event, with anomaly and misuse detection
+            feeding the alerting and governance layers automatically.
+          </p>
+        </div>
 
-      <div className="metrics-grid">
-        <div className="metric-card info">
-          <span className="metric-icon">🔍</span>
-          <span className="metric-label">Events Scanned</span>
-          <span className="metric-value">{totalScanned}</span>
-        </div>
-        <div className="metric-card warning">
-          <span className="metric-icon">⚠️</span>
-          <span className="metric-label">PII Detected</span>
-          <span className="metric-value">{piiCount}</span>
-        </div>
-        <div className="metric-card danger">
-          <span className="metric-icon">📊</span>
-          <span className="metric-label">Avg Risk Score</span>
-          <span className="metric-value">{avgRisk.toFixed(1)}</span>
-        </div>
-        <div className="metric-card success">
-          <span className="metric-icon">🛡️</span>
-          <span className="metric-label">Security Score</span>
-          <span className="metric-value">{(100 - avgRisk).toFixed(1)}</span>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">Risk Assessment</div>
-        <div style={{ fontSize: '16px', fontWeight: 600, color: riskColor, marginBottom: '8px' }}>
-          {riskLabel} — {avgRisk.toFixed(1)} / 100
-        </div>
-        <div className="risk-bar-container">
-          <div className="risk-bar-bg">
-            <div
-              className="risk-bar-fill"
-              style={{ width: `${Math.min(avgRisk, 100)}%`, background: riskColor }}
-            />
+        <div className="panel">
+          <div className="section-head">
+            <div>
+              <h2>Security Snapshot</h2>
+              <p>Current state of risk, violations, and abnormal activity.</p>
+            </div>
           </div>
-          <div className="risk-label">
-            <span>0 — Safe</span>
-            <span>100 — Critical</span>
+
+          <div className="mini-grid">
+            <div className="list-item">
+              <strong>Total Security Events</strong>
+              <div className="list-meta">{summary?.total_events || 0}</div>
+            </div>
+            <div className="list-item">
+              <strong>PII Detections</strong>
+              <div className="list-meta">{summary?.total_with_pii || 0}</div>
+            </div>
+            <div className="list-item">
+              <strong>Misuse Patterns</strong>
+              <div className="list-meta">{summary?.misuse_events || 0}</div>
+            </div>
+            <div className="list-item">
+              <strong>Data Out Violations</strong>
+              <div className="list-meta">{summary?.data_out_events || 0}</div>
+            </div>
+            <div className="list-item">
+              <strong>Average Risk</strong>
+              <div className="list-meta">{Number(summary?.average_risk_score || 0).toFixed(1)}</div>
+            </div>
+            <div className="list-item">
+              <strong>Highest Risk</strong>
+              <div className="list-meta">{Number(summary?.highest_risk_score || 0).toFixed(1)}</div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="card">
-        <div className="card-title">Data Security Logs</div>
-        <div className="form-group" style={{ maxWidth: '200px', marginBottom: '16px' }}>
-          <select value={piiFilter} onChange={(e) => setPiiFilter(e.target.value)}>
-            <option value="">All Events</option>
-            <option value="true">PII Detected</option>
-            <option value="false">No PII</option>
-          </select>
+      <section className="two-column">
+        <div className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Open Anomalies</h3>
+              <p>Usage spikes and suspicious changes identified by background detection.</p>
+            </div>
+          </div>
+          <div className="list-grid">
+            {anomalies.length ? (
+              anomalies.map((item) => (
+                <div key={item.id} className="list-item">
+                  <strong>{item.anomaly_type}</strong>
+                  <div className="list-meta">
+                    <span className={`status-pill ${item.severity}`}>{item.severity}</span>
+                    {"  "} {item.message}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state">No open anomalies.</div>
+            )}
+          </div>
         </div>
-        {Array.isArray(logs) && logs.length > 0 ? (
-          <div className="table-container">
+
+        <div className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Security Logs</h3>
+              <p>Event-level records for PII, data out, misuse, and masking decisions.</p>
+            </div>
+          </div>
+          <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Event ID</th>
-                  <th>PII Detected</th>
-                  <th>PII Type</th>
-                  <th>Masking</th>
-                  <th>Risk Score</th>
-                  <th>Data In (MB)</th>
-                  <th>Data Out (MB)</th>
-                  <th>Time</th>
+                  <th>Event</th>
+                  <th>PII</th>
+                  <th>Type</th>
+                  <th>Data Out</th>
+                  <th>Misuse</th>
+                  <th>Spike</th>
+                  <th>Risk</th>
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id}>
-                    <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.event_id || '—'}</td>
-                    <td>
-                      <span className={`badge ${log.pii_detected ? 'badge-danger' : 'badge-success'}`}>
-                        {log.pii_detected ? 'Yes' : 'No'}
-                      </span>
-                    </td>
-                    <td>{log.pii_type || '—'}</td>
-                    <td>
-                      <span className={`badge ${log.masking_applied ? 'badge-success' : 'badge-danger'}`}>
-                        {log.masking_applied ? 'Applied' : 'Missing'}
-                      </span>
-                    </td>
-                    <td>{Number(log.risk_score || 0).toFixed(1)}</td>
-                    <td>{Number(log.data_in_mb || 0).toFixed(4)}</td>
-                    <td>{Number(log.data_out_mb || 0).toFixed(4)}</td>
-                    <td>{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</td>
+                {logs.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.event_id}</td>
+                    <td>{item.pii_detected ? "yes" : "no"}</td>
+                    <td>{item.pii_type || "-"}</td>
+                    <td>{item.data_out_violation ? "yes" : "no"}</td>
+                    <td>{item.misuse_pattern_detected ? "yes" : "no"}</td>
+                    <td>{item.abnormal_usage_spike ? "yes" : "no"}</td>
+                    <td>{Number(item.risk_score || 0).toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="empty-state">No security logs found</div>
-        )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

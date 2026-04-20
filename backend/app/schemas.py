@@ -1,8 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExternalToolCost(BaseModel):
@@ -10,27 +10,57 @@ class ExternalToolCost(BaseModel):
     cost: Decimal
 
 
-class TokenInfo(BaseModel):
-    input: int
-    output: int
+class PipelineStageCreate(BaseModel):
+    stage_order: int = 0
+    stage_name: str
+    system_name: Optional[str] = None
+    status: str = "success"
+    stage_latency_ms: int = 0
+    retry_count: int = 0
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class TelemetryEventCreate(BaseModel):
     event_id: str
-    tool_name: str
-    component_name: str
-    service_type: str
-    execution_type: str
-    user_id: str
+    request_id: Optional[str] = None
+    trace_id: Optional[str] = None
     org_id: str = "default"
     project_id: Optional[str] = None
-    input_data_size_mb: Decimal = Decimal("0")
-    output_data_size_mb: Decimal = Decimal("0")
-    external_tools: list[ExternalToolCost] = []
-    tokens: Optional[TokenInfo] = None
+    user_id: Optional[str] = None
+    api_key_id: Optional[str] = None
+    tool_name: str
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    component_name: Optional[str] = None
+    service_type: Optional[str] = None
+    execution_type: Optional[str] = None
     status: str = "success"
     latency_ms: int = 0
-    api_key_id: Optional[str] = None
+    input_data_size_mb: Decimal = Decimal("0")
+    output_data_size_mb: Decimal = Decimal("0")
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    infra_cost: Decimal = Decimal("0")
+    external_tools: list[ExternalToolCost] = Field(default_factory=list)
+    stages: list[PipelineStageCreate] = Field(default_factory=list)
+    contains_pii: bool = False
+    pii_type: Optional[str] = None
+    data_out_violation: bool = False
+    tags: list[str] = Field(default_factory=list)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class BatchTelemetryIngest(BaseModel):
+    events: list[TelemetryEventCreate]
+
+
+class CostSummary(BaseModel):
+    llm_cost: Decimal = Decimal("0")
+    external_cost: Decimal = Decimal("0")
+    infra_cost: Decimal = Decimal("0")
+    total_cost: Decimal = Decimal("0")
 
 
 class CostBreakdownResponse(BaseModel):
@@ -43,40 +73,120 @@ class CostBreakdownResponse(BaseModel):
     total_cost: Decimal
 
 
+class PipelineStageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stage_order: int
+    stage_name: str
+    system_name: Optional[str] = None
+    status: Optional[str] = None
+    stage_latency_ms: int = 0
+    retry_count: int = 0
+    details: Optional[dict[str, Any]] = None
+
+
 class TelemetryEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     event_id: str
+    request_id: Optional[str] = None
+    trace_id: Optional[str] = None
     org_id: str
     project_id: Optional[str] = None
     user_id: Optional[str] = None
+    api_key_id: Optional[str] = None
     tool_name: str
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
     service_type: Optional[str] = None
     component_name: Optional[str] = None
     execution_type: Optional[str] = None
     status: Optional[str] = None
-    input_data_size_mb: Optional[Decimal] = None
-    output_data_size_mb: Optional[Decimal] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    latency_ms: Optional[int] = None
-    created_at: Optional[datetime] = None
-    cost_breakdown: list[CostBreakdownResponse] = []
-
-
-class CostSummary(BaseModel):
+    input_data_size_mb: Decimal = Decimal("0")
+    output_data_size_mb: Decimal = Decimal("0")
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
     llm_cost: Decimal = Decimal("0")
-    external_cost: Decimal = Decimal("0")
     infra_cost: Decimal = Decimal("0")
+    external_cost: Decimal = Decimal("0")
     total_cost: Decimal = Decimal("0")
+    risk_score: Decimal = Decimal("0")
+    anomaly_score: Decimal = Decimal("0")
+    misuse_detected: bool = False
+    abnormal_usage_spike: bool = False
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    latency_ms: int = 0
+    tags: list[str] = Field(default_factory=list)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+    cost_breakdown: list[CostBreakdownResponse] = Field(default_factory=list)
+    stages: list[PipelineStageResponse] = Field(default_factory=list)
+
+
+class TraceDetailResponse(BaseModel):
+    event: TelemetryEventResponse
+    security: Optional["DataSecurityLogResponse"] = None
+
+
+class DailySummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    org_id: str
+    project_id: Optional[str] = None
+    tool_name: str
+    date: date
+    total_events: int
+    total_cost: Decimal
+    llm_cost: Decimal
+    infra_cost: Decimal
+    external_cost: Decimal
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0
+    avg_latency_ms: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    anomaly_count: int = 0
+    misuse_count: int = 0
+    total_input_mb: Decimal = Decimal("0")
+    total_output_mb: Decimal = Decimal("0")
+    avg_risk_score: Decimal = Decimal("0")
+
+
+class MonthlySummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    org_id: str
+    project_id: Optional[str] = None
+    tool_name: str
+    month: date
+    total_events: int
+    total_cost: Decimal
+    llm_cost: Decimal
+    infra_cost: Decimal
+    external_cost: Decimal
+    total_tokens: int = 0
+    avg_latency_ms: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    anomaly_count: int = 0
+    misuse_count: int = 0
+
+
+class TodaySummaryResponse(BaseModel):
+    total_cost: Decimal
+    total_events: int
+    tools: list[DailySummaryResponse]
 
 
 class ToolRegistryCreate(BaseModel):
     tool_name: str
-    tool_type: str
-    vendor: str
-    cost_model: str
-    base_cost: Decimal
+    tool_type: Optional[str] = None
+    vendor: Optional[str] = None
+    cost_model: Optional[str] = None
+    base_cost: Decimal = Decimal("0")
 
 
 class ToolRegistryResponse(BaseModel):
@@ -91,46 +201,29 @@ class ToolRegistryResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class AlertResponse(BaseModel):
+class ToolConnectorCreate(BaseModel):
+    connector_name: str
+    tool_name: str
+    provider: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    ingestion_mode: str = "api"
+    status: str = "active"
+
+
+class ToolConnectorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    org_id: Optional[str] = None
-    tool_name: Optional[str] = None
-    alert_type: Optional[str] = None
-    severity: Optional[str] = None
-    message: Optional[str] = None
-    threshold_value: Optional[Decimal] = None
-    actual_value: Optional[Decimal] = None
-    status: Optional[str] = None
-    created_at: Optional[datetime] = None
-
-
-class DailySummaryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    org_id: str
-    project_id: Optional[str] = None
+    connector_name: str
     tool_name: str
-    date: date
-    total_events: int
-    total_cost: Decimal
-    llm_cost: Decimal
-    ml_cost: Decimal
-    infra_cost: Decimal
-    external_cost: Decimal
-    total_tokens: Optional[Decimal] = None
-    avg_latency_ms: int = 0
-    success_count: int = 0
-    failure_count: int = 0
-    total_input_mb: Optional[Decimal] = None
-    total_output_mb: Optional[Decimal] = None
-
-
-class TodaySummaryResponse(BaseModel):
-    total_cost: Decimal
-    total_events: int
-    tools: list[DailySummaryResponse]
+    provider: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    ingestion_mode: str
+    status: str
+    last_ingested_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 class ToolUsageResponse(BaseModel):
@@ -139,8 +232,28 @@ class ToolUsageResponse(BaseModel):
     total_events: int
     total_cost: Decimal
     total_tokens: Decimal = Decimal("0")
-    total_tokens_in: Decimal
-    total_tokens_out: Decimal
+    total_prompt_tokens: Decimal = Decimal("0")
+    total_completion_tokens: Decimal = Decimal("0")
+    avg_latency_ms: Decimal = Decimal("0")
+    success_rate: Decimal = Decimal("0")
+
+
+class AlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    org_id: Optional[str] = None
+    tool_name: Optional[str] = None
+    event_id: Optional[str] = None
+    rule_id: Optional[int] = None
+    alert_type: Optional[str] = None
+    severity: Optional[str] = None
+    source: Optional[str] = None
+    message: Optional[str] = None
+    threshold_value: Optional[Decimal] = None
+    actual_value: Optional[Decimal] = None
+    status: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class DataSecurityLogResponse(BaseModel):
@@ -150,10 +263,58 @@ class DataSecurityLogResponse(BaseModel):
     event_id: Optional[str] = None
     pii_detected: Optional[bool] = None
     pii_type: Optional[str] = None
+    data_out_violation: Optional[bool] = None
+    misuse_pattern_detected: Optional[bool] = None
+    abnormal_usage_spike: Optional[bool] = None
     masking_applied: Optional[bool] = None
     risk_score: Optional[Decimal] = None
     data_in_mb: Optional[Decimal] = None
     data_out_mb: Optional[Decimal] = None
+    created_at: Optional[datetime] = None
+
+
+class GovernanceRuleCreate(BaseModel):
+    rule_name: str
+    description: Optional[str] = None
+    metric_name: str
+    operator: str = ">"
+    threshold_value: Decimal
+    severity: str = "medium"
+    scope_level: str = "organization"
+    scope_reference: Optional[str] = None
+    is_active: bool = True
+
+
+class GovernanceRuleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    rule_name: str
+    description: Optional[str] = None
+    metric_name: str
+    operator: str
+    threshold_value: Decimal
+    severity: str
+    scope_level: str
+    scope_reference: Optional[str] = None
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+
+class UsageAnomalyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    org_id: str
+    tool_name: str
+    event_id: Optional[str] = None
+    anomaly_type: str
+    severity: str
+    anomaly_score: Decimal
+    baseline_value: Decimal
+    observed_value: Decimal
+    message: Optional[str] = None
+    status: str
     created_at: Optional[datetime] = None
 
 
@@ -247,20 +408,25 @@ class BudgetResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class MonthlySummaryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class GovernanceOverviewResponse(BaseModel):
+    total_cost_today: Decimal
+    total_events_today: int
+    total_tokens_today: int
+    avg_latency_today: Decimal
+    success_rate_today: Decimal
+    active_alerts: int
+    anomalies_open: int
+    connectors_active: int
+    rules_active: int
+    avg_risk_score: Decimal
+    highest_risk_score: Decimal
+    alerts_by_severity: dict[str, int]
+    cost_by_type: dict[str, Decimal]
+    health: dict[str, Decimal]
+    tool_rollup: list[DailySummaryResponse]
+    recent_alerts: list[AlertResponse]
+    recent_anomalies: list[UsageAnomalyResponse]
+    recent_events: list[TelemetryEventResponse]
 
-    org_id: str
-    project_id: Optional[str] = None
-    tool_name: str
-    month: date
-    total_events: int
-    total_cost: Decimal
-    llm_cost: Decimal
-    ml_cost: Decimal
-    infra_cost: Decimal
-    external_cost: Decimal
-    total_tokens: Optional[Decimal] = None
-    avg_latency_ms: int = 0
-    success_count: int = 0
-    failure_count: int = 0
+
+TraceDetailResponse.model_rebuild()

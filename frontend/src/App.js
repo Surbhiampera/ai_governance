@@ -1,62 +1,63 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
-import Organizations from './pages/Organizations';
-import Tools from './pages/Tools';
-import Alerts from './pages/Alerts';
-import Security from './pages/Security';
-import TestEvent from './pages/TestEvent';
+import React from "react";
+import {
+  BrowserRouter as Router,
+  NavLink,
+  Route,
+  Routes,
+} from "react-router-dom";
+import Dashboard from "./pages/Dashboard";
+import Tools from "./pages/Tools";
+import Alerts from "./pages/Alerts";
+import Security from "./pages/Security";
+import TestEvent from "./pages/TestEvent";
+
+const navItems = [
+  { to: "/", label: "Overview", end: true },
+  { to: "/controls", label: "Controls" },
+  { to: "/alerts", label: "Alerts" },
+  { to: "/security", label: "Security" },
+  { to: "/tracing", label: "Tracing" },
+];
 
 function App() {
   return (
     <Router>
-      <div className="app-container">
+      <div className="shell">
         <aside className="sidebar">
-          <div className="sidebar-header">
-            <h2>AI Governance</h2>
-            <span>Monitoring Dashboard</span>
+          <div className="brand-block">
+            <p className="brand-kicker">Centralized AI Governance</p>
+            <h1>PulseBoard</h1>
+            <p className="brand-copy">Multi-tool monitoring </p>
           </div>
-          <ul className="sidebar-nav">
-            <li>
-              <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">📊</span> Dashboard
+
+          <nav className="nav-stack">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  isActive ? "nav-link active" : "nav-link"
+                }
+              >
+                {item.label}
               </NavLink>
-            </li>
-            <li>
-              <NavLink to="/organizations" className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">🏢</span> Organizations
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/tools" className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">🔧</span> Tools
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/alerts" className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">🔔</span> Alerts
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/security" className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">🛡️</span> Security
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/test" className={({ isActive }) => isActive ? 'active' : ''}>
-                <span className="nav-icon">🧪</span> Test Event
-              </NavLink>
-            </li>
-          </ul>
+            ))}
+          </nav>
+
+          <div className="sidebar-footer">
+            <span>Palette</span>
+            {/* <strong>#9E2A97 / #7C70AE</strong> */}
+          </div>
         </aside>
-        <main className="main-content">
+
+        <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/organizations" element={<Organizations />} />
-            <Route path="/tools" element={<Tools />} />
+            <Route path="/controls" element={<Tools />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/security" element={<Security />} />
-            <Route path="/test" element={<TestEvent />} />
+            <Route path="/tracing" element={<TestEvent />} />
           </Routes>
         </main>
       </div>

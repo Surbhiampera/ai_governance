@@ -1,4 +1,4 @@
-1. ORGANIZATION (ROOT)
+1. ORGANIZATIONS
 CREATE TABLE organizations (
     id VARCHAR(100) PRIMARY KEY,
     org_name VARCHAR(150) NOT NULL,
@@ -6,27 +6,28 @@ CREATE TABLE organizations (
     budget_limit DECIMAL(14,6),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-🔵 2. PROJECTS
+
+2. PROJECTS
 CREATE TABLE projects (
     id VARCHAR(100) PRIMARY KEY,
     org_id VARCHAR(100) NOT NULL,
     project_name VARCHAR(150),
     environment VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
-🟡 3. USERS
+
+3. USERS
 CREATE TABLE users (
     id VARCHAR(100) PRIMARY KEY,
     org_id VARCHAR(100),
     email VARCHAR(150),
     role VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
-🔴 4. API KEYS (CRITICAL)
+
+4. API KEYS
 CREATE TABLE api_keys (
     id VARCHAR(120) PRIMARY KEY,
     org_id VARCHAR(100),
@@ -34,198 +35,235 @@ CREATE TABLE api_keys (
     key_name VARCHAR(150),
     provider VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (org_id) REFERENCES organizations(id),
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
-⚡ CORE SYSTEM (YOUR ORIGINAL + IMPROVED)
-🟢 5. TELEMETRY EVENTS (HEART)
-CREATE TABLE telemetry_events (
-    id BIGSERIAL PRIMARY KEY,
-    event_id VARCHAR(120) UNIQUE NOT NULL,
 
-    org_id VARCHAR(100),
-    project_id VARCHAR(100),
-    user_id VARCHAR(100),
-    api_key_id VARCHAR(120),
-
-    tool_name VARCHAR(150) NOT NULL,
-    service_type VARCHAR(50),
-    component_name VARCHAR(150),
-
-    execution_type VARCHAR(50),
-    status VARCHAR(30),
-
-    input_data_size_mb DECIMAL(10,4) DEFAULT 0,
-    output_data_size_mb DECIMAL(10,4) DEFAULT 0,
-
-    start_time TIMESTAMP,
-    end_time TIMESTAMP,
-    latency_ms INT DEFAULT 0,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
-    -- NO heavy foreign keys here (performance)
-);
-🟡 6. COST BREAKDOWN
-CREATE TABLE cost_breakdown (
-    id BIGSERIAL PRIMARY KEY,
-    event_id VARCHAR(120) NOT NULL,
-
-    cost_type VARCHAR(50),
-    component_name VARCHAR(150),
-
-    unit_cost DECIMAL(12,6),
-    quantity DECIMAL(12,6),
-    total_cost DECIMAL(12,6),
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (event_id) REFERENCES telemetry_events(event_id)
-);
-🟣 7. TOOL REGISTRY
+5. TOOL REGISTRY
 CREATE TABLE tool_registry (
     id BIGSERIAL PRIMARY KEY,
     tool_name VARCHAR(150) UNIQUE NOT NULL,
     tool_type VARCHAR(50),
     vendor VARCHAR(100),
     cost_model VARCHAR(50),
-    base_cost DECIMAL(12,6),
+    base_cost DECIMAL(12,6) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-🔵 8. EXECUTION PIPELINE
+
+6. TOOL CONNECTORS
+CREATE TABLE tool_connectors (
+    id BIGSERIAL PRIMARY KEY,
+    connector_name VARCHAR(150) UNIQUE NOT NULL,
+    tool_name VARCHAR(150) NOT NULL,
+    provider VARCHAR(100),
+    endpoint_url VARCHAR(255),
+    auth_type VARCHAR(50),
+    ingestion_mode VARCHAR(50) DEFAULT 'api',
+    status VARCHAR(30) DEFAULT 'active',
+    last_ingested_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+7. GOVERNANCE RULES
+CREATE TABLE governance_rules (
+    id BIGSERIAL PRIMARY KEY,
+    rule_name VARCHAR(150) UNIQUE NOT NULL,
+    description TEXT,
+    metric_name VARCHAR(100) NOT NULL,
+    operator VARCHAR(20) DEFAULT '>',
+    threshold_value DECIMAL(14,6) NOT NULL,
+    severity VARCHAR(20) DEFAULT 'medium',
+    scope_level VARCHAR(30) DEFAULT 'organization',
+    scope_reference VARCHAR(150),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+8. TELEMETRY EVENTS
+CREATE TABLE telemetry_events (
+    id BIGSERIAL PRIMARY KEY,
+    event_id VARCHAR(120) UNIQUE NOT NULL,
+    request_id VARCHAR(120),
+    trace_id VARCHAR(120),
+    org_id VARCHAR(100) NOT NULL,
+    project_id VARCHAR(100),
+    user_id VARCHAR(100),
+    api_key_id VARCHAR(120),
+    tool_name VARCHAR(150) NOT NULL,
+    provider VARCHAR(100),
+    model_name VARCHAR(120),
+    service_type VARCHAR(50),
+    component_name VARCHAR(150),
+    execution_type VARCHAR(50),
+    status VARCHAR(30),
+    input_data_size_mb DECIMAL(12,4) DEFAULT 0,
+    output_data_size_mb DECIMAL(12,4) DEFAULT 0,
+    prompt_tokens INT DEFAULT 0,
+    completion_tokens INT DEFAULT 0,
+    total_tokens INT DEFAULT 0,
+    llm_cost DECIMAL(14,6) DEFAULT 0,
+    infra_cost DECIMAL(14,6) DEFAULT 0,
+    external_cost DECIMAL(14,6) DEFAULT 0,
+    total_cost DECIMAL(14,6) DEFAULT 0,
+    risk_score DECIMAL(8,2) DEFAULT 0,
+    anomaly_score DECIMAL(8,2) DEFAULT 0,
+    misuse_detected BOOLEAN DEFAULT FALSE,
+    abnormal_usage_spike BOOLEAN DEFAULT FALSE,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    latency_ms INT DEFAULT 0,
+    tags JSON,
+    metadata_json JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+9. COST BREAKDOWN
+CREATE TABLE cost_breakdown (
+    id BIGSERIAL PRIMARY KEY,
+    event_id VARCHAR(120) NOT NULL,
+    cost_type VARCHAR(50) NOT NULL,
+    component_name VARCHAR(150),
+    unit_cost DECIMAL(12,6) DEFAULT 0,
+    quantity DECIMAL(12,6) DEFAULT 0,
+    total_cost DECIMAL(12,6) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES telemetry_events(event_id)
+);
+
+10. EXECUTION PIPELINE
 CREATE TABLE execution_pipeline (
     id BIGSERIAL PRIMARY KEY,
-    event_id VARCHAR(120),
-
-    stage_name VARCHAR(150),
+    event_id VARCHAR(120) NOT NULL,
+    stage_order INT DEFAULT 0,
+    stage_name VARCHAR(150) NOT NULL,
     system_name VARCHAR(150),
     status VARCHAR(30),
-
+    stage_latency_ms INT DEFAULT 0,
     retry_count INT DEFAULT 0,
+    details JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (event_id) REFERENCES telemetry_events(event_id)
 );
-🔴 9. SECURITY LOGS
+
+11. DATA SECURITY LOGS
 CREATE TABLE data_security_logs (
     id BIGSERIAL PRIMARY KEY,
-    event_id VARCHAR(120),
-
+    event_id VARCHAR(120) NOT NULL,
     pii_detected BOOLEAN DEFAULT FALSE,
     pii_type VARCHAR(100),
-    masking_applied BOOLEAN DEFAULT TRUE,
-
-    risk_score DECIMAL(5,2),
-
-    data_in_mb DECIMAL(10,4),
-    data_out_mb DECIMAL(10,4),
-
+    data_out_violation BOOLEAN DEFAULT FALSE,
+    misuse_pattern_detected BOOLEAN DEFAULT FALSE,
+    abnormal_usage_spike BOOLEAN DEFAULT FALSE,
+    masking_applied BOOLEAN DEFAULT FALSE,
+    risk_score DECIMAL(8,2) DEFAULT 0,
+    data_in_mb DECIMAL(12,4) DEFAULT 0,
+    data_out_mb DECIMAL(12,4) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (event_id) REFERENCES telemetry_events(event_id)
 );
-🟠 10. ALERTS
-CREATE TABLE alerts (
+
+12. USAGE ANOMALIES
+CREATE TABLE usage_anomalies (
     id BIGSERIAL PRIMARY KEY,
-
-    org_id VARCHAR(100),
-    tool_name VARCHAR(150),
-
-    alert_type VARCHAR(50),
-    severity VARCHAR(20),
+    org_id VARCHAR(100) NOT NULL,
+    tool_name VARCHAR(150) NOT NULL,
+    event_id VARCHAR(120),
+    anomaly_type VARCHAR(60) NOT NULL,
+    severity VARCHAR(20) DEFAULT 'medium',
+    anomaly_score DECIMAL(8,2) DEFAULT 0,
+    baseline_value DECIMAL(14,6) DEFAULT 0,
+    observed_value DECIMAL(14,6) DEFAULT 0,
     message TEXT,
-
-    threshold_value DECIMAL(12,6),
-    actual_value DECIMAL(12,6),
-
-    status VARCHAR(20) DEFAULT 'active',
-
+    status VARCHAR(20) DEFAULT 'open',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-📊 REPORTING LAYER
-🟢 11. DAILY SUMMARY
+
+13. ALERTS
+CREATE TABLE alerts (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    tool_name VARCHAR(150),
+    event_id VARCHAR(120),
+    rule_id BIGINT,
+    alert_type VARCHAR(50),
+    severity VARCHAR(20),
+    source VARCHAR(40) DEFAULT 'system',
+    message TEXT,
+    threshold_value DECIMAL(14,6),
+    actual_value DECIMAL(14,6),
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rule_id) REFERENCES governance_rules(id)
+);
+
+14. DAILY ORG SUMMARY
 CREATE TABLE daily_org_summary (
     id BIGSERIAL PRIMARY KEY,
-
-    org_id VARCHAR(100),
+    org_id VARCHAR(100) NOT NULL,
     project_id VARCHAR(100),
-    tool_name VARCHAR(150),
-
+    tool_name VARCHAR(150) NOT NULL,
     date DATE NOT NULL,
-
     total_events INT DEFAULT 0,
     total_cost DECIMAL(14,6) DEFAULT 0,
-
     llm_cost DECIMAL(14,6) DEFAULT 0,
-    ml_cost DECIMAL(14,6) DEFAULT 0,
     infra_cost DECIMAL(14,6) DEFAULT 0,
     external_cost DECIMAL(14,6) DEFAULT 0,
-
+    total_prompt_tokens INT DEFAULT 0,
+    total_completion_tokens INT DEFAULT 0,
+    total_tokens INT DEFAULT 0,
     avg_latency_ms INT DEFAULT 0,
     success_count INT DEFAULT 0,
     failure_count INT DEFAULT 0,
-
+    anomaly_count INT DEFAULT 0,
+    misuse_count INT DEFAULT 0,
     total_input_mb DECIMAL(12,4) DEFAULT 0,
     total_output_mb DECIMAL(12,4) DEFAULT 0,
-
+    avg_risk_score DECIMAL(8,2) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(org_id, project_id, tool_name, date)
+    UNIQUE (org_id, project_id, tool_name, date)
 );
-🟣 12. MONTHLY SUMMARY
+
+15. MONTHLY ORG SUMMARY
 CREATE TABLE monthly_org_summary (
     id BIGSERIAL PRIMARY KEY,
-
-    org_id VARCHAR(100),
+    org_id VARCHAR(100) NOT NULL,
     project_id VARCHAR(100),
-    tool_name VARCHAR(150),
-
+    tool_name VARCHAR(150) NOT NULL,
     month DATE NOT NULL,
-
     total_events INT DEFAULT 0,
     total_cost DECIMAL(14,6) DEFAULT 0,
-
     llm_cost DECIMAL(14,6) DEFAULT 0,
-    ml_cost DECIMAL(14,6) DEFAULT 0,
     infra_cost DECIMAL(14,6) DEFAULT 0,
     external_cost DECIMAL(14,6) DEFAULT 0,
-
+    total_tokens INT DEFAULT 0,
     avg_latency_ms INT DEFAULT 0,
     success_count INT DEFAULT 0,
     failure_count INT DEFAULT 0,
-
+    anomaly_count INT DEFAULT 0,
+    misuse_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(org_id, project_id, tool_name, month)
+    UNIQUE (org_id, project_id, tool_name, month)
 );
-🧠 GOVERNANCE LAYER
-🟡 13. BUDGETS
+
+16. BUDGETS
 CREATE TABLE budgets (
     id BIGSERIAL PRIMARY KEY,
-
     org_id VARCHAR(100),
     project_id VARCHAR(100),
-
     budget_type VARCHAR(50),
     limit_amount DECIMAL(14,6),
-
     alert_threshold_percent INT DEFAULT 80,
-
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
     FOREIGN KEY (org_id) REFERENCES organizations(id),
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
-🔵 14. RATE LIMITS (OPTIONAL - ADD LATER)
+
+17. RATE LIMITS
 CREATE TABLE rate_limits (
     id BIGSERIAL PRIMARY KEY,
-
     org_id VARCHAR(100),
     tool_name VARCHAR(150),
-
     max_requests_per_min INT,
     max_tokens_per_day INT,
-
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

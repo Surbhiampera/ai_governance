@@ -28,5 +28,13 @@ celery_app.conf.update(
             "task": "app.workers.tasks.run_monthly_aggregation",
             "schedule": 86400.0,  # every 24 hours
         },
+        "anomaly-detection": {
+            "task": "app.workers.tasks.run_anomaly_detection",
+            "schedule": 1800.0,  # every 30 minutes
+        },
+        "alert-scan": {
+            "task": "app.workers.tasks.run_alert_scan",
+            "schedule": 1800.0,  # every 30 minutes
+        },
     },
 )
