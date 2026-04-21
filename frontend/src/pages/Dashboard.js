@@ -16,42 +16,49 @@ import {
 import {
   getGovernanceOverview,
   getSecuritySummary,
+  getTelemetryLogs,
   getToolsUsage,
   getUsageTrends,
 } from "../api";
 
-const CHART_COLORS = ["#9E2A97", "#7C70AE"];
+const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4"];
 
 const money = (value) => `$${Number(value || 0).toFixed(2)}`;
+const num = (value, decimals = 0) =>
+  Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 
 function Dashboard() {
   const [overview, setOverview] = useState(null);
   const [trends, setTrends] = useState([]);
   const [security, setSecurity] = useState(null);
   const [toolUsage, setToolUsage] = useState([]);
+  const [recentLogs, setRecentLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async (isRefresh = false) => {
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
-      const [overviewRes, trendsRes, securityRes, usageRes] = await Promise.all([
-        getGovernanceOverview(),
-        getUsageTrends(null, 14),
-        getSecuritySummary(),
-        getToolsUsage(),
-      ]);
+      const [overviewRes, trendsRes, securityRes, usageRes, logsRes] =
+        await Promise.all([
+          getGovernanceOverview(),
+          getUsageTrends(null, 14),
+          getSecuritySummary(),
+          getToolsUsage(),
+          getTelemetryLogs({ limit: 20 }),
+        ]);
 
       setOverview(overviewRes.data);
       setTrends(trendsRes.data || []);
       setSecurity(securityRes.data);
       setToolUsage(usageRes.data || []);
+      setRecentLogs(logsRes.data || []);
       setError("");
     } catch (err) {
       setError(
@@ -69,24 +76,23 @@ function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div className="loading">Loading centralized governance dashboard...</div>;
+    return (
+      <div className="loading">Loading centralized governance dashboard…</div>
+    );
   }
 
   if (error) {
     return <div className="error-message">{error}</div>;
   }
 
-  const alertsBySeverity = Object.entries(overview?.alerts_by_severity || {}).map(
-    ([name, value]) => ({
-      name,
-      value,
-    }),
-  );
+  /* ── derived data ── */
+  const alertsBySeverity = Object.entries(
+    overview?.alerts_by_severity || {},
+  ).map(([name, value]) => ({ name, value }));
 
-  const costMix = Object.entries(overview?.cost_by_type || {}).map(([name, value]) => ({
-    name,
-    value: Number(value || 0),
-  }));
+  const costMix = Object.entries(overview?.cost_by_type || {}).map(
+    ([name, value]) => ({ name, value: Number(value || 0) }),
+  );
 
   const topTools = (toolUsage || []).slice(0, 6).map((item) => ({
     tool: item.tool_name,
@@ -94,20 +100,16 @@ function Dashboard() {
     tokens: Number(item.total_tokens || 0),
   }));
 
-  const recentEvents = overview?.recent_events || [];
   const recentAlerts = overview?.recent_alerts || [];
   const recentAnomalies = overview?.recent_anomalies || [];
 
   return (
     <div className="page-shell">
+      {/* ═══════════ HERO ═══════════ */}
       <section className="hero">
         <div className="hero-card">
-          <h2>Real-time AI governance across tools, teams, and pipelines.</h2>
-          <p>
-            This screen unifies cost tracking, AI health monitoring, event tracing,
-            security posture, anomaly detection, and rule-driven alerts so the
-            organization can see and control every request path.
-          </p>
+          <h2>AI Governance Dashboard</h2>
+          <p>Live view of cost, tokens, latency, and security across all AI tools.</p>
 
           <div className="hero-metrics">
             <div className="hero-chip">
@@ -116,15 +118,17 @@ function Dashboard() {
             </div>
             <div className="hero-chip">
               <span>Events Today</span>
-              <strong>{overview?.total_events_today || 0}</strong>
+              <strong>{num(overview?.total_events_today)}</strong>
             </div>
             <div className="hero-chip">
               <span>Tokens Today</span>
-              <strong>{overview?.total_tokens_today || 0}</strong>
+              <strong>{num(overview?.total_tokens_today)}</strong>
             </div>
             <div className="hero-chip">
               <span>Success Rate</span>
-              <strong>{Number(overview?.success_rate_today || 0).toFixed(1)}%</strong>
+              <strong>
+                {Number(overview?.success_rate_today || 0).toFixed(1)}%
+              </strong>
             </div>
           </div>
         </div>
@@ -133,7 +137,7 @@ function Dashboard() {
           <div className="section-head">
             <div>
               <h2>Control Snapshot</h2>
-              <p>Fast view of the live operating state across governance controls.</p>
+              <p>Live operating state across governance controls.</p>
             </div>
             <button
               type="button"
@@ -141,83 +145,166 @@ function Dashboard() {
               onClick={() => load(true)}
               disabled={refreshing}
             >
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing ? "Refreshing…" : "↻ Refresh"}
             </button>
           </div>
 
           <div className="pill-row">
             <div className="pill">
-              Active alerts <span className="highlight">{overview?.active_alerts || 0}</span>
+              Active alerts{" "}
+              <span className="highlight">{overview?.active_alerts || 0}</span>
             </div>
             <div className="pill">
-              Open anomalies <span className="highlight">{overview?.anomalies_open || 0}</span>
+              Open anomalies{" "}
+              <span className="highlight">{overview?.anomalies_open || 0}</span>
             </div>
             <div className="pill">
-              Active connectors <span className="highlight">{overview?.connectors_active || 0}</span>
+              Connectors{" "}
+              <span className="highlight">
+                {overview?.connectors_active || 0}
+              </span>
             </div>
             <div className="pill">
-              Active rules <span className="highlight">{overview?.rules_active || 0}</span>
-            </div>
-            <div className="pill">
-              Avg risk <span className="highlight">{Number(overview?.avg_risk_score || 0).toFixed(1)}</span>
-            </div>
-            <div className="pill">
-              Peak risk <span className="highlight">{Number(overview?.highest_risk_score || 0).toFixed(1)}</span>
+              Rules{" "}
+              <span className="highlight">{overview?.rules_active || 0}</span>
             </div>
           </div>
 
-          <div className="stack" style={{ marginTop: 20 }}>
+          <div className="stack" style={{ marginTop: 18 }}>
             <div className="list-item">
-              <strong>AI Health Monitoring</strong>
+              <strong>Health</strong>
               <div className="list-meta">
-                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}% | Failure{" "}
-                {Number(overview?.health?.failure_rate || 0).toFixed(1)}% | Avg latency{" "}
-                {Number(overview?.health?.avg_latency_ms || 0).toFixed(1)} ms | Anomaly score{" "}
-                {Number(overview?.health?.anomaly_score || 0).toFixed(2)}
+                Success{" "}
+                {Number(overview?.health?.success_rate || 0).toFixed(1)}% ·
+                Failure{" "}
+                {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
+                latency{" "}
+                {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
               </div>
             </div>
             <div className="list-item">
-              <strong>Security Layer</strong>
+              <strong>Security</strong>
               <div className="list-meta">
-                PII events {security?.total_with_pii || 0} | Misuse patterns{" "}
-                {security?.misuse_events || 0} | Data out violations{" "}
-                {security?.data_out_events || 0} | Highest risk{" "}
-                {Number(security?.highest_risk_score || 0).toFixed(1)}
+                PII events {security?.total_with_pii || 0} · Misuse{" "}
+                {security?.misuse_events || 0} · Data-out violations{" "}
+                {security?.data_out_events || 0}
               </div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* ═══════════ KPI CARDS ═══════════ */}
       <section className="stats-grid">
         <div className="metric-card">
-          <div className="metric-eyebrow">Latency Today</div>
-          <div className="metric-value">{Number(overview?.avg_latency_today || 0).toFixed(1)} ms</div>
-          <div className="metric-note">Tracks end-to-end responsiveness across all AI pipelines.</div>
+          <div className="metric-eyebrow">Avg Latency</div>
+          <div className="metric-value">
+            {Number(overview?.avg_latency_today || 0).toFixed(0)}
+            <span style={{ fontSize: 16, fontWeight: 400 }}> ms</span>
+          </div>
         </div>
         <div className="metric-card">
-          <div className="metric-eyebrow">Rule Coverage</div>
+          <div className="metric-eyebrow">Active Rules</div>
           <div className="metric-value">{overview?.rules_active || 0}</div>
-          <div className="metric-note">Automated conditions watching cost, data out, and risk events.</div>
         </div>
         <div className="metric-card">
-          <div className="metric-eyebrow">Multi-Tool Connectors</div>
+          <div className="metric-eyebrow">Connectors</div>
           <div className="metric-value">{overview?.connectors_active || 0}</div>
-          <div className="metric-note">API ingestion points for multiple AI platforms and workflows.</div>
         </div>
         <div className="metric-card">
-          <div className="metric-eyebrow">Open Security Signals</div>
+          <div className="metric-eyebrow">Security Signals</div>
           <div className="metric-value">{security?.open_anomalies || 0}</div>
-          <div className="metric-note">Pending anomalies and abnormal usage patterns needing review.</div>
         </div>
       </section>
 
+      {/* ═══════════ RECENT EVENTS TABLE ═══════════ */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Recent Events</h3>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Org</th>
+                <th>Project</th>
+                <th>Tool</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>Service</th>
+                <th>Exec Type</th>
+                <th>User</th>
+                <th>Tokens In</th>
+                <th>Tokens Out</th>
+                <th>Latency</th>
+                <th>Cost</th>
+                <th>Input MB</th>
+                <th>Output MB</th>
+                <th>PII</th>
+                <th>Tags</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentLogs.length === 0 && (
+                <tr>
+                  <td colSpan={17} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                    No events recorded yet.
+                  </td>
+                </tr>
+              )}
+              {recentLogs.map((row) => (
+                <tr key={row.event_id}>
+                  <td>{row.org_id || "—"}</td>
+                  <td>{row.project_id || "—"}</td>
+                  <td>
+                    <strong>{row.tool_name || "—"}</strong>
+                  </td>
+                  <td>{row.provider || "—"}</td>
+                  <td>{row.model_name || "—"}</td>
+                  <td>
+                    <span
+                      className={`status-pill ${(row.status || "").toLowerCase()}`}
+                    >
+                      {row.status || "—"}
+                    </span>
+                  </td>
+                  <td>{row.service_type || "—"}</td>
+                  <td>{row.execution_type || "—"}</td>
+                  <td>{row.user_id || "—"}</td>
+                  <td>{num(row.prompt_tokens)}</td>
+                  <td>{num(row.completion_tokens)}</td>
+                  <td>{num(row.latency_ms)} ms</td>
+                  <td>{money(row.total_cost)}</td>
+                  <td>{num(row.input_data_size_mb, 2)}</td>
+                  <td>{num(row.output_data_size_mb, 2)}</td>
+                  <td>
+                    {row.pii_type ? (
+                      <span className="status-pill critical">{row.pii_type}</span>
+                    ) : (
+                      <span style={{ color: "var(--gray-500)" }}>none</span>
+                    )}
+                  </td>
+                  <td>
+                    {Array.isArray(row.tags) && row.tags.length > 0
+                      ? row.tags.join(", ")
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ═══════════ CHARTS ROW ═══════════ */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>Usage and Cost Trend</h3>
-              <p>Daily movement of requests and spend over the last two weeks.</p>
+              <h3>Cost &amp; Events Trend</h3>
             </div>
           </div>
           <div className="chart-box">
@@ -229,8 +316,14 @@ function Dashboard() {
                     <stop offset="95%" stopColor="#9E2A97" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <CartesianGrid
+                  stroke="rgba(124,112,174,0.12)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#6d6782", fontSize: 12 }}
+                />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip />
                 <Area
@@ -256,7 +349,6 @@ function Dashboard() {
           <div className="section-head">
             <div>
               <h3>Cost Composition</h3>
-              <p>LLM, infrastructure, and external service spend in today&apos;s footprint.</p>
             </div>
           </div>
           <div className="chart-box">
@@ -272,7 +364,10 @@ function Dashboard() {
                   innerRadius={58}
                 >
                   {costMix.map((entry, index) => (
-                    <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    <Cell
+                      key={entry.name}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => money(value)} />
@@ -282,21 +377,31 @@ function Dashboard() {
         </div>
       </section>
 
+      {/* ═══════════ TOOLS + ALERTS ROW ═══════════ */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>Top Tool Consumption</h3>
-              <p>Per tool event volume and cost concentration across the estate.</p>
+              <h3>Top Tools by Cost &amp; Tokens</h3>
             </div>
           </div>
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topTools}>
-                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                <XAxis dataKey="tool" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <CartesianGrid
+                  stroke="rgba(124,112,174,0.12)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="tool"
+                  tick={{ fill: "#6d6782", fontSize: 12 }}
+                />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
-                <Tooltip formatter={(value, name) => (name === "cost" ? money(value) : value)} />
+                <Tooltip
+                  formatter={(value, name) =>
+                    name === "cost" ? money(value) : value
+                  }
+                />
                 <Bar dataKey="cost" fill="#9E2A97" radius={[8, 8, 0, 0]} />
                 <Bar dataKey="tokens" fill="#7C70AE" radius={[8, 8, 0, 0]} />
               </BarChart>
@@ -307,41 +412,34 @@ function Dashboard() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>Alert Severity Mix</h3>
-              <p>Live risk load for the rule engine, health monitors, and security detectors.</p>
+              <h3>Alert Severity</h3>
             </div>
           </div>
           <div className="list-grid">
             {alertsBySeverity.length ? (
-              alertsBySeverity.map((item, index) => (
+              alertsBySeverity.map((item) => (
                 <div key={item.name} className="list-item">
                   <strong>{item.name}</strong>
                   <div className="list-meta">
-                    <span
-                      className={`status-pill ${item.name}`}
-                      style={{
-                        background:
-                          index % 2 === 0 ? "rgba(158, 42, 151, 0.12)" : "rgba(124, 112, 174, 0.12)",
-                      }}
-                    >
+                    <span className={`status-pill ${item.name}`}>
                       {item.value} active
                     </span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="empty-state">No active alerts at the moment.</div>
+              <div className="empty-state">No active alerts.</div>
             )}
           </div>
         </div>
       </section>
 
-      <section className="three-column">
+      {/* ═══════════ ALERTS + ANOMALIES ROW ═══════════ */}
+      <section className="two-column">
         <div className="panel">
           <div className="section-head">
             <div>
               <h3>Recent Alerts</h3>
-              <p>Automatically triggered governance alerts.</p>
             </div>
           </div>
           <div className="list-grid">
@@ -350,8 +448,10 @@ function Dashboard() {
                 <div key={alert.id} className="list-item">
                   <strong>{alert.alert_type}</strong>
                   <div className="list-meta">
-                    <span className={`status-pill ${alert.severity}`}>{alert.severity}</span>
-                    {"  "} {alert.message}
+                    <span className={`status-pill ${alert.severity}`}>
+                      {alert.severity}
+                    </span>{" "}
+                    {alert.message}
                   </div>
                 </div>
               ))
@@ -365,7 +465,6 @@ function Dashboard() {
           <div className="section-head">
             <div>
               <h3>Open Anomalies</h3>
-              <p>Detected usage spikes, cost anomalies, and latency drift.</p>
             </div>
           </div>
           <div className="list-grid">
@@ -374,8 +473,10 @@ function Dashboard() {
                 <div key={item.id} className="list-item">
                   <strong>{item.anomaly_type}</strong>
                   <div className="list-meta">
-                    <span className={`status-pill ${item.severity}`}>{item.severity}</span>
-                    {"  "} {item.message}
+                    <span className={`status-pill ${item.severity}`}>
+                      {item.severity}
+                    </span>{" "}
+                    {item.message}
                   </div>
                 </div>
               ))
@@ -384,37 +485,13 @@ function Dashboard() {
             )}
           </div>
         </div>
-
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Recent Event Traces</h3>
-              <p>Last requests with tokens, cost, latency, and pipeline detail.</p>
-            </div>
-          </div>
-          <div className="list-grid">
-            {recentEvents.length ? (
-              recentEvents.map((event) => (
-                <div key={event.event_id} className="timeline-card">
-                  <strong>{event.tool_name}</strong>
-                  <div className="list-meta">
-                    Event {event.event_id} | {event.total_tokens} tokens | {money(event.total_cost)} |{" "}
-                    {event.latency_ms} ms
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">No recent trace data yet.</div>
-            )}
-          </div>
-        </div>
       </section>
 
+      {/* ═══════════ TOOL ROLLUP TABLE ═══════════ */}
       <section className="panel">
         <div className="section-head">
           <div>
             <h3>Today&apos;s Tool Rollup</h3>
-            <p>One-screen operational view of cost, reliability, risk, and anomalies per tool.</p>
           </div>
         </div>
         <div className="table-wrap">
@@ -434,18 +511,27 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
+              {(overview?.tool_rollup || []).length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                    No tool data for today.
+                  </td>
+                </tr>
+              )}
               {(overview?.tool_rollup || []).map((row) => (
                 <tr key={`${row.tool_name}-${row.date}`}>
-                  <td>{row.tool_name}</td>
-                  <td>{row.total_events}</td>
+                  <td>
+                    <strong>{row.tool_name}</strong>
+                  </td>
+                  <td>{num(row.total_events)}</td>
                   <td>{money(row.total_cost)}</td>
-                  <td>{row.total_tokens}</td>
-                  <td>{row.success_count}</td>
-                  <td>{row.failure_count}</td>
-                  <td>{row.avg_latency_ms} ms</td>
+                  <td>{num(row.total_tokens)}</td>
+                  <td>{num(row.success_count)}</td>
+                  <td>{num(row.failure_count)}</td>
+                  <td>{num(row.avg_latency_ms)} ms</td>
                   <td>{Number(row.avg_risk_score || 0).toFixed(1)}</td>
-                  <td>{row.anomaly_count}</td>
-                  <td>{row.misuse_count}</td>
+                  <td>{num(row.anomaly_count)}</td>
+                  <td>{num(row.misuse_count)}</td>
                 </tr>
               ))}
             </tbody>

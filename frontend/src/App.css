@@ -524,6 +524,73 @@ td {
   color: var(--brand-primary);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(17, 17, 17, 0.45);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 80px rgba(124, 112, 174, 0.22);
+  padding: 28px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.btn-close {
+  background: none;
+  border: 1px solid rgba(124, 112, 174, 0.18);
+  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--gray-700);
+  font-size: 16px;
+  transition: background 0.18s ease;
+}
+
+.btn-close:hover {
+  background: var(--gray-100);
+}
+
+.tool-cost-chip {
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(158, 42, 151, 0.07);
+  border: 1px solid rgba(158, 42, 151, 0.16);
+  color: var(--gray-700);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tool-cost-chip strong {
+  color: var(--brand-primary);
+}
+
 @media (max-width: 1200px) {
   .shell {
     grid-template-columns: 1fr;

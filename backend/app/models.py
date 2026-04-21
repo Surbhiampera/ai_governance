@@ -75,6 +75,18 @@ class ToolRegistry(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class ModelRegistry(Base):
+    __tablename__ = "model_registry"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    model_name = Column(String(120), unique=True, nullable=False)
+    provider = Column(String(100), nullable=True)
+    model_type = Column(String(50), nullable=True)
+    cost_per_1k_tokens = Column(Numeric(12, 6), default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class ToolConnector(Base):
     __tablename__ = "tool_connectors"
     __table_args__ = {"extend_existing": True}

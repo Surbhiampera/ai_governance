@@ -6,16 +6,16 @@ import {
   Routes,
 } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
+import Cost from "./pages/Cost";
 import Tools from "./pages/Tools";
-import Alerts from "./pages/Alerts";
-import Security from "./pages/Security";
+import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
+  { to: "/cost", label: "Cost" },
   { to: "/controls", label: "Controls" },
-  { to: "/alerts", label: "Alerts" },
-  { to: "/security", label: "Security" },
+  { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/tracing", label: "Tracing" },
 ];
 
@@ -54,9 +54,9 @@ function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/cost" element={<Cost />} />
             <Route path="/controls" element={<Tools />} />
-            <Route path="/alerts" element={<Alerts />} />
-            <Route path="/security" element={<Security />} />
+            <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/tracing" element={<TestEvent />} />
           </Routes>
         </main>

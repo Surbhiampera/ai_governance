@@ -52,6 +52,21 @@ class TelemetryEventCreate(BaseModel):
     completed_at: Optional[datetime] = None
 
 
+class TelemetryEventUpdate(BaseModel):
+    tool_name: Optional[str] = None
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    latency_ms: Optional[int] = None
+    infra_cost: Optional[Decimal] = None
+    input_data_size_mb: Optional[Decimal] = None
+    output_data_size_mb: Optional[Decimal] = None
+    pii_type: Optional[str] = None
+    tags: Optional[list[str]] = None
+    status: Optional[str] = None
+
+
 class BatchTelemetryIngest(BaseModel):
     events: list[TelemetryEventCreate]
 
@@ -198,6 +213,24 @@ class ToolRegistryResponse(BaseModel):
     vendor: Optional[str] = None
     cost_model: Optional[str] = None
     base_cost: Optional[Decimal] = None
+    created_at: Optional[datetime] = None
+
+
+class ModelRegistryCreate(BaseModel):
+    model_name: str
+    provider: Optional[str] = None
+    model_type: Optional[str] = None
+    cost_per_1k_tokens: Decimal = Decimal("0")
+
+
+class ModelRegistryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    model_name: str
+    provider: Optional[str] = None
+    model_type: Optional[str] = None
+    cost_per_1k_tokens: Optional[Decimal] = None
     created_at: Optional[datetime] = None
 
 

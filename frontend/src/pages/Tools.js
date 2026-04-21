@@ -93,18 +93,14 @@ function Tools() {
     <div className="page-shell">
       <section className="hero">
         <div className="hero-card">
-          <h2>Governance control plane for connectors, rules, and background jobs.</h2>
-          <p>
-            This is where we define what to ingest, what conditions to enforce, and
-            when to run aggregation and anomaly workflows across the monitoring stack.
-          </p>
+          <h2>Control Plane</h2>
+          <p>Connectors, rules, and background jobs.</p>
         </div>
 
         <div className="panel">
           <div className="section-head">
             <div>
-              <h2>Background Processing</h2>
-              <p>Celery-backed jobs for aggregation, alerts, and anomaly analysis.</p>
+              <h2>Background Jobs</h2>
             </div>
           </div>
 
@@ -151,8 +147,7 @@ function Tools() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>Multi-Tool Connectors</h3>
-              <p>Register ingestion sources for OpenAI, Azure, Anthropic, LangChain, or internal tools.</p>
+              <h3>Connectors</h3>
             </div>
           </div>
 
@@ -215,7 +210,6 @@ function Tools() {
           <div className="section-head">
             <div>
               <h3>Rule Engine</h3>
-              <p>Define automatic conditions for cost, risk score, token volume, latency, or data out.</p>
             </div>
           </div>
 
@@ -308,7 +302,6 @@ function Tools() {
           <div className="section-head">
             <div>
               <h3>Registered Connectors</h3>
-              <p>Currently active multi-tool ingestion endpoints.</p>
             </div>
           </div>
           <div className="table-wrap">
@@ -343,7 +336,6 @@ function Tools() {
           <div className="section-head">
             <div>
               <h3>Active Rules</h3>
-              <p>Thresholds currently enforced by the automated governance layer.</p>
             </div>
           </div>
           <div className="table-wrap">
@@ -379,7 +371,6 @@ function Tools() {
         <div className="section-head">
           <div>
             <h3>Tool Usage Summary</h3>
-            <p>How each connected tool is performing on volume, cost, latency, and reliability.</p>
           </div>
         </div>
         <div className="table-wrap">

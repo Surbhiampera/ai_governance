@@ -39,18 +39,39 @@ export const getSecurityLogs = (piiDetected, misuseDetected) =>
 export const getUsageAnomalies = (status = "open") =>
   API.get("/security/anomalies", { params: { status } });
 
+// Combined alerts & security endpoints
+export const getAlertsSecurity = (status) =>
+  API.get("/alerts-security/alerts", { params: { status: status || undefined } });
+export const resolveAlertCombined = (id) =>
+  API.patch(`/alerts-security/alerts/${id}/resolve`);
+export const getSecuritySummaryCombined = () =>
+  API.get("/alerts-security/summary");
+export const getSecurityLogsCombined = (piiDetected, misuseDetected) =>
+  API.get("/alerts-security/logs", {
+    params: { pii_detected: piiDetected, misuse_detected: misuseDetected },
+  });
+export const getAnomaliesCombined = (status = "open") =>
+  API.get("/alerts-security/anomalies", { params: { status } });
+
 export const getTelemetryLogs = (params) =>
   API.get("/telemetry/logs", { params });
 export const getTrace = (eventId) => API.get(`/telemetry/traces/${eventId}`);
 export const postTelemetryEvent = (data) => API.post("/telemetry/event", data);
 export const postTelemetryBatch = (events) =>
   API.post("/telemetry/events/batch", { events });
+export const updateTelemetryEvent = (eventId, data) =>
+  API.put(`/telemetry/event/${eventId}`, data);
+export const deleteTelemetryEvent = (eventId) =>
+  API.delete(`/telemetry/event/${eventId}`);
 
 export const getTools = () => API.get("/tools/");
 export const registerTool = (data) => API.post("/tools/register", data);
 export const getToolsUsage = () => API.get("/tools/usage");
 export const getConnectors = () => API.get("/tools/connectors");
 export const createConnector = (data) => API.post("/tools/connectors", data);
+
+export const getModels = () => API.get("/models/");
+export const registerModel = (data) => API.post("/models/register", data);
 
 export const getRules = () => API.get("/governance/rules");
 export const createRule = (data) => API.post("/governance/rules", data);

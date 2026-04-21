@@ -7,12 +7,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent
+from app.models import Alert, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, UsageAnomaly
 from app.schemas import (
     BatchTelemetryIngest,
     CostBreakdownResponse,
     TelemetryEventCreate,
     TelemetryEventResponse,
+    TelemetryEventUpdate,
     TraceDetailResponse,
 )
 from app.services.alert_engine import AlertEngine
@@ -77,6 +78,40 @@ def get_event_trace(event_id: str, db: Session = Depends(get_db)):
 
     security = db.query(DataSecurityLog).filter(DataSecurityLog.event_id == event_id).first()
     return TraceDetailResponse(event=_build_event_response(db, event), security=security)
+
+
+@router.delete("/event/{event_id}")
+def delete_event(event_id: str, db: Session = Depends(get_db)):
+    event = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    db.query(CostBreakdown).filter(CostBreakdown.event_id == event_id).delete()
+    db.query(ExecutionPipeline).filter(ExecutionPipeline.event_id == event_id).delete()
+    db.query(DataSecurityLog).filter(DataSecurityLog.event_id == event_id).delete()
+    db.query(Alert).filter(Alert.event_id == event_id).delete()
+    db.query(UsageAnomaly).filter(UsageAnomaly.event_id == event_id).delete()
+    db.delete(event)
+    db.commit()
+    return {"status": "deleted", "event_id": event_id}
+
+
+@router.put("/event/{event_id}", response_model=TelemetryEventResponse)
+def update_event(event_id: str, update_data: TelemetryEventUpdate, db: Session = Depends(get_db)):
+    event = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    update_fields = update_data.model_dump(exclude_none=True)
+    for field, value in update_fields.items():
+        setattr(event, field, value)
+
+    if "prompt_tokens" in update_fields or "completion_tokens" in update_fields:
+        event.total_tokens = event.prompt_tokens + event.completion_tokens
+
+    db.commit()
+    db.refresh(event)
+    return _build_event_response(db, event)
 
 
 def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEvent:

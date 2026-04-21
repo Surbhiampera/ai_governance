@@ -1,43 +1,54 @@
 import React, { useEffect, useState } from "react";
-import { getTelemetryLogs, getTrace, postTelemetryEvent } from "../api";
+import {
+  getTelemetryLogs,
+  getTrace,
+  postTelemetryEvent,
+  updateTelemetryEvent,
+  deleteTelemetryEvent,
+} from "../api";
 
-const defaultEvent = {
+const freshIds = () => ({
   event_id: `evt-${Date.now()}`,
   request_id: `req-${Date.now()}`,
   trace_id: `trace-${Date.now()}`,
-  org_id: "default",
-  project_id: "governance-hub",
-  user_id: "analyst-01",
-  tool_name: "openai",
-  provider: "OpenAI",
-  model_name: "gpt-4.1",
-  component_name: "answer-pipeline",
-  service_type: "llm",
-  execution_type: "chat",
+});
+
+const blankEvent = {
+  org_id: "",
+  project_id: "",
+  user_id: "",
+  tool_name: "",
+  provider: "",
+  model_name: "",
+  component_name: "",
+  service_type: "",
+  execution_type: "",
   status: "success",
-  latency_ms: 920,
-  input_data_size_mb: 2.4,
-  output_data_size_mb: 1.1,
-  prompt_tokens: 2800,
-  completion_tokens: 1100,
-  infra_cost: 0.18,
+  latency_ms: "",
+  input_data_size_mb: "",
+  output_data_size_mb: "",
+  prompt_tokens: "",
+  completion_tokens: "",
+  infra_cost: "",
   contains_pii: false,
   pii_type: "",
   data_out_violation: false,
-  tags: "monitoring,production",
-  stages: [
-    { stage_order: 1, stage_name: "ingest", system_name: "gateway", status: "success", stage_latency_ms: 120, retry_count: 0, details: { queue: "api" } },
-    { stage_order: 2, stage_name: "policy-check", system_name: "guardrail", status: "success", stage_latency_ms: 180, retry_count: 0, details: { rule_pack: "baseline" } },
-    { stage_order: 3, stage_name: "model-execution", system_name: "llm", status: "success", stage_latency_ms: 620, retry_count: 0, details: { region: "us" } },
-  ],
+  tags: "",
+  stages: [],
 };
 
+const REQUIRED_FIELDS = ["org_id", "tool_name", "project_id", "model_name"];
+
 function TestEvent() {
-  const [form, setForm] = useState(defaultEvent);
+  const [form, setForm] = useState({ ...blankEvent });
   const [events, setEvents] = useState([]);
   const [selectedTrace, setSelectedTrace] = useState(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [validationErrors, setValidationErrors] = useState({});
 
   const loadEvents = async () => {
     const response = await getTelemetryLogs({ limit: 12 });
@@ -45,185 +56,425 @@ function TestEvent() {
   };
 
   useEffect(() => {
-    loadEvents().catch(() => setMessage("Unable to load recent traces."));
+    loadEvents().catch(() => setMessage("Unable to load data."));
   }, []);
 
-  const submitEvent = async (event) => {
-    event.preventDefault();
+  /* ── Modal helpers ── */
+  const openAddModal = () => {
+    setEditingEventId(null);
+    setForm({ ...blankEvent });
+    setValidationErrors({});
+    setModalOpen(true);
+  };
+
+  const openEditModal = (evt) => {
+    setEditingEventId(evt.event_id);
+    setValidationErrors({});
+    setForm({
+      ...blankEvent,
+      event_id: evt.event_id,
+      request_id: evt.request_id || "",
+      trace_id: evt.trace_id || "",
+      org_id: evt.org_id || "",
+      project_id: evt.project_id || "",
+      user_id: evt.user_id || "",
+      tool_name: evt.tool_name || "",
+      provider: evt.provider || "",
+      model_name: evt.model_name || "",
+      component_name: evt.component_name || "",
+      service_type: evt.service_type || "",
+      execution_type: evt.execution_type || "",
+      status: evt.status || "success",
+      latency_ms: evt.latency_ms ?? "",
+      input_data_size_mb: evt.input_data_size_mb ?? "",
+      output_data_size_mb: evt.output_data_size_mb ?? "",
+      prompt_tokens: evt.prompt_tokens ?? "",
+      completion_tokens: evt.completion_tokens ?? "",
+      infra_cost: evt.infra_cost ?? "",
+      pii_type: evt.pii_type || "",
+      tags: Array.isArray(evt.tags) ? evt.tags.join(", ") : evt.tags || "",
+      stages: evt.stages || [],
+    });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingEventId(null);
+    setValidationErrors({});
+  };
+
+  const resetForm = () => {
+    setValidationErrors({});
+    if (editingEventId) {
+      const evt = events.find((e) => e.event_id === editingEventId);
+      if (evt) { openEditModal(evt); return; }
+    }
+    setForm({ ...blankEvent });
+  };
+
+  /* ── Validate mandatory fields ── */
+  const validate = () => {
+    const errors = {};
+    if (!form.org_id) errors.org_id = "Organization is required";
+    if (!form.tool_name) errors.tool_name = "Tool is required";
+    if (!form.project_id) errors.project_id = "Project is required";
+    if (!form.model_name || !form.model_name.trim()) errors.model_name = "Model is required";
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  /* ── Submit (add or edit) ── */
+  const submitEvent = async (e) => {
+    e.preventDefault();
+    if (!editingEventId && !validate()) return;
     setSubmitting(true);
     try {
-      await postTelemetryEvent({
+      const ids = editingEventId ? {} : freshIds();
+      const payload = {
         ...form,
-        input_data_size_mb: Number(form.input_data_size_mb),
-        output_data_size_mb: Number(form.output_data_size_mb),
-        latency_ms: Number(form.latency_ms),
-        prompt_tokens: Number(form.prompt_tokens),
-        completion_tokens: Number(form.completion_tokens),
-        infra_cost: Number(form.infra_cost),
+        ...ids,
+        input_data_size_mb: Number(form.input_data_size_mb) || 0,
+        output_data_size_mb: Number(form.output_data_size_mb) || 0,
+        latency_ms: Number(form.latency_ms) || 0,
+        prompt_tokens: Number(form.prompt_tokens) || 0,
+        completion_tokens: Number(form.completion_tokens) || 0,
+        infra_cost: Number(form.infra_cost) || 0,
         pii_type: form.pii_type || null,
-        tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-      });
-      setMessage("Telemetry event ingested.");
-      setForm({
-        ...defaultEvent,
-        event_id: `evt-${Date.now()}`,
-        request_id: `req-${Date.now()}`,
-        trace_id: `trace-${Date.now()}`,
-      });
+        component_name: form.component_name || null,
+        service_type: form.service_type || null,
+        execution_type: form.execution_type || null,
+        user_id: form.user_id || null,
+        tags: typeof form.tags === "string"
+          ? form.tags.split(",").map((t) => t.trim()).filter(Boolean)
+          : form.tags,
+      };
+
+      if (editingEventId) {
+        await updateTelemetryEvent(editingEventId, payload);
+        setMessage(`Event ${editingEventId} updated successfully.`);
+      } else {
+        await postTelemetryEvent(payload);
+        setMessage("Telemetry event ingested successfully.");
+      }
+      closeModal();
       await loadEvents();
     } catch {
-      setMessage("Telemetry ingest failed. Check backend connectivity.");
+      setMessage(
+        editingEventId
+          ? "Update failed. Check backend connectivity."
+          : "Telemetry ingest failed. Check backend connectivity."
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
+  /* ── Delete ── */
+  const handleDelete = async (eventId) => {
+    try {
+      await deleteTelemetryEvent(eventId);
+      setMessage(`Event ${eventId} deleted.`);
+      setDeleteConfirm(null);
+      if (selectedTrace?.event?.event_id === eventId) setSelectedTrace(null);
+      await loadEvents();
+    } catch {
+      setMessage("Delete failed. Check backend connectivity.");
+    }
+  };
+
+  /* ── Trace viewer ── */
   const openTrace = async (eventId) => {
     const response = await getTrace(eventId);
     setSelectedTrace(response.data);
   };
 
+  const isEditing = !!editingEventId;
+
+  const fieldError = (name) =>
+    validationErrors[name]
+      ? { border: "1px solid #c0392b" }
+      : {};
+
   return (
     <div className="page-shell">
-      <section className="hero">
-        <div className="hero-card">
-          <h2>Event tracing and simulator for full request visibility.</h2>
-          <p>
-            Post a sample request with tokens, cost, latency, security attributes,
-            and pipeline stages to validate the entire governance workflow end to end.
-          </p>
-        </div>
-
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h2>Simulator Status</h2>
-              <p>Use this to generate telemetry and verify cost, alert, and tracing behavior.</p>
-            </div>
+      {/* ── Compact Header ── */}
+      <section className="panel" style={{ padding: "18px 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Event Tracing &amp; Simulator</h2>
+            <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
+              Inject, edit, or remove telemetry events. Inspect traces with tokens, cost, latency, and security.
+            </p>
           </div>
-          <div className="list-item">
-            <strong>Live feedback</strong>
-            <div className="list-meta">{message || "No simulator actions yet."}</div>
+          <div className="action-row">
+            <button type="button" className="btn btn-primary" onClick={openAddModal}>
+              ＋ Add Event
+            </button>
           </div>
         </div>
+        {message && (
+          <div className="list-meta" style={{ marginTop: 10 }}>{message}</div>
+        )}
       </section>
 
-      <section className="two-column">
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Ingest Test Event</h3>
-              <p>Creates one full telemetry record with trace stages and governance signals.</p>
-            </div>
-          </div>
-
-          <form className="stack" onSubmit={submitEvent}>
-            <div className="form-grid">
-              <div className="field">
-                <label>Event ID</label>
-                <input value={form.event_id} onChange={(e) => setForm({ ...form, event_id: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Request ID</label>
-                <input value={form.request_id} onChange={(e) => setForm({ ...form, request_id: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Trace ID</label>
-                <input value={form.trace_id} onChange={(e) => setForm({ ...form, trace_id: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Tool Name</label>
-                <input value={form.tool_name} onChange={(e) => setForm({ ...form, tool_name: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Provider</label>
-                <input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Model</label>
-                <input value={form.model_name} onChange={(e) => setForm({ ...form, model_name: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Prompt Tokens</label>
-                <input value={form.prompt_tokens} onChange={(e) => setForm({ ...form, prompt_tokens: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Completion Tokens</label>
-                <input value={form.completion_tokens} onChange={(e) => setForm({ ...form, completion_tokens: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Latency ms</label>
-                <input value={form.latency_ms} onChange={(e) => setForm({ ...form, latency_ms: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Infra Cost</label>
-                <input value={form.infra_cost} onChange={(e) => setForm({ ...form, infra_cost: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Input MB</label>
-                <input value={form.input_data_size_mb} onChange={(e) => setForm({ ...form, input_data_size_mb: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Output MB</label>
-                <input value={form.output_data_size_mb} onChange={(e) => setForm({ ...form, output_data_size_mb: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <div className="field">
-                <label>PII Type</label>
-                <input value={form.pii_type} onChange={(e) => setForm({ ...form, pii_type: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Tags</label>
-                <input
-                  value={form.tags}
-                  onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                  placeholder="monitoring,production"
-                />
-              </div>
-            </div>
-
-            <div className="action-row">
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? "Submitting..." : "Ingest event"}
+      {/* ── Inject / Edit Modal ── */}
+      {modalOpen && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{isEditing ? "Edit Event" : "Inject Telemetry Event"}</h3>
+              <button type="button" className="btn-close" onClick={closeModal}>
+                ✕
               </button>
             </div>
-          </form>
-        </div>
 
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Recent Traces</h3>
-              <p>Select an event to inspect pipeline stages, security score, and costs.</p>
-            </div>
-          </div>
-          <div className="list-grid">
-            {events.map((item) => (
-              <div key={item.event_id} className="timeline-card">
-                <strong>{item.tool_name}</strong>
-                <div className="list-meta">
-                  {item.event_id} | {item.total_tokens} tokens | ${Number(item.total_cost || 0).toFixed(2)} |{" "}
-                  {item.latency_ms} ms
+            <form className="stack" onSubmit={submitEvent}>
+              {isEditing && (
+                <div className="tool-cost-chip" style={{ fontSize: 13, color: "var(--gray-500)" }}>
+                  Editing: <strong style={{ color: "var(--gray-700)" }}>{editingEventId}</strong>
                 </div>
-                <div className="action-row" style={{ marginTop: 12 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => openTrace(item.event_id)}>
-                    Open trace
-                  </button>
+              )}
+
+              {/* ── Required Fields ── */}
+              <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                Required fields
+              </p>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Organization *</label>
+                  <input value={form.org_id} onChange={(e) => setForm({ ...form, org_id: e.target.value })} placeholder="e.g. org-acme" style={fieldError("org_id")} />
+                  {validationErrors.org_id && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.org_id}</span>}
+                </div>
+                <div className="field">
+                  <label>Project *</label>
+                  <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="e.g. proj-main" style={fieldError("project_id")} />
+                  {validationErrors.project_id && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.project_id}</span>}
                 </div>
               </div>
-            ))}
+              <div className="form-grid">
+                <div className="field">
+                  <label>Tool *</label>
+                  <input value={form.tool_name} onChange={(e) => setForm({ ...form, tool_name: e.target.value })} placeholder="e.g. LangChain, OpenAI" style={fieldError("tool_name")} />
+                  {validationErrors.tool_name && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.tool_name}</span>}
+                </div>
+                <div className="field">
+                  <label>Model *</label>
+                  <input value={form.model_name} onChange={(e) => setForm({ ...form, model_name: e.target.value })} placeholder="e.g. gpt-4, claude-3" style={fieldError("model_name")} />
+                  {validationErrors.model_name && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.model_name}</span>}
+                </div>
+              </div>
+
+              {/* ── Optional Details ── */}
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                Optional details
+              </p>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Provider</label>
+                  <input
+                    value={form.provider}
+                    onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                    placeholder="e.g. openai, anthropic"
+                  />
+                </div>
+                <div className="field">
+                  <label>Status</label>
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                    <option value="success">success</option>
+                    <option value="completed">completed</option>
+                    <option value="failed">failed</option>
+                    <option value="error">error</option>
+                    <option value="timeout">timeout</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Service Type</label>
+                  <input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="e.g. llm, embedding" />
+                </div>
+                <div className="field">
+                  <label>Execution Type</label>
+                  <input value={form.execution_type} onChange={(e) => setForm({ ...form, execution_type: e.target.value })} placeholder="e.g. chat, completion" />
+                </div>
+                <div className="field">
+                  <label>Component</label>
+                  <input value={form.component_name} onChange={(e) => setForm({ ...form, component_name: e.target.value })} placeholder="e.g. answer-pipeline" />
+                </div>
+                <div className="field">
+                  <label>User ID</label>
+                  <input value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })} placeholder="e.g. analyst-01" />
+                </div>
+              </div>
+
+              {/* ── Metrics ── */}
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                Metrics
+              </p>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Prompt Tokens</label>
+                  <input type="number" min="0" value={form.prompt_tokens} onChange={(e) => setForm({ ...form, prompt_tokens: e.target.value })} placeholder="0" />
+                </div>
+                <div className="field">
+                  <label>Completion Tokens</label>
+                  <input type="number" min="0" value={form.completion_tokens} onChange={(e) => setForm({ ...form, completion_tokens: e.target.value })} placeholder="0" />
+                </div>
+                <div className="field">
+                  <label>Latency (ms)</label>
+                  <input type="number" min="0" value={form.latency_ms} onChange={(e) => setForm({ ...form, latency_ms: e.target.value })} placeholder="0" />
+                </div>
+                <div className="field">
+                  <label>Infra Cost ($)</label>
+                  <input type="number" step="0.0001" min="0" value={form.infra_cost} onChange={(e) => setForm({ ...form, infra_cost: e.target.value })} placeholder="0.00" />
+                </div>
+                <div className="field">
+                  <label>Input Size (MB)</label>
+                  <input type="number" step="0.01" min="0" value={form.input_data_size_mb} onChange={(e) => setForm({ ...form, input_data_size_mb: e.target.value })} placeholder="0.00" />
+                </div>
+                <div className="field">
+                  <label>Output Size (MB)</label>
+                  <input type="number" step="0.01" min="0" value={form.output_data_size_mb} onChange={(e) => setForm({ ...form, output_data_size_mb: e.target.value })} placeholder="0.00" />
+                </div>
+              </div>
+
+              {/* ── Security & Tags ── */}
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                Security &amp; tags
+              </p>
+              <div className="form-grid">
+                <div className="field">
+                  <label>PII Type</label>
+                  <input value={form.pii_type} onChange={(e) => setForm({ ...form, pii_type: e.target.value })} placeholder="e.g. email, ssn (leave empty if none)" />
+                </div>
+                <div className="field">
+                  <label>Tags</label>
+                  <input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="comma-separated, e.g. monitoring, prod" />
+                </div>
+              </div>
+
+              {/* ── Action buttons ── */}
+              <div className="action-row">
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting
+                    ? isEditing ? "Saving…" : "Submitting…"
+                    : isEditing ? "Save Changes" : "Inject Event"}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={resetForm}>
+                  ↺ Reset
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={closeModal}>
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {deleteConfirm && (
+        <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
+          <div
+            className="modal-dialog"
+            style={{ maxWidth: 440, textAlign: "center" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ justifyContent: "center" }}>
+              <h3>Delete Event?</h3>
+            </div>
+            <p style={{ color: "var(--gray-500)", margin: "0 0 8px" }}>
+              This will permanently remove the event and all related traces,
+              cost breakdowns, security logs, and alerts.
+            </p>
+            <p style={{ fontWeight: 700, wordBreak: "break-all", margin: "0 0 20px" }}>
+              {deleteConfirm}
+            </p>
+            <div className="action-row" style={{ justifyContent: "center" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#c0392b" }}
+                onClick={() => handleDelete(deleteConfirm)}
+              >
+                Yes, Delete
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Recent Events ── */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Recent Events</h3>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>Select an event to inspect, edit, or delete.</p>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={openAddModal}>
+            ＋ Add Event
+          </button>
+        </div>
+        <div className="list-grid">
+          {events.length === 0 && (
+            <div className="empty-state">No events yet. Inject one to get started.</div>
+          )}
+          {events.map((item) => (
+            <div key={item.event_id} className="timeline-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <strong>{item.tool_name || "—"}</strong>
+                  <div className="list-meta">
+                    {item.event_id} &nbsp;·&nbsp; {item.total_tokens} tokens &nbsp;·&nbsp; $
+                    {Number(item.total_cost || 0).toFixed(2)} &nbsp;·&nbsp; {item.latency_ms} ms
+                  </div>
+                </div>
+                <span
+                  className={`status-pill ${(item.status || "").toLowerCase()}`}
+                  style={{ flexShrink: 0, marginLeft: 12 }}
+                >
+                  {item.status || "—"}
+                </span>
+              </div>
+              <div className="action-row" style={{ marginTop: 12 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => openTrace(item.event_id)}>
+                  Trace
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => openEditModal(item)}>
+                  ✎ Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ color: "#c0392b" }}
+                  onClick={() => setDeleteConfirm(item.event_id)}
+                >
+                  ✕ Delete
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
+      {/* ── Selected Trace ── */}
       <section className="panel">
         <div className="section-head">
           <div>
             <h3>Selected Trace</h3>
-            <p>Request-level view of tokens, cost, latency, pipeline stages, and security controls.</p>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>Request-level view of tokens, cost, latency, pipeline stages, and security.</p>
           </div>
+          {selectedTrace && (
+            <button type="button" className="btn btn-ghost" onClick={() => setSelectedTrace(null)}>
+              ✕ Close
+            </button>
+          )}
         </div>
 
         {selectedTrace ? (
