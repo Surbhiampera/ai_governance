@@ -114,7 +114,18 @@ CREATE TABLE telemetry_events (
     latency_ms INT DEFAULT 0,
     tags JSON,
     metadata_json JSON,
+
+    ALTER TABLE telemetry_events,
+    ADD COLUMN raw_usage_json JSON,
+    ALTER TABLE telemetry_events,
+    ADD COLUMN api_key_hash VARCHAR(200),
+        ALTER TABLE telemetry_events,
+    ADD COLUMN parent_event_id VARCHAR(120),
+        ALTER TABLE telemetry_events,
+    ADD COLUMN currency VARCHAR(10) DEFAULT 'USD',
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    
 );
 
 9. COST BREAKDOWN
@@ -267,3 +278,38 @@ CREATE TABLE rate_limits (
     max_tokens_per_day INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE rate_limit_violations (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    tool_name VARCHAR(150),
+    violation_type VARCHAR(50),
+    observed_value INT,
+    limit_value INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE model_pricing (
+    id BIGSERIAL PRIMARY KEY,
+    provider VARCHAR(100),
+    model_name VARCHAR(120),
+
+    input_cost_per_1k DECIMAL(12,6),
+    output_cost_per_1k DECIMAL(12,6),
+
+    currency VARCHAR(10) DEFAULT 'USD',
+    effective_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(provider, model_name)
+);
+
+CREATE INDEX idx_telemetry_org_time 
+ON telemetry_events(org_id, created_at);
+
+CREATE INDEX idx_telemetry_project_time 
+ON telemetry_events(project_id, created_at);
+
+CREATE INDEX idx_telemetry_model 
+ON telemetry_events(model_name);
+
+CREATE INDEX idx_telemetry_event_id 
+ON telemetry_events(event_id);

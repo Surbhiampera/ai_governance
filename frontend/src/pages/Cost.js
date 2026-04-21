@@ -19,6 +19,7 @@ function Cost() {
   const [byProject, setByProject] = useState([]);
   const [dailyCost, setDailyCost] = useState([]);
   const [monthlyCost, setMonthlyCost] = useState([]);
+  const [activeMetric, setActiveMetric] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -50,10 +51,9 @@ function Cost() {
     load();
   }, []);
 
-  if (loading) return <div className="loading">Loading cost analytics…</div>;
+  if (loading) return <div className="loading">Loading cost analytics...</div>;
   if (error) return <div className="error-message">{error}</div>;
 
-  /* aggregate daily costs by date for chart */
   const dailyByDate = Object.values(
     dailyCost.reduce((acc, r) => {
       if (!acc[r.date]) acc[r.date] = { date: r.date, cost: 0, tokens: 0 };
@@ -63,44 +63,105 @@ function Cost() {
     }, {}),
   ).sort((a, b) => a.date.localeCompare(b.date));
 
+  const metricCards = [
+    {
+      id: "today",
+      title: "Today",
+      value: money(totals?.today?.cost),
+      detailRows: [
+        { label: "Total cost", value: money(totals?.today?.cost) },
+        { label: "Tokens", value: num(totals?.today?.tokens) },
+        { label: "Events", value: num(totals?.today?.events) },
+        { label: "Daily rows", value: num(dailyCost.length) },
+      ],
+    },
+    {
+      id: "this-month",
+      title: "This Month",
+      value: money(totals?.this_month?.cost),
+      detailRows: [
+        { label: "Total cost", value: money(totals?.this_month?.cost) },
+        { label: "Tokens", value: num(totals?.this_month?.tokens) },
+        { label: "Events", value: num(totals?.this_month?.events) },
+        { label: "Monthly rows", value: num(monthlyCost.length) },
+      ],
+    },
+    {
+      id: "all-time",
+      title: "All Time",
+      value: money(totals?.all_time?.cost),
+      detailRows: [
+        { label: "Total cost", value: money(totals?.all_time?.cost) },
+        { label: "Tokens", value: num(totals?.all_time?.tokens) },
+        { label: "Events", value: num(totals?.all_time?.events) },
+        { label: "Tracked projects", value: num(byProject.length) },
+      ],
+    },
+    {
+      id: "models",
+      title: "Models Tracked",
+      value: num(byModel.length),
+      detailRows: [
+        { label: "Models tracked", value: num(byModel.length) },
+        { label: "Projects active", value: num(byProject.length) },
+        {
+          label: "Top model",
+          value: byModel[0]?.model_name || "No model data",
+        },
+        {
+          label: "Top provider",
+          value: byModel[0]?.provider || "Provider not set",
+        },
+      ],
+    },
+  ];
+
+  const activeMetricData = metricCards.find((card) => card.id === activeMetric);
+
   return (
     <div className="page-shell">
-      {/* ── KPI cards ── */}
       <section className="stats-grid">
-        <div className="metric-card">
-          <div className="metric-eyebrow">Today</div>
-          <div className="metric-value">{money(totals?.today?.cost)}</div>
-          <div className="metric-note">
-            {num(totals?.today?.tokens)} tokens · {num(totals?.today?.events)}{" "}
-            events
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">This Month</div>
-          <div className="metric-value">{money(totals?.this_month?.cost)}</div>
-          <div className="metric-note">
-            {num(totals?.this_month?.tokens)} tokens ·{" "}
-            {num(totals?.this_month?.events)} events
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">All Time</div>
-          <div className="metric-value">{money(totals?.all_time?.cost)}</div>
-          <div className="metric-note">
-            {num(totals?.all_time?.tokens)} tokens ·{" "}
-            {num(totals?.all_time?.events)} events
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">Models Tracked</div>
-          <div className="metric-value">{byModel.length}</div>
-          <div className="metric-note">
-            {byProject.length} projects active
-          </div>
-        </div>
+        {metricCards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            className="metric-card metric-card-button"
+            onClick={() => setActiveMetric(card.id)}
+          >
+            <div className="metric-eyebrow">{card.title}</div>
+            <div className="metric-value">{card.value}</div>
+          </button>
+        ))}
       </section>
 
-      {/* ── Cost by Model ── */}
+      {activeMetricData ? (
+        <div className="modal-backdrop metric-modal-backdrop" onClick={() => setActiveMetric(null)}>
+          <div className="modal-dialog metric-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">{activeMetricData.title}</div>
+                <h3 style={{ marginTop: 8 }}>{activeMetricData.value}</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setActiveMetric(null)}
+              >
+                x
+              </button>
+            </div>
+            <div className="metric-modal-grid">
+              {activeMetricData.detailRows.map((row) => (
+                <div key={row.label} className="tool-cost-chip">
+                  <strong>{row.label}</strong>
+                  <div>{row.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="panel">
         <div className="section-head">
           <div>
@@ -153,7 +214,6 @@ function Cost() {
         </div>
       </section>
 
-      {/* ── Cost by Project ── */}
       <section className="panel">
         <div className="section-head">
           <div>
@@ -200,7 +260,6 @@ function Cost() {
         </div>
       </section>
 
-      {/* ── Charts row ── */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
@@ -211,14 +270,8 @@ function Cost() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailyByDate}>
-                <CartesianGrid
-                  stroke="rgba(124,112,174,0.12)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#6d6782", fontSize: 12 }}
-                />
+                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip formatter={(v) => money(v)} />
                 <Bar dataKey="cost" fill="#9E2A97" radius={[8, 8, 0, 0]} />

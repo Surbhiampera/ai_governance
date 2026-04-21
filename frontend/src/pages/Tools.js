@@ -42,6 +42,30 @@ function Tools() {
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState("");
 
+  const workflowCards = [
+    {
+      title: "Background Jobs",
+      description:
+        "Run in the background without UI blocking. They automatically fetch, process, and store usage, cost, and log data so the app stays current without manual action.",
+      impact:
+        "Improves performance, enables real-time dashboards, and handles heavier work silently.",
+    },
+    {
+      title: "Connectors",
+      description:
+        "Connect the app to external tools like OpenAI, Anthropic, and internal services. They pull usage, logs, and cost data into one system.",
+      impact:
+        "All tool data comes into one place, which gives you centralized monitoring.",
+    },
+    {
+      title: "Rule Engine",
+      description:
+        "Defines conditions such as cost > $100 or risk_score > 75 and automatically triggers alerts or actions when thresholds are matched.",
+      impact:
+        "Helps governance, cost control, and risk detection stay active automatically.",
+    },
+  ];
+
   const load = async () => {
     const [connectorRes, rulesRes, usageRes] = await Promise.all([
       getConnectors(),
@@ -94,13 +118,21 @@ function Tools() {
       <section className="hero">
         <div className="hero-card">
           <h2>Control Plane</h2>
-          <p>Connectors, rules, and background jobs.</p>
+          <p>
+            Automated governance workflow for connectors, background jobs, and
+            the rule engine.
+          </p>
         </div>
 
         <div className="panel">
           <div className="section-head">
             <div>
               <h2>Background Jobs</h2>
+              <p>
+                Trigger background processing that refreshes summaries, scans
+                anomalies, and keeps the platform updated while the rest of the
+                app remains usable.
+              </p>
             </div>
           </div>
 
@@ -108,7 +140,9 @@ function Tools() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => runWorker("Daily aggregation", triggerDailyAggregation)}
+              onClick={() =>
+                runWorker("Daily aggregation", triggerDailyAggregation)
+              }
               disabled={running === "Daily aggregation"}
             >
               Run daily aggregation
@@ -116,7 +150,9 @@ function Tools() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => runWorker("Monthly aggregation", triggerMonthlyAggregation)}
+              onClick={() =>
+                runWorker("Monthly aggregation", triggerMonthlyAggregation)
+              }
               disabled={running === "Monthly aggregation"}
             >
               Run monthly aggregation
@@ -124,7 +160,9 @@ function Tools() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => runWorker("Anomaly detection", triggerAnomalyDetection)}
+              onClick={() =>
+                runWorker("Anomaly detection", triggerAnomalyDetection)
+              }
               disabled={running === "Anomaly detection"}
             >
               Run anomaly detection
@@ -139,9 +177,62 @@ function Tools() {
             </button>
           </div>
 
-          {message ? <div className="list-meta" style={{ marginTop: 16 }}>{message}</div> : null}
+          {message ? (
+            <div className="list-meta" style={{ marginTop: 16 }}>
+              {message}
+            </div>
+          ) : null}
         </div>
       </section>
+
+      <section className="three-column">
+        {workflowCards.map((card) => (
+          <div key={card.title} className="panel workflow-card">
+            <div className="metric-eyebrow">{card.title}</div>
+            <h3 style={{ marginTop: 10 }}>{card.title}</h3>
+            <p className="panel-muted">{card.description}</p>
+            <div className="tool-cost-chip" style={{ marginTop: 18 }}>
+              <strong>Impact</strong>
+              <div>{card.impact}</div>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>How They Work Together</h3>
+            <p>
+              Connectors bring data, background jobs process and update it, and
+              the rule engine analyzes conditions to trigger actions.
+            </p>
+          </div>
+        </div>
+        <div className="workflow-strip">
+          <div className="workflow-step">
+            <strong>1. Connectors</strong>
+            <span>Bring usage, logs, and cost data into the platform.</span>
+          </div>
+          <div className="workflow-arrow">-&gt;</div>
+          <div className="workflow-step">
+            <strong>2. Background Jobs</strong>
+            <span>Process, aggregate, and store updated telemetry.</span>
+          </div>
+          <div className="workflow-arrow">-&gt;</div>
+          <div className="workflow-step">
+            <strong>3. Rule Engine</strong>
+            <span>Analyze thresholds and trigger governance outcomes.</span>
+          </div>
+        </div>
+        <div className="list-item" style={{ marginTop: 18 }}>
+          <strong>Together</strong>
+          <div className="list-meta">
+            The app stays automated, monitored, and controlled while heavy
+            lifting happens quietly in the background.
+          </div>
+        </div>
+      </section> */}
 
       <section className="two-column">
         <div className="panel">
@@ -157,7 +248,12 @@ function Tools() {
                 <label>Connector Name</label>
                 <input
                   value={connectorForm.connector_name}
-                  onChange={(e) => setConnectorForm({ ...connectorForm, connector_name: e.target.value })}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      connector_name: e.target.value,
+                    })
+                  }
                   required
                 />
               </div>
@@ -165,7 +261,12 @@ function Tools() {
                 <label>Tool Name</label>
                 <input
                   value={connectorForm.tool_name}
-                  onChange={(e) => setConnectorForm({ ...connectorForm, tool_name: e.target.value })}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      tool_name: e.target.value,
+                    })
+                  }
                   required
                 />
               </div>
@@ -173,14 +274,24 @@ function Tools() {
                 <label>Provider</label>
                 <input
                   value={connectorForm.provider}
-                  onChange={(e) => setConnectorForm({ ...connectorForm, provider: e.target.value })}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      provider: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="field">
                 <label>Auth Type</label>
                 <select
                   value={connectorForm.auth_type}
-                  onChange={(e) => setConnectorForm({ ...connectorForm, auth_type: e.target.value })}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      auth_type: e.target.value,
+                    })
+                  }
                 >
                   <option value="api_key">api_key</option>
                   <option value="oauth">oauth</option>
@@ -194,7 +305,12 @@ function Tools() {
                 <label>Endpoint URL</label>
                 <input
                   value={connectorForm.endpoint_url}
-                  onChange={(e) => setConnectorForm({ ...connectorForm, endpoint_url: e.target.value })}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      endpoint_url: e.target.value,
+                    })
+                  }
                   placeholder="https://api.vendor.com/logs"
                 />
               </div>
@@ -219,7 +335,9 @@ function Tools() {
                 <label>Rule Name</label>
                 <input
                   value={ruleForm.rule_name}
-                  onChange={(e) => setRuleForm({ ...ruleForm, rule_name: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, rule_name: e.target.value })
+                  }
                   required
                 />
               </div>
@@ -227,7 +345,9 @@ function Tools() {
                 <label>Metric</label>
                 <select
                   value={ruleForm.metric_name}
-                  onChange={(e) => setRuleForm({ ...ruleForm, metric_name: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, metric_name: e.target.value })
+                  }
                 >
                   <option value="risk_score">risk_score</option>
                   <option value="total_cost">total_cost</option>
@@ -241,7 +361,9 @@ function Tools() {
                 <label>Operator</label>
                 <select
                   value={ruleForm.operator}
-                  onChange={(e) => setRuleForm({ ...ruleForm, operator: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, operator: e.target.value })
+                  }
                 >
                   <option value=">">&gt;</option>
                   <option value=">=">&gt;=</option>
@@ -253,7 +375,12 @@ function Tools() {
                 <label>Threshold</label>
                 <input
                   value={ruleForm.threshold_value}
-                  onChange={(e) => setRuleForm({ ...ruleForm, threshold_value: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({
+                      ...ruleForm,
+                      threshold_value: e.target.value,
+                    })
+                  }
                   required
                 />
               </div>
@@ -261,7 +388,9 @@ function Tools() {
                 <label>Severity</label>
                 <select
                   value={ruleForm.severity}
-                  onChange={(e) => setRuleForm({ ...ruleForm, severity: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, severity: e.target.value })
+                  }
                 >
                   <option value="critical">critical</option>
                   <option value="high">high</option>
@@ -273,7 +402,9 @@ function Tools() {
                 <label>Scope</label>
                 <select
                   value={ruleForm.scope_level}
-                  onChange={(e) => setRuleForm({ ...ruleForm, scope_level: e.target.value })}
+                  onChange={(e) =>
+                    setRuleForm({ ...ruleForm, scope_level: e.target.value })
+                  }
                 >
                   <option value="organization">organization</option>
                   <option value="project">project</option>
@@ -286,7 +417,9 @@ function Tools() {
               <label>Description</label>
               <textarea
                 value={ruleForm.description}
-                onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
+                onChange={(e) =>
+                  setRuleForm({ ...ruleForm, description: e.target.value })
+                }
               />
             </div>
 
@@ -323,7 +456,9 @@ function Tools() {
                     <td>{item.provider || "-"}</td>
                     <td>{item.ingestion_mode}</td>
                     <td>
-                      <span className={`status-pill ${item.status}`}>{item.status}</span>
+                      <span className={`status-pill ${item.status}`}>
+                        {item.status}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -357,7 +492,9 @@ function Tools() {
                     <td>{item.operator}</td>
                     <td>{item.threshold_value}</td>
                     <td>
-                      <span className={`status-pill ${item.severity}`}>{item.severity}</span>
+                      <span className={`status-pill ${item.severity}`}>
+                        {item.severity}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -397,7 +534,9 @@ function Tools() {
                   <td>${Number(item.total_cost || 0).toFixed(2)}</td>
                   <td>{Number(item.total_tokens || 0).toFixed(0)}</td>
                   <td>{Number(item.total_prompt_tokens || 0).toFixed(0)}</td>
-                  <td>{Number(item.total_completion_tokens || 0).toFixed(0)}</td>
+                  <td>
+                    {Number(item.total_completion_tokens || 0).toFixed(0)}
+                  </td>
                   <td>{Number(item.avg_latency_ms || 0).toFixed(1)} ms</td>
                   <td>{Number(item.success_rate || 0).toFixed(1)}%</td>
                 </tr>

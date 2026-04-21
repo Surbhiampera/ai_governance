@@ -36,6 +36,7 @@ function Dashboard() {
   const [security, setSecurity] = useState(null);
   const [toolUsage, setToolUsage] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [activeMetric, setActiveMetric] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +78,7 @@ function Dashboard() {
 
   if (loading) {
     return (
-      <div className="loading">Loading centralized governance dashboard…</div>
+      <div className="loading">Loading centralized governance dashboard...</div>
     );
   }
 
@@ -85,7 +86,6 @@ function Dashboard() {
     return <div className="error-message">{error}</div>;
   }
 
-  /* ── derived data ── */
   const alertsBySeverity = Object.entries(
     overview?.alerts_by_severity || {},
   ).map(([name, value]) => ({ name, value }));
@@ -102,10 +102,90 @@ function Dashboard() {
 
   const recentAlerts = overview?.recent_alerts || [];
   const recentAnomalies = overview?.recent_anomalies || [];
+  const securitySignals =
+    (security?.open_anomalies || 0) +
+    (security?.total_with_pii || 0) +
+    (security?.misuse_events || 0) +
+    (security?.data_out_events || 0);
+
+  const metricCards = [
+    {
+      id: "latency",
+      title: "Avg Latency",
+      value: `${Number(overview?.avg_latency_today || 0).toFixed(0)} ms`,
+      detailRows: [
+        {
+          label: "Today average",
+          value: `${Number(overview?.avg_latency_today || 0).toFixed(0)} ms`,
+        },
+        {
+          label: "Health average",
+          value: `${Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms`,
+        },
+        {
+          label: "Success rate",
+          value: `${Number(overview?.health?.success_rate || 0).toFixed(1)}%`,
+        },
+        {
+          label: "Failure rate",
+          value: `${Number(overview?.health?.failure_rate || 0).toFixed(1)}%`,
+        },
+      ],
+    },
+    {
+      id: "rules",
+      title: "Active Rules",
+      value: num(overview?.rules_active || 0),
+      detailRows: [
+        { label: "Active rules", value: num(overview?.rules_active || 0) },
+        { label: "Active alerts", value: num(overview?.active_alerts || 0) },
+        {
+          label: "Highest risk score",
+          value: Number(overview?.highest_risk_score || 0).toFixed(1),
+        },
+        {
+          label: "Average risk score",
+          value: Number(overview?.avg_risk_score || 0).toFixed(1),
+        },
+      ],
+    },
+    {
+      id: "connectors",
+      title: "Connectors",
+      value: num(overview?.connectors_active || 0),
+      detailRows: [
+        {
+          label: "Active connectors",
+          value: num(overview?.connectors_active || 0),
+        },
+        { label: "Tools tracked", value: num(toolUsage.length) },
+        { label: "Recent events loaded", value: num(recentLogs.length) },
+        {
+          label: "Refresh state",
+          value: refreshing ? "Refreshing data" : "Live snapshot ready",
+        },
+      ],
+    },
+    {
+      id: "security",
+      title: "Security Signals",
+      value: num(securitySignals),
+      detailRows: [
+        { label: "Combined signals", value: num(securitySignals) },
+        { label: "PII events", value: num(security?.total_with_pii || 0) },
+        { label: "Misuse events", value: num(security?.misuse_events || 0) },
+        {
+          label: "Data-out violations",
+          value: num(security?.data_out_events || 0),
+        },
+      ],
+    },
+  ];
+
+  const activeMetricData = metricCards.find((card) => card.id === activeMetric);
 
   return (
     <div className="page-shell">
-      {/* ═══════════ HERO ═══════════ */}
       <section className="hero">
         <div className="hero-card">
           <h2>AI Governance Dashboard</h2>
@@ -145,28 +225,22 @@ function Dashboard() {
               onClick={() => load(true)}
               disabled={refreshing}
             >
-              {refreshing ? "Refreshing…" : "↻ Refresh"}
+              {refreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
 
           <div className="pill-row">
             <div className="pill">
-              Active alerts{" "}
-              <span className="highlight">{overview?.active_alerts || 0}</span>
+              Active alerts <span className="highlight">{overview?.active_alerts || 0}</span>
             </div>
             <div className="pill">
-              Open anomalies{" "}
-              <span className="highlight">{overview?.anomalies_open || 0}</span>
+              Open anomalies <span className="highlight">{overview?.anomalies_open || 0}</span>
             </div>
             <div className="pill">
-              Connectors{" "}
-              <span className="highlight">
-                {overview?.connectors_active || 0}
-              </span>
+              Connectors <span className="highlight">{overview?.connectors_active || 0}</span>
             </div>
             <div className="pill">
-              Rules{" "}
-              <span className="highlight">{overview?.rules_active || 0}</span>
+              Rules <span className="highlight">{overview?.rules_active || 0}</span>
             </div>
           </div>
 
@@ -174,12 +248,9 @@ function Dashboard() {
             <div className="list-item">
               <strong>Health</strong>
               <div className="list-meta">
-                Success{" "}
-                {Number(overview?.health?.success_rate || 0).toFixed(1)}% ·
-                Failure{" "}
-                {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
-                latency{" "}
-                {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
+                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}% ·
+                Failure {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
+                latency {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
               </div>
             </div>
             <div className="list-item">
@@ -194,30 +265,48 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ═══════════ KPI CARDS ═══════════ */}
-      <section className="stats-grid">
-        <div className="metric-card">
-          <div className="metric-eyebrow">Avg Latency</div>
-          <div className="metric-value">
-            {Number(overview?.avg_latency_today || 0).toFixed(0)}
-            <span style={{ fontSize: 16, fontWeight: 400 }}> ms</span>
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">Active Rules</div>
-          <div className="metric-value">{overview?.rules_active || 0}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">Connectors</div>
-          <div className="metric-value">{overview?.connectors_active || 0}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-eyebrow">Security Signals</div>
-          <div className="metric-value">{security?.open_anomalies || 0}</div>
-        </div>
+      <section className="stats-grid stats-grid-overview">
+        {metricCards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            className="metric-card metric-card-button"
+            onClick={() => setActiveMetric(card.id)}
+          >
+            <div className="metric-eyebrow">{card.title}</div>
+            <div className="metric-value">{card.value}</div>
+          </button>
+        ))}
       </section>
 
-      {/* ═══════════ RECENT EVENTS TABLE ═══════════ */}
+      {activeMetricData ? (
+        <div className="modal-backdrop metric-modal-backdrop" onClick={() => setActiveMetric(null)}>
+          <div className="modal-dialog metric-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">{activeMetricData.title}</div>
+                <h3 style={{ marginTop: 8 }}>{activeMetricData.value}</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setActiveMetric(null)}
+              >
+                x
+              </button>
+            </div>
+            <div className="metric-modal-grid">
+              {activeMetricData.detailRows.map((row) => (
+                <div key={row.label} className="tool-cost-chip">
+                  <strong>{row.label}</strong>
+                  <div>{row.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="panel">
         <div className="section-head">
           <div>
@@ -248,32 +337,30 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {recentLogs.length === 0 && (
+              {recentLogs.length === 0 ? (
                 <tr>
                   <td colSpan={17} style={{ textAlign: "center", color: "var(--gray-500)" }}>
                     No events recorded yet.
                   </td>
                 </tr>
-              )}
+              ) : null}
               {recentLogs.map((row) => (
                 <tr key={row.event_id}>
-                  <td>{row.org_id || "—"}</td>
-                  <td>{row.project_id || "—"}</td>
+                  <td>{row.org_id || "-"}</td>
+                  <td>{row.project_id || "-"}</td>
                   <td>
-                    <strong>{row.tool_name || "—"}</strong>
+                    <strong>{row.tool_name || "-"}</strong>
                   </td>
-                  <td>{row.provider || "—"}</td>
-                  <td>{row.model_name || "—"}</td>
+                  <td>{row.provider || "-"}</td>
+                  <td>{row.model_name || "-"}</td>
                   <td>
-                    <span
-                      className={`status-pill ${(row.status || "").toLowerCase()}`}
-                    >
-                      {row.status || "—"}
+                    <span className={`status-pill ${(row.status || "").toLowerCase()}`}>
+                      {row.status || "-"}
                     </span>
                   </td>
-                  <td>{row.service_type || "—"}</td>
-                  <td>{row.execution_type || "—"}</td>
-                  <td>{row.user_id || "—"}</td>
+                  <td>{row.service_type || "-"}</td>
+                  <td>{row.execution_type || "-"}</td>
+                  <td>{row.user_id || "-"}</td>
                   <td>{num(row.prompt_tokens)}</td>
                   <td>{num(row.completion_tokens)}</td>
                   <td>{num(row.latency_ms)} ms</td>
@@ -290,7 +377,7 @@ function Dashboard() {
                   <td>
                     {Array.isArray(row.tags) && row.tags.length > 0
                       ? row.tags.join(", ")
-                      : "—"}
+                      : "-"}
                   </td>
                 </tr>
               ))}
@@ -299,7 +386,6 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ═══════════ CHARTS ROW ═══════════ */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
@@ -316,14 +402,8 @@ function Dashboard() {
                     <stop offset="95%" stopColor="#9E2A97" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid
-                  stroke="rgba(124,112,174,0.12)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#6d6782", fontSize: 12 }}
-                />
+                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip />
                 <Area
@@ -377,7 +457,6 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ═══════════ TOOLS + ALERTS ROW ═══════════ */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
@@ -388,14 +467,8 @@ function Dashboard() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topTools}>
-                <CartesianGrid
-                  stroke="rgba(124,112,174,0.12)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="tool"
-                  tick={{ fill: "#6d6782", fontSize: 12 }}
-                />
+                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                <XAxis dataKey="tool" tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip
                   formatter={(value, name) =>
@@ -434,7 +507,6 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ═══════════ ALERTS + ANOMALIES ROW ═══════════ */}
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
@@ -487,7 +559,6 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ═══════════ TOOL ROLLUP TABLE ═══════════ */}
       <section className="panel">
         <div className="section-head">
           <div>
@@ -511,13 +582,13 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {(overview?.tool_rollup || []).length === 0 && (
+              {(overview?.tool_rollup || []).length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
                     No tool data for today.
                   </td>
                 </tr>
-              )}
+              ) : null}
               {(overview?.tool_rollup || []).map((row) => (
                 <tr key={`${row.tool_name}-${row.date}`}>
                   <td>

@@ -52,20 +52,53 @@ function AlertsSecurity() {
     <div className="page-shell">
       {/* ── Compact Header + Snapshot ── */}
       <section className="panel" style={{ padding: "18px 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
           <div>
             <h2 style={{ margin: 0 }}>Alerts &amp; Security</h2>
-            <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
-              Governance alerts, security signals, PII exposure, and anomaly detection.
+            <p
+              style={{
+                margin: "4px 0 0",
+                color: "var(--gray-500)",
+                fontSize: 14,
+              }}
+            >
+              Governance alerts, security signals, PII exposure, and anomaly
+              detection.
             </p>
           </div>
           <div className="pill-row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <div className="pill">Active Alerts <span className="highlight">{summary?.active_alerts || 0}</span></div>
-            <div className="pill">Anomalies <span className="highlight">{summary?.open_anomalies || 0}</span></div>
-            <div className="pill">PII <span className="highlight">{summary?.total_with_pii || 0}</span></div>
-            <div className="pill">Misuse <span className="highlight">{summary?.misuse_events || 0}</span></div>
-            <div className="pill">Data Out <span className="highlight">{summary?.data_out_events || 0}</span></div>
-            <div className="pill">Risk {Number(summary?.average_risk_score || 0).toFixed(1)} / {Number(summary?.highest_risk_score || 0).toFixed(1)}</div>
+            <div className="pill">
+              Active Alerts{" "}
+              <span className="highlight">{summary?.active_alerts || 0}</span>
+            </div>
+            <div className="pill">
+              Anomalies{" "}
+              <span className="highlight">{summary?.open_anomalies || 0}</span>
+            </div>
+            <div className="pill">
+              PII{" "}
+              <span className="highlight">{summary?.total_with_pii || 0}</span>
+            </div>
+            <div className="pill">
+              Misuse{" "}
+              <span className="highlight">{summary?.misuse_events || 0}</span>
+            </div>
+            <div className="pill">
+              Data Out{" "}
+              <span className="highlight">{summary?.data_out_events || 0}</span>
+            </div>
+            <div className="pill">
+              Risk {Number(summary?.average_risk_score || 0).toFixed(1)} /{" "}
+              {Number(summary?.highest_risk_score || 0).toFixed(1)}
+            </div>
           </div>
         </div>
       </section>
@@ -74,18 +107,46 @@ function AlertsSecurity() {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h3>🔔 Alerts</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+            <h3>Alerts</h3>
+            <p
+              style={{
+                margin: "2px 0 0",
+                color: "var(--gray-500)",
+                fontSize: 13,
+              }}
+            >
               Triggered by rules, budgets, anomalies, and security signals.
             </p>
           </div>
           <div className="action-row">
-            <button type="button" className={`btn ${alertFilter === "active" ? "btn-primary" : "btn-ghost"}`} onClick={() => setAlertFilter("active")}>Active</button>
-            <button type="button" className={`btn ${alertFilter === "resolved" ? "btn-primary" : "btn-ghost"}`} onClick={() => setAlertFilter("resolved")}>Resolved</button>
-            <button type="button" className={`btn ${alertFilter === "all" ? "btn-primary" : "btn-ghost"}`} onClick={() => setAlertFilter("all")}>All</button>
+            <button
+              type="button"
+              className={`btn ${alertFilter === "active" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setAlertFilter("active")}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              className={`btn ${alertFilter === "resolved" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setAlertFilter("resolved")}
+            >
+              Resolved
+            </button>
+            <button
+              type="button"
+              className={`btn ${alertFilter === "all" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setAlertFilter("all")}
+            >
+              All
+            </button>
           </div>
         </div>
-        {message && <div className="list-meta" style={{ marginBottom: 12 }}>{message}</div>}
+        {message && (
+          <div className="list-meta" style={{ marginBottom: 12 }}>
+            {message}
+          </div>
+        )}
         <div className="table-wrap">
           <table>
             <thead>
@@ -104,23 +165,46 @@ function AlertsSecurity() {
             </thead>
             <tbody>
               {alerts.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>No alerts.</td></tr>
+                <tr>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No alerts.
+                  </td>
+                </tr>
               )}
               {alerts.map((a) => (
                 <tr key={a.id}>
                   <td>{a.id}</td>
                   <td>{a.alert_type}</td>
-                  <td><span className={`status-pill ${a.severity}`}>{a.severity}</span></td>
+                  <td>
+                    <span className={`status-pill ${a.severity}`}>
+                      {a.severity}
+                    </span>
+                  </td>
                   <td>{a.source || "system"}</td>
                   <td>{a.tool_name || "-"}</td>
                   <td>{a.message}</td>
                   <td>{a.threshold_value ?? "-"}</td>
                   <td>{a.actual_value ?? "-"}</td>
-                  <td><span className={`status-pill ${a.status}`}>{a.status}</span></td>
+                  <td>
+                    <span className={`status-pill ${a.status}`}>
+                      {a.status}
+                    </span>
+                  </td>
                   <td>
                     {a.status === "active" ? (
-                      <button type="button" className="btn btn-secondary" onClick={() => handleResolve(a.id)}>Resolve</button>
-                    ) : "-"}
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleResolve(a.id)}
+                      >
+                        Resolve
+                      </button>
+                    ) : (
+                      "-"
+                    )}
                   </td>
                 </tr>
               ))}
@@ -134,8 +218,14 @@ function AlertsSecurity() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>🛡️ Open Anomalies</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              <h3> Open Anomalies</h3>
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  color: "var(--gray-500)",
+                  fontSize: 13,
+                }}
+              >
                 Usage spikes and suspicious changes from background detection.
               </p>
             </div>
@@ -146,8 +236,11 @@ function AlertsSecurity() {
                 <div key={item.id} className="list-item">
                   <strong>{item.anomaly_type}</strong>
                   <div className="list-meta">
-                    <span className={`status-pill ${item.severity}`}>{item.severity}</span>
-                    {"  "}{item.message}
+                    <span className={`status-pill ${item.severity}`}>
+                      {item.severity}
+                    </span>
+                    {"  "}
+                    {item.message}
                   </div>
                 </div>
               ))
@@ -160,8 +253,14 @@ function AlertsSecurity() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3>🔒 Security Logs</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              <h3> Security Logs</h3>
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  color: "var(--gray-500)",
+                  fontSize: 13,
+                }}
+              >
                 PII, data-out, misuse, and risk scoring per event.
               </p>
             </div>
@@ -181,7 +280,14 @@ function AlertsSecurity() {
               </thead>
               <tbody>
                 {logs.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)" }}>No security logs.</td></tr>
+                  <tr>
+                    <td
+                      colSpan={7}
+                      style={{ textAlign: "center", color: "var(--gray-500)" }}
+                    >
+                      No security logs.
+                    </td>
+                  </tr>
                 )}
                 {logs.map((item) => (
                   <tr key={item.id}>

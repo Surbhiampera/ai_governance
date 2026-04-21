@@ -38,3 +38,4 @@ pgdata/
 # Logs
 *.log
 governance-platform
+node_modules
