@@ -65,9 +65,9 @@ function Cost() {
     if (selectedOrg) {
       getProjects(selectedOrg).then((res) => setProjects(res.data || []));
     } else {
-      setProjects([]);
-      setSelectedProject("");
+      getProjects().then((res) => setProjects(res.data || []));
     }
+    setSelectedProject("");
   }, [selectedOrg]);
 
   if (loading) return <div className="loading">Loading cost analytics...</div>;
@@ -152,7 +152,7 @@ function Cost() {
           </div>
           <div className="field" style={{ minWidth: 180 }}>
             <label style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project</label>
-            <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} disabled={!selectedOrg}>
+            <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
               <option value="">All Projects</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.project_name || p.id}</option>

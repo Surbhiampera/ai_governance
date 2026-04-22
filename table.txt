@@ -252,6 +252,9 @@ CREATE TABLE monthly_org_summary (
     failure_count INT DEFAULT 0,
     anomaly_count INT DEFAULT 0,
     misuse_count INT DEFAULT 0,
+    ALTER TABLE monthly_org_summary,
+ADD COLUMN total_prompt_tokens BIGINT,
+ADD COLUMN total_completion_tokens BIGINT;
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (org_id, project_id, tool_name, month)
 );
@@ -313,3 +316,27 @@ ON telemetry_events(model_name);
 
 CREATE INDEX idx_telemetry_event_id 
 ON telemetry_events(event_id);
+
+
+
+CREATE TABLE data_uploads (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    uploaded_by VARCHAR(100),
+    file_name VARCHAR(255),
+    file_type VARCHAR(50), 
+    storage_path TEXT,    
+    file_size_mb DECIMAL(12,4),
+    linked_event_id VARCHAR(120), 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE uploaded_data_records (
+    id BIGSERIAL PRIMARY KEY,
+    upload_id BIGINT,
+    input_tokens INT,
+    output_tokens INT,
+    cost DECIMAL(12,6),
+    metadata JSON
+);
