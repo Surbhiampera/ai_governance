@@ -1,8 +1,9 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from app.schemas import (
 )
 from app.services.alert_engine import AlertEngine
 from app.services.cost_engine import CostEngine
+from app.celery_app import celery_app
 from app.services.security_engine import SecurityEngine
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
@@ -39,6 +41,110 @@ def ingest_events_batch(batch: BatchTelemetryIngest, db: Session = Depends(get_d
     ingested = []
     for event_data in batch.events:
         event = _ingest_event(db, event_data)
+        ingested.append(event.event_id)
+    db.commit()
+    return {"status": "completed", "ingested_count": len(ingested), "event_ids": ingested}
+
+
+@router.post("/import/excel")
+async def import_events_from_excel(
+    file: UploadFile = File(...),
+    org_id: str = Form("default"),
+    project_id: Optional[str] = Form(None),
+    async_ingest: bool = Form(True),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload an Excel file (.xlsx) containing telemetry rows.
+    Expected columns (case-insensitive):
+      event_id, request_id, trace_id, user_id, api_key_id,
+      tool_name, provider, model_name, component_name, service_type, execution_type,
+      status, latency_ms,
+      prompt_tokens, completion_tokens,
+      input_data_size_mb, output_data_size_mb,
+      input_data_count, output_data_count
+    org_id/project_id from the form act as defaults when not present in the sheet.
+    """
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx/.xls) are supported")
+
+    try:
+        import pandas as pd  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"Excel parsing dependency missing: {e}")
+
+    raw = await file.read()
+    try:
+        df = pd.read_excel(BytesIO(raw))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Unable to read Excel: {e}")
+
+    if df.empty:
+        return {"status": "completed", "ingested_count": 0, "event_ids": []}
+
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    def _get(row, key, default=None):
+        if key in row and row[key] is not None:
+            val = row[key]
+            if isinstance(val, float) and pd.isna(val):
+                return default
+            return val
+        return default
+
+    events: list[TelemetryEventCreate] = []
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
+    for idx, r in df.iterrows():
+        row = r.to_dict()
+        event_id = str(_get(row, "event_id", f"xl-{now_ms}-{idx}"))
+        prompt_tokens = int(_get(row, "prompt_tokens", 0) or 0)
+        completion_tokens = int(_get(row, "completion_tokens", 0) or 0)
+        latency_ms = int(_get(row, "latency_ms", 0) or 0)
+        input_mb = Decimal(str(_get(row, "input_data_size_mb", 0) or 0))
+        output_mb = Decimal(str(_get(row, "output_data_size_mb", 0) or 0))
+        in_count = _get(row, "input_data_count", None)
+        out_count = _get(row, "output_data_count", None)
+        in_count = int(in_count) if in_count not in (None, "", 0) else None
+        out_count = int(out_count) if out_count not in (None, "", 0) else None
+
+        events.append(
+            TelemetryEventCreate(
+                event_id=event_id,
+                request_id=_get(row, "request_id", None),
+                trace_id=_get(row, "trace_id", None),
+                org_id=str(_get(row, "org_id", org_id)),
+                project_id=_get(row, "project_id", project_id),
+                user_id=_get(row, "user_id", None),
+                api_key_id=_get(row, "api_key_id", None),
+                tool_name=str(_get(row, "tool_name", "")),
+                provider=_get(row, "provider", None),
+                model_name=_get(row, "model_name", None),
+                component_name=_get(row, "component_name", None),
+                service_type=_get(row, "service_type", None),
+                execution_type=_get(row, "execution_type", None),
+                status=str(_get(row, "status", "success") or "success"),
+                latency_ms=latency_ms,
+                input_data_size_mb=input_mb,
+                output_data_size_mb=output_mb,
+                input_data_count=in_count,
+                output_data_count=out_count,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                tags=[],
+                metadata_json={},
+            )
+        )
+
+    # Ingest in parallel via Celery if requested; fall back to sync ingestion.
+    if async_ingest:
+        ingested_ids = [e.event_id for e in events]
+        celery_app.send_task("app.workers.tasks.ingest_events_batch_task", args=[[e.model_dump() for e in events]])
+        return {"status": "queued", "ingested_count": len(ingested_ids), "event_ids": ingested_ids}
+
+    ingested: list[str] = []
+    for e in events:
+        event = _ingest_event(db, e)
         ingested.append(event.event_id)
     db.commit()
     return {"status": "completed", "ingested_count": len(ingested), "event_ids": ingested}
@@ -103,6 +209,14 @@ def update_event(event_id: str, update_data: TelemetryEventUpdate, db: Session =
         raise HTTPException(status_code=404, detail="Event not found")
 
     update_fields = update_data.model_dump(exclude_none=True)
+    # data count fields are stored in metadata_json (no schema migration required)
+    if "input_data_count" in update_fields or "output_data_count" in update_fields:
+        meta = dict(event.metadata_json or {})
+        if "input_data_count" in update_fields:
+            meta["input_data_count"] = update_fields.pop("input_data_count")
+        if "output_data_count" in update_fields:
+            meta["output_data_count"] = update_fields.pop("output_data_count")
+        event.metadata_json = meta
     for field, value in update_fields.items():
         setattr(event, field, value)
 
@@ -126,6 +240,12 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
     cost_summary = cost_engine.calculate(event_data, db)
     security_result = security_engine.analyze(event_data)
     anomaly_score, abnormal_usage_spike = _detect_event_spike(db, event_data)
+
+    meta = dict(event_data.metadata_json or {})
+    if event_data.input_data_count is not None:
+        meta["input_data_count"] = int(event_data.input_data_count)
+    if event_data.output_data_count is not None:
+        meta["output_data_count"] = int(event_data.output_data_count)
 
     telemetry = TelemetryEvent(
         event_id=event_data.event_id,
@@ -159,7 +279,7 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         completed_at=completed_at,
         latency_ms=event_data.latency_ms,
         tags=event_data.tags,
-        metadata_json=event_data.metadata_json,
+        metadata_json=meta,
     )
     db.add(telemetry)
     db.flush()
@@ -358,6 +478,7 @@ def _build_event_response(db: Session, event: TelemetryEvent) -> TelemetryEventR
         .order_by(ExecutionPipeline.stage_order.asc(), ExecutionPipeline.id.asc())
         .all()
     )
+    meta = event.metadata_json or {}
     return TelemetryEventResponse(
         event_id=event.event_id,
         request_id=event.request_id,
@@ -375,6 +496,8 @@ def _build_event_response(db: Session, event: TelemetryEvent) -> TelemetryEventR
         status=event.status,
         input_data_size_mb=Decimal(str(event.input_data_size_mb or 0)),
         output_data_size_mb=Decimal(str(event.output_data_size_mb or 0)),
+        input_data_count=meta.get("input_data_count"),
+        output_data_count=meta.get("output_data_count"),
         prompt_tokens=event.prompt_tokens or 0,
         completion_tokens=event.completion_tokens or 0,
         total_tokens=event.total_tokens or 0,

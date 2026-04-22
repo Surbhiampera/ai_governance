@@ -38,6 +38,8 @@ class TelemetryEventCreate(BaseModel):
     latency_ms: int = 0
     input_data_size_mb: Decimal = Decimal("0")
     output_data_size_mb: Decimal = Decimal("0")
+    input_data_count: Optional[int] = None
+    output_data_count: Optional[int] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     infra_cost: Decimal = Decimal("0")
@@ -62,6 +64,8 @@ class TelemetryEventUpdate(BaseModel):
     infra_cost: Optional[Decimal] = None
     input_data_size_mb: Optional[Decimal] = None
     output_data_size_mb: Optional[Decimal] = None
+    input_data_count: Optional[int] = None
+    output_data_count: Optional[int] = None
     pii_type: Optional[str] = None
     tags: Optional[list[str]] = None
     status: Optional[str] = None
@@ -119,6 +123,8 @@ class TelemetryEventResponse(BaseModel):
     status: Optional[str] = None
     input_data_size_mb: Decimal = Decimal("0")
     output_data_size_mb: Decimal = Decimal("0")
+    input_data_count: Optional[int] = None
+    output_data_count: Optional[int] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0

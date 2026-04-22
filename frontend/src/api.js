@@ -59,6 +59,10 @@ export const getTrace = (eventId) => API.get(`/telemetry/traces/${eventId}`);
 export const postTelemetryEvent = (data) => API.post("/telemetry/event", data);
 export const postTelemetryBatch = (events) =>
   API.post("/telemetry/events/batch", { events });
+export const uploadTelemetryExcel = (formData) =>
+  API.post("/telemetry/import/excel", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 export const updateTelemetryEvent = (eventId, data) =>
   API.put(`/telemetry/event/${eventId}`, data);
 export const deleteTelemetryEvent = (eventId) =>

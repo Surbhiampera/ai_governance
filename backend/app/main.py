@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cors_origins, get_log_level
 from app.routers import alerts, alerts_security, apikeys, budgets, costs, governance, models, organizations, projects, security, summary, telemetry, tools, workers
+from app.routers.telemetry_v1 import router as telemetry_v1_router
 
 logging.basicConfig(
     level=get_log_level(),
@@ -43,6 +44,7 @@ app.add_middleware(
 
 # --- Unversioned routes (backward compatible) ---
 app.include_router(telemetry.router)
+app.include_router(telemetry_v1_router)
 app.include_router(summary.router)
 app.include_router(tools.router)
 app.include_router(models.router)

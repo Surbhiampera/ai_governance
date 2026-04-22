@@ -3,6 +3,7 @@ import {
   getTelemetryLogs,
   getTrace,
   postTelemetryEvent,
+  uploadTelemetryExcel,
   updateTelemetryEvent,
   deleteTelemetryEvent,
 } from "../api";
@@ -27,6 +28,8 @@ const blankEvent = {
   latency_ms: "",
   input_data_size_mb: "",
   output_data_size_mb: "",
+  input_data_count: "",
+  output_data_count: "",
   prompt_tokens: "",
   completion_tokens: "",
   infra_cost: "",
@@ -45,6 +48,10 @@ function TestEvent() {
   const [selectedTrace, setSelectedTrace] = useState(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importOrgId, setImportOrgId] = useState("");
+  const [importProjectId, setImportProjectId] = useState("");
+  const [importAsync, setImportAsync] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -88,6 +95,8 @@ function TestEvent() {
       latency_ms: evt.latency_ms ?? "",
       input_data_size_mb: evt.input_data_size_mb ?? "",
       output_data_size_mb: evt.output_data_size_mb ?? "",
+      input_data_count: evt.input_data_count ?? "",
+      output_data_count: evt.output_data_count ?? "",
       prompt_tokens: evt.prompt_tokens ?? "",
       completion_tokens: evt.completion_tokens ?? "",
       infra_cost: evt.infra_cost ?? "",
@@ -136,6 +145,14 @@ function TestEvent() {
         ...ids,
         input_data_size_mb: Number(form.input_data_size_mb) || 0,
         output_data_size_mb: Number(form.output_data_size_mb) || 0,
+        input_data_count:
+          form.input_data_count === "" || form.input_data_count == null
+            ? null
+            : Number(form.input_data_count),
+        output_data_count:
+          form.output_data_count === "" || form.output_data_count == null
+            ? null
+            : Number(form.output_data_count),
         latency_ms: Number(form.latency_ms) || 0,
         prompt_tokens: Number(form.prompt_tokens) || 0,
         completion_tokens: Number(form.completion_tokens) || 0,
@@ -167,6 +184,32 @@ function TestEvent() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /* ── Excel import ── */
+  const importExcel = async () => {
+    if (!importFile) {
+      setMessage("Pick an Excel file first.");
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      fd.append("org_id", importOrgId || "default");
+      if (importProjectId) fd.append("project_id", importProjectId);
+      fd.append("async_ingest", String(importAsync));
+
+      const res = await uploadTelemetryExcel(fd);
+      setMessage(
+        res.data?.status === "queued"
+          ? `Import queued (${res.data.ingested_count} rows).`
+          : `Import completed (${res.data.ingested_count} rows).`
+      );
+      setImportFile(null);
+      await loadEvents();
+    } catch {
+      setMessage("Excel import failed. Check backend connectivity and file format.");
     }
   };
 
@@ -216,6 +259,48 @@ function TestEvent() {
         {message && (
           <div className="list-meta" style={{ marginTop: 10 }}>{message}</div>
         )}
+      </section>
+
+      {/* ── Excel import panel ── */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Upload Excel Logs</h3>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              Upload an .xlsx file to ingest telemetry events and calculate costs server-side.
+            </p>
+          </div>
+        </div>
+        <div className="form-grid">
+          <div className="field">
+            <label>Organization</label>
+            <input value={importOrgId} onChange={(e) => setImportOrgId(e.target.value)} placeholder="default" />
+          </div>
+          <div className="field">
+            <label>Project (default)</label>
+            <input value={importProjectId} onChange={(e) => setImportProjectId(e.target.value)} placeholder="optional" />
+          </div>
+          <div className="field">
+            <label>Async ingest</label>
+            <select value={importAsync ? "true" : "false"} onChange={(e) => setImportAsync(e.target.value === "true")}>
+              <option value="true">true (parallel)</option>
+              <option value="false">false (sync)</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Excel file</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+            />
+          </div>
+        </div>
+        <div className="action-row">
+          <button type="button" className="btn btn-primary" onClick={importExcel}>
+            Upload &amp; Ingest
+          </button>
+        </div>
       </section>
 
       {/* ── Inject / Edit Modal ── */}
@@ -334,6 +419,14 @@ function TestEvent() {
                 <div className="field">
                   <label>Output Size (MB)</label>
                   <input type="number" step="0.01" min="0" value={form.output_data_size_mb} onChange={(e) => setForm({ ...form, output_data_size_mb: e.target.value })} placeholder="0.00" />
+                </div>
+                <div className="field">
+                  <label>Input Count</label>
+                  <input type="number" min="0" value={form.input_data_count} onChange={(e) => setForm({ ...form, input_data_count: e.target.value })} placeholder="optional" />
+                </div>
+                <div className="field">
+                  <label>Output Count</label>
+                  <input type="number" min="0" value={form.output_data_count} onChange={(e) => setForm({ ...form, output_data_count: e.target.value })} placeholder="optional" />
                 </div>
               </div>
 

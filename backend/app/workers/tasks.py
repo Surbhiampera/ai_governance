@@ -212,3 +212,27 @@ def run_alert_scan():
         return {"status": "ok", "alerts_created": created}
     finally:
         db.close()
+
+
+@celery_app.task(name="app.workers.tasks.ingest_events_batch_task")
+def ingest_events_batch_task(events: list[dict]):
+    """
+    Background ingestion for imported telemetry batches (e.g. Excel upload).
+    Uses the same ingestion logic as the HTTP API and commits once per chunk.
+    """
+    from app.routers.telemetry import _ingest_event  # local import to avoid import cycles
+    from app.schemas import TelemetryEventCreate
+
+    db = SessionLocal()
+    try:
+        ingested: list[str] = []
+        for raw in events:
+            event_data = TelemetryEventCreate.model_validate(raw)
+            ev = _ingest_event(db, event_data)
+            ingested.append(ev.event_id)
+            if len(ingested) % 200 == 0:
+                db.commit()
+        db.commit()
+        return {"status": "completed", "ingested_count": len(ingested), "event_ids": ingested}
+    finally:
+        db.close()
