@@ -102,7 +102,8 @@ function Tools() {
           <div className="action-row" style={{ marginTop: 18 }}>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn"
+              style={{ background: "#fff", color: "#9E2A97", fontWeight: 600, border: "1px solid rgba(255,255,255,0.5)" }}
               onClick={() =>
                 runWorker("Daily aggregation", triggerDailyAggregation)
               }
@@ -112,7 +113,8 @@ function Tools() {
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn"
+              style={{ background: "rgba(255,255,255,0.2)", color: "#fff", fontWeight: 600, border: "1px solid rgba(255,255,255,0.4)" }}
               onClick={() =>
                 runWorker("Monthly aggregation", triggerMonthlyAggregation)
               }
@@ -122,7 +124,8 @@ function Tools() {
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn"
+              style={{ background: "rgba(255,255,255,0.2)", color: "#fff", fontWeight: 600, border: "1px solid rgba(255,255,255,0.4)" }}
               onClick={() =>
                 runWorker("Anomaly detection", triggerAnomalyDetection)
               }
@@ -132,7 +135,8 @@ function Tools() {
             </button>
             <button
               type="button"
-              className="btn btn-ghost"
+              className="btn"
+              style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.9)", fontWeight: 600, border: "1px solid rgba(255,255,255,0.25)" }}
               onClick={() => runWorker("Alert scan", triggerAlertScan)}
               disabled={running === "Alert scan"}
             >
@@ -141,7 +145,7 @@ function Tools() {
           </div>
 
           {message ? (
-            <div className="list-meta" style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12, color: "rgba(255,255,255,0.9)", fontSize: 14 }}>
               {message}
             </div>
           ) : null}
