@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
+import { getOrganizations, getProjects } from "../api";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
 const num = (v) => Number(v || 0).toLocaleString();
@@ -17,28 +18,37 @@ function Cost() {
   const [totals, setTotals] = useState(null);
   const [byModel, setByModel] = useState([]);
   const [byProject, setByProject] = useState([]);
+  const [byOrg, setByOrg] = useState([]);
   const [dailyCost, setDailyCost] = useState([]);
   const [monthlyCost, setMonthlyCost] = useState([]);
   const [activeMetric, setActiveMetric] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [orgs, setOrgs] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [selectedOrg, setSelectedOrg] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
 
   const load = async () => {
     try {
       setLoading(true);
-      const [totalsRes, modelRes, projectRes, dailyRes, monthlyRes] =
+      const [totalsRes, modelRes, projectRes, orgRes, dailyRes, monthlyRes, orgsRes] =
         await Promise.all([
           API.get("/costs/totals"),
-          API.get("/costs/by-model"),
-          API.get("/costs/by-project"),
-          API.get("/costs/daily", { params: { days: 14 } }),
-          API.get("/costs/monthly"),
+          API.get("/costs/by-model", { params: { org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
+          API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
+          API.get("/costs/by-org"),
+          API.get("/costs/daily", { params: { days: 14, org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
+          API.get("/costs/monthly", { params: { org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
+          getOrganizations(),
         ]);
       setTotals(totalsRes.data);
       setByModel(modelRes.data || []);
       setByProject(projectRes.data || []);
+      setByOrg(orgRes.data || []);
       setDailyCost(dailyRes.data || []);
       setMonthlyCost(monthlyRes.data || []);
+      setOrgs(orgsRes.data || []);
       setError("");
     } catch {
       setError("Unable to load cost data. Check backend connectivity.");
@@ -49,7 +59,16 @@ function Cost() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [selectedOrg, selectedProject]);
+
+  useEffect(() => {
+    if (selectedOrg) {
+      getProjects(selectedOrg).then((res) => setProjects(res.data || []));
+    } else {
+      setProjects([]);
+      setSelectedProject("");
+    }
+  }, [selectedOrg]);
 
   if (loading) return <div className="loading">Loading cost analytics...</div>;
   if (error) return <div className="error-message">{error}</div>;
@@ -120,6 +139,29 @@ function Cost() {
 
   return (
     <div className="page-shell">
+      <section className="panel" style={{ padding: "14px 24px" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="field" style={{ minWidth: 180 }}>
+            <label style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Organization</label>
+            <select value={selectedOrg} onChange={(e) => { setSelectedOrg(e.target.value); setSelectedProject(""); }}>
+              <option value="">All Organizations</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>{o.org_name || o.id}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ minWidth: 180 }}>
+            <label style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project</label>
+            <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} disabled={!selectedOrg}>
+              <option value="">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.project_name || p.id}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
       <section className="stats-grid">
         {metricCards.map((card) => (
           <button
@@ -249,6 +291,50 @@ function Cost() {
                     <strong>{r.project_id}</strong>
                   </td>
                   <td>{r.org_id}</td>
+                  <td>{num(r.total_events)}</td>
+                  <td>{num(r.total_tokens)}</td>
+                  <td>{money(r.total_cost)}</td>
+                  <td>{r.avg_latency_ms} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Cost by Organization</h3>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th>Events</th>
+                <th>Tokens</th>
+                <th>Total Cost</th>
+                <th>Avg Latency</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byOrg.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No organization data yet.
+                  </td>
+                </tr>
+              )}
+              {byOrg.map((r) => (
+                <tr key={r.org_id}>
+                  <td>
+                    <strong>{r.org_id}</strong>
+                  </td>
                   <td>{num(r.total_events)}</td>
                   <td>{num(r.total_tokens)}</td>
                   <td>{money(r.total_cost)}</td>

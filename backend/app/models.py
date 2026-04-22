@@ -157,6 +157,7 @@ class TelemetryEvent(Base):
     latency_ms = Column(Integer, default=0)
     tags = Column(JSON, nullable=True)
     metadata_json = Column(JSON, nullable=True)
+    raw_usage_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -294,6 +295,8 @@ class MonthlyOrgSummary(Base):
     infra_cost = Column(Numeric(14, 6), default=0)
     external_cost = Column(Numeric(14, 6), default=0)
     total_tokens = Column(Integer, default=0)
+    total_prompt_tokens = Column(Integer, default=0)
+    total_completion_tokens = Column(Integer, default=0)
     avg_latency_ms = Column(Integer, default=0)
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
@@ -325,3 +328,33 @@ class RateLimit(Base):
     max_requests_per_min = Column(Integer, nullable=True)
     max_tokens_per_day = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class RateLimitViolation(Base):
+    __tablename__ = "rate_limit_violations"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    org_id = Column(String(100), nullable=True)
+    project_id = Column(String(100), nullable=True)
+    tool_name = Column(String(150), nullable=True)
+    violation_type = Column(String(50), nullable=True)
+    observed_value = Column(Integer, nullable=True)
+    limit_value = Column(Integer, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ModelPricing(Base):
+    __tablename__ = "model_pricing"
+    __table_args__ = (
+        UniqueConstraint("provider", "model_name"),
+        {"extend_existing": True},
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    provider = Column(String(100), nullable=True)
+    model_name = Column(String(120), nullable=True)
+    input_cost_per_1k = Column(Numeric(12, 6), default=0)
+    output_cost_per_1k = Column(Numeric(12, 6), default=0)
+    currency = Column(String(10), default="USD")
+    effective_from = Column(DateTime, server_default=func.now())

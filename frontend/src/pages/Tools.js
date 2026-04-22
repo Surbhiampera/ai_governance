@@ -42,30 +42,6 @@ function Tools() {
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState("");
 
-  const workflowCards = [
-    {
-      title: "Background Jobs",
-      description:
-        "Run in the background without UI blocking. They automatically fetch, process, and store usage, cost, and log data so the app stays current without manual action.",
-      impact:
-        "Improves performance, enables real-time dashboards, and handles heavier work silently.",
-    },
-    {
-      title: "Connectors",
-      description:
-        "Connect the app to external tools like OpenAI, Anthropic, and internal services. They pull usage, logs, and cost data into one system.",
-      impact:
-        "All tool data comes into one place, which gives you centralized monitoring.",
-    },
-    {
-      title: "Rule Engine",
-      description:
-        "Defines conditions such as cost > $100 or risk_score > 75 and automatically triggers alerts or actions when thresholds are matched.",
-      impact:
-        "Helps governance, cost control, and risk detection stay active automatically.",
-    },
-  ];
-
   const load = async () => {
     const [connectorRes, rulesRes, usageRes] = await Promise.all([
       getConnectors(),
@@ -122,21 +98,8 @@ function Tools() {
             Automated governance workflow for connectors, background jobs, and
             the rule engine.
           </p>
-        </div>
 
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h2>Background Jobs</h2>
-              <p>
-                Trigger background processing that refreshes summaries, scans
-                anomalies, and keeps the platform updated while the rest of the
-                app remains usable.
-              </p>
-            </div>
-          </div>
-
-          <div className="action-row">
+          <div className="action-row" style={{ marginTop: 18 }}>
             <button
               type="button"
               className="btn btn-primary"
@@ -178,61 +141,12 @@ function Tools() {
           </div>
 
           {message ? (
-            <div className="list-meta" style={{ marginTop: 16 }}>
+            <div className="list-meta" style={{ marginTop: 12 }}>
               {message}
             </div>
           ) : null}
         </div>
       </section>
-
-      <section className="three-column">
-        {workflowCards.map((card) => (
-          <div key={card.title} className="panel workflow-card">
-            <div className="metric-eyebrow">{card.title}</div>
-            <h3 style={{ marginTop: 10 }}>{card.title}</h3>
-            <p className="panel-muted">{card.description}</p>
-            <div className="tool-cost-chip" style={{ marginTop: 18 }}>
-              <strong>Impact</strong>
-              <div>{card.impact}</div>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      {/* <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>How They Work Together</h3>
-            <p>
-              Connectors bring data, background jobs process and update it, and
-              the rule engine analyzes conditions to trigger actions.
-            </p>
-          </div>
-        </div>
-        <div className="workflow-strip">
-          <div className="workflow-step">
-            <strong>1. Connectors</strong>
-            <span>Bring usage, logs, and cost data into the platform.</span>
-          </div>
-          <div className="workflow-arrow">-&gt;</div>
-          <div className="workflow-step">
-            <strong>2. Background Jobs</strong>
-            <span>Process, aggregate, and store updated telemetry.</span>
-          </div>
-          <div className="workflow-arrow">-&gt;</div>
-          <div className="workflow-step">
-            <strong>3. Rule Engine</strong>
-            <span>Analyze thresholds and trigger governance outcomes.</span>
-          </div>
-        </div>
-        <div className="list-item" style={{ marginTop: 18 }}>
-          <strong>Together</strong>
-          <div className="list-meta">
-            The app stays automated, monitored, and controlled while heavy
-            lifting happens quietly in the background.
-          </div>
-        </div>
-      </section> */}
 
       <section className="two-column">
         <div className="panel">

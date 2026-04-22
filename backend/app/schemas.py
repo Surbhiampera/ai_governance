@@ -48,6 +48,7 @@ class TelemetryEventCreate(BaseModel):
     data_out_violation: bool = False
     tags: list[str] = Field(default_factory=list)
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+    raw_usage_json: dict[str, Any] = Field(default_factory=dict)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
@@ -135,6 +136,7 @@ class TelemetryEventResponse(BaseModel):
     latency_ms: int = 0
     tags: list[str] = Field(default_factory=list)
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+    raw_usage_json: Optional[dict[str, Any]] = None
     created_at: Optional[datetime] = None
     cost_breakdown: list[CostBreakdownResponse] = Field(default_factory=list)
     stages: list[PipelineStageResponse] = Field(default_factory=list)
@@ -183,6 +185,8 @@ class MonthlySummaryResponse(BaseModel):
     infra_cost: Decimal
     external_cost: Decimal
     total_tokens: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
     avg_latency_ms: int = 0
     success_count: int = 0
     failure_count: int = 0
@@ -460,6 +464,26 @@ class GovernanceOverviewResponse(BaseModel):
     recent_alerts: list[AlertResponse]
     recent_anomalies: list[UsageAnomalyResponse]
     recent_events: list[TelemetryEventResponse]
+
+
+class ModelPricingCreate(BaseModel):
+    provider: str
+    model_name: str
+    input_cost_per_1k: Decimal
+    output_cost_per_1k: Decimal
+    currency: str = "USD"
+
+
+class ModelPricingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    input_cost_per_1k: Optional[Decimal] = None
+    output_cost_per_1k: Optional[Decimal] = None
+    currency: Optional[str] = None
+    effective_from: Optional[datetime] = None
 
 
 TraceDetailResponse.model_rebuild()

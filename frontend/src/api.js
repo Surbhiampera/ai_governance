@@ -111,4 +111,27 @@ export const triggerAnomalyDetection = () =>
   API.post("/workers/anomaly-detection/sync");
 export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
 
+export const getCostByOrg = () => API.get("/costs/by-org");
+export const getCostByProject = (orgId) =>
+  API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
+export const getCostDaily = (days, orgId, projectId) =>
+  API.get("/costs/daily", {
+    params: { days, org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostMonthly = (orgId, projectId) =>
+  API.get("/costs/monthly", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostByModel = (orgId, projectId) =>
+  API.get("/costs/by-model", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostTotals = () => API.get("/costs/totals");
+
+export const getModelPricing = () => API.get("/pricing/");
+export const createModelPricing = (data) => API.post("/pricing/", data);
+export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
+
+export const trackEvent = (data) => API.post("/telemetry/track", data);
+
 export default API;

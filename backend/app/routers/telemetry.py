@@ -114,6 +114,13 @@ def update_event(event_id: str, update_data: TelemetryEventUpdate, db: Session =
     return _build_event_response(db, event)
 
 
+@router.post("/track", response_model=TelemetryEventResponse)
+def track_event(event_data: TelemetryEventCreate, db: Session = Depends(get_db)):
+    event = _ingest_event(db, event_data)
+    db.commit()
+    return _build_event_response(db, event)
+
+
 def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEvent:
     existing = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_data.event_id).first()
     if existing:
@@ -160,6 +167,14 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         latency_ms=event_data.latency_ms,
         tags=event_data.tags,
         metadata_json=event_data.metadata_json,
+        raw_usage_json=event_data.raw_usage_json if event_data.raw_usage_json else {
+            "prompt_tokens": event_data.prompt_tokens,
+            "completion_tokens": event_data.completion_tokens,
+            "total_tokens": total_tokens,
+            "provider": event_data.provider,
+            "model_name": event_data.model_name,
+            "latency_ms": event_data.latency_ms,
+        },
     )
     db.add(telemetry)
     db.flush()
@@ -391,6 +406,7 @@ def _build_event_response(db: Session, event: TelemetryEvent) -> TelemetryEventR
         latency_ms=event.latency_ms or 0,
         tags=event.tags or [],
         metadata_json=event.metadata_json or {},
+        raw_usage_json=event.raw_usage_json,
         created_at=event.created_at,
         cost_breakdown=[CostBreakdownResponse.model_validate(item) for item in breakdown],
         stages=stages,

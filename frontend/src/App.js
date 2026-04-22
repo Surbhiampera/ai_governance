@@ -10,6 +10,7 @@ import Cost from "./pages/Cost";
 import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
+import Organizations from "./pages/Organizations";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
@@ -17,6 +18,7 @@ const navItems = [
   { to: "/controls", label: "Controls" },
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/tracing", label: "Tracing" },
+  { to: "/organizations", label: "Organizations" },
 ];
 
 function App() {
@@ -58,6 +60,7 @@ function App() {
             <Route path="/controls" element={<Tools />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/tracing" element={<TestEvent />} />
+            <Route path="/organizations" element={<Organizations />} />
           </Routes>
         </main>
       </div>

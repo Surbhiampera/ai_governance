@@ -15,6 +15,7 @@ router = APIRouter(prefix="/costs", tags=["costs"])
 @router.get("/by-model")
 def cost_by_model(
     org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     rows = (
@@ -35,6 +36,8 @@ def cost_by_model(
     )
     if org_id:
         rows = rows.filter(TelemetryEvent.org_id == org_id)
+    if project_id:
+        rows = rows.filter(TelemetryEvent.project_id == project_id)
 
     results = []
     for r in rows.all():
@@ -92,6 +95,7 @@ def cost_by_project(
 def cost_daily(
     days: int = Query(14, ge=1, le=90),
     org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     cutoff = date.today() - timedelta(days=days - 1)
@@ -109,6 +113,8 @@ def cost_daily(
     )
     if org_id:
         query = query.filter(DailyOrgSummary.org_id == org_id)
+    if project_id:
+        query = query.filter(DailyOrgSummary.project_id == project_id)
 
     return [
         {
@@ -125,6 +131,7 @@ def cost_daily(
 @router.get("/monthly")
 def cost_monthly(
     org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     query = (
@@ -140,6 +147,8 @@ def cost_monthly(
     )
     if org_id:
         query = query.filter(MonthlyOrgSummary.org_id == org_id)
+    if project_id:
+        query = query.filter(MonthlyOrgSummary.project_id == project_id)
 
     return [
         {
@@ -150,6 +159,32 @@ def cost_monthly(
             "total_events": r.total_events or 0,
         }
         for r in query.all()
+    ]
+
+
+@router.get("/by-org")
+def cost_by_org(db: Session = Depends(get_db)):
+    rows = (
+        db.query(
+            TelemetryEvent.org_id,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+            func.avg(TelemetryEvent.latency_ms).label("avg_latency_ms"),
+        )
+        .group_by(TelemetryEvent.org_id)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+        .all()
+    )
+    return [
+        {
+            "org_id": r.org_id,
+            "total_events": r.total_events or 0,
+            "total_tokens": r.total_tokens or 0,
+            "total_cost": float(r.total_cost or 0),
+            "avg_latency_ms": round(float(r.avg_latency_ms or 0), 1),
+        }
+        for r in rows
     ]
 
 

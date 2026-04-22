@@ -522,6 +522,29 @@ function TestEvent() {
                 </tbody>
               </table>
             </div>
+
+            {selectedTrace.event.raw_usage_json &&
+              Object.keys(selectedTrace.event.raw_usage_json).length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <strong style={{ fontSize: 13, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                    Raw Usage (Audit)
+                  </strong>
+                  <pre
+                    style={{
+                      marginTop: 8,
+                      padding: 14,
+                      borderRadius: 14,
+                      background: "var(--gray-50)",
+                      border: "1px solid rgba(124,112,174,0.16)",
+                      fontSize: 13,
+                      overflow: "auto",
+                      maxHeight: 220,
+                    }}
+                  >
+                    {JSON.stringify(selectedTrace.event.raw_usage_json, null, 2)}
+                  </pre>
+                </div>
+              )}
           </div>
         ) : (
           <div className="empty-state">Pick a recent event to inspect its full trace.</div>
