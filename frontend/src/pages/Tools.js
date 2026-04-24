@@ -79,8 +79,14 @@ function Tools() {
   const runWorker = async (type, action) => {
     setRunning(type);
     try {
-      await action();
-      setMessage(`${type} completed successfully.`);
+      const res = await action();
+      const result = res.data?.result || {};
+      const details = [];
+      if (result.rows_processed !== undefined) details.push(`${result.rows_processed} rows processed`);
+      if (result.anomalies_created !== undefined) details.push(`${result.anomalies_created} anomalies created`);
+      if (result.alerts_created !== undefined) details.push(`${result.alerts_created} alerts created`);
+      const summary = details.length ? ` (${details.join(", ")})` : "";
+      setMessage(`${type} completed successfully${summary}.`);
       await load();
     } catch {
       setMessage(`${type} failed. Check backend worker connectivity.`);

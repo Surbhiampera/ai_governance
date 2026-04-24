@@ -66,8 +66,23 @@ ALTER TABLE daily_org_summary ADD COLUMN IF NOT EXISTS avg_risk_score DECIMAL(8,
 ALTER TABLE daily_org_summary ADD COLUMN IF NOT EXISTS project_id VARCHAR(100);
 
 -- ============================================================
+-- 3b. tool_connectors  (DB has tool_id NOT NULL, ORM doesn't use it)
+-- ============================================================
+ALTER TABLE tool_connectors ALTER COLUMN tool_id DROP NOT NULL;
+ALTER TABLE tool_connectors ALTER COLUMN tool_id SET DEFAULT NULL;
+
+-- ============================================================
+-- 3c. rate_limits  (DB has tool_id NOT NULL, ORM doesn't use it)
+-- ============================================================
+ALTER TABLE rate_limits ALTER COLUMN tool_id DROP NOT NULL;
+ALTER TABLE rate_limits ALTER COLUMN tool_id SET DEFAULT NULL;
+
+-- ============================================================
 -- 4. monthly_org_summary  (ORM uses tool_name, not tool_id/model_id)
 -- ============================================================
+-- Make old columns nullable so ORM inserts (which omit them) succeed
+ALTER TABLE monthly_org_summary ALTER COLUMN tool_id DROP NOT NULL;
+ALTER TABLE monthly_org_summary ALTER COLUMN model_id DROP NOT NULL;
 ALTER TABLE monthly_org_summary ADD COLUMN IF NOT EXISTS tool_name VARCHAR(150);
 ALTER TABLE monthly_org_summary ADD COLUMN IF NOT EXISTS llm_cost DECIMAL(14,6) DEFAULT 0;
 ALTER TABLE monthly_org_summary ADD COLUMN IF NOT EXISTS infra_cost DECIMAL(14,6) DEFAULT 0;
