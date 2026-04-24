@@ -713,3 +713,41 @@ td {
     padding: 20px;
   }
 }
+
+/* ── Login Screen ── */
+.login-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1028 0%, #2d1f3d 100%);
+}
+
+.login-card {
+  text-align: center;
+  padding: 48px 40px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(124,112,174,0.18);
+  backdrop-filter: blur(12px);
+  max-width: 400px;
+  width: 100%;
+}
+
+.login-card h1 {
+  color: #fff;
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.login-card p {
+  color: rgba(255,255,255,0.6);
+  margin: 0 0 32px;
+  font-size: 15px;
+}
+
+.login-card .btn {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 15px;
+}

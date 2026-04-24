@@ -1,0 +1,295 @@
+✅ 1. ORGANIZATIONS
+CREATE TABLE organizations (
+    id VARCHAR(100) PRIMARY KEY,
+    org_name VARCHAR(150) NOT NULL,
+    plan_type VARCHAR(50),
+    budget_limit DECIMAL(14,6),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 2. PROJECTS
+CREATE TABLE projects (
+    id VARCHAR(100) PRIMARY KEY,
+    org_id VARCHAR(100) NOT NULL,
+    project_name VARCHAR(150),
+    environment VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id)
+);
+✅ 3. USERS
+CREATE TABLE users (
+    id VARCHAR(100) PRIMARY KEY,
+    org_id VARCHAR(100),
+    email VARCHAR(150),
+    role VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id)
+);
+✅ 4. API_KEYS
+CREATE TABLE api_keys (
+    id VARCHAR(120) PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    key_name VARCHAR(100),
+    provider VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+✅ 5. USER_PROJECTS
+CREATE TABLE user_projects (
+    user_id VARCHAR(100),
+    project_id VARCHAR(100),
+    role VARCHAR(50),
+    PRIMARY KEY (user_id, project_id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+✅ 6. UPLOAD_DATA
+CREATE TABLE upload_data (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    user_id VARCHAR(100),
+    file_name TEXT,
+    file_type VARCHAR(50),
+    file_size_mb DECIMAL(10,2),
+    storage_path TEXT,
+    upload_source VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+✅ 7. BUDGETS
+CREATE TABLE budgets (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    budget_type VARCHAR(50),
+    limit_amount DECIMAL(14,6),
+    alert_threshold_percent INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+✅ 8. RATE_LIMITS
+CREATE TABLE rate_limits (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    tool_id VARCHAR(100),
+    tool_name VARCHAR(150),
+    max_requests_per_min INT,
+    max_tokens_per_day INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+✅ 9. TOOL_CONNECTORS
+CREATE TABLE tool_connectors (
+    id VARCHAR(120) PRIMARY KEY,
+    connector_name VARCHAR(150),
+    tool_name VARCHAR(150),
+    provider VARCHAR(100),
+    endpoint_url TEXT,
+    auth_type VARCHAR(50),
+    ingestion_mode VARCHAR(50),
+    status VARCHAR(50),
+    last_ingested_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    tool_id VARCHAR(100)
+);
+✅ 10. TOOL_REGISTRY
+CREATE TABLE tool_registry (
+    tool_name VARCHAR(150) PRIMARY KEY,
+    tool_type VARCHAR(100),
+    vendor VARCHAR(100),
+    cost_model VARCHAR(100),
+    base_cost DECIMAL(14,6),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 11. PROVIDERS
+CREATE TABLE providers (
+    id VARCHAR(100) PRIMARY KEY,
+    provider_name VARCHAR(150)
+);
+✅ 12. TELEMETRY_EVENTS (CORE TABLE)
+CREATE TABLE telemetry_events (
+    id BIGSERIAL PRIMARY KEY,
+    event_id VARCHAR(120) UNIQUE NOT NULL,
+    request_id VARCHAR(120),
+    trace_id VARCHAR(120),
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    user_id VARCHAR(100),
+    api_key_id VARCHAR(120),
+    provider VARCHAR(100),
+    model_name VARCHAR(100),
+    service_type VARCHAR(100),
+    endpoint_name VARCHAR(150),
+    input_tokens INT,
+    output_tokens INT,
+    total_tokens INT,
+    latency_ms DECIMAL(10,2),
+    cost DECIMAL(14,6),
+    status VARCHAR(50),
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+✅ 13. DATA_SECURITY_LOGS
+CREATE TABLE data_security_logs (
+    id BIGSERIAL PRIMARY KEY,
+    pii_detected BOOLEAN,
+    pii_type VARCHAR(100),
+    data_outbound BOOLEAN,
+    misuse_pattern_detected BOOLEAN,
+    anomaly_usage_spike BOOLEAN,
+    masking_applied BOOLEAN,
+    risk_score DECIMAL(5,2),
+    data_in_mb DECIMAL(10,2),
+    data_out_mb DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 14. EXECUTION_PIPELINE
+CREATE TABLE execution_pipeline (
+    id BIGSERIAL PRIMARY KEY,
+    stage_order INT,
+    stage_name VARCHAR(100),
+    system_name VARCHAR(100),
+    stage_latency_ms DECIMAL(10,2),
+    retry_count INT,
+    status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    telemetry_id BIGINT,
+    FOREIGN KEY (telemetry_id) REFERENCES telemetry_events(id)
+);
+✅ 15. RATE_LIMIT_VIOLATIONS
+CREATE TABLE rate_limit_violations (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100),
+    tool_name VARCHAR(150),
+    violation_type VARCHAR(100),
+    observed_value DECIMAL(10,2),
+    limit_value DECIMAL(10,2),
+    telemetry_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (telemetry_id) REFERENCES telemetry_events(id)
+);
+✅ 16. USAGE_ANOMALIES
+CREATE TABLE usage_anomalies (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    tool_name VARCHAR(150) NOT NULL,
+    event_id VARCHAR(120),
+    anomaly_type VARCHAR(60) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'medium',
+    anomaly_score DECIMAL(8,2) DEFAULT 0,
+    baseline_value DECIMAL(14,6) DEFAULT 0,
+    observed_value DECIMAL(14,6) DEFAULT 0,
+    message TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'open',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 17. ALERTS
+CREATE TABLE alerts (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100),
+    rule_id BIGINT,
+    alert_type VARCHAR(100),
+    severity VARCHAR(50),
+    message TEXT,
+    threshold_value DECIMAL(10,2),
+    actual_value DECIMAL(10,2),
+    status VARCHAR(50),
+    telemetry_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (telemetry_id) REFERENCES telemetry_events(id)
+);
+✅ 18. GOVERNANCE_RULES
+CREATE TABLE governance_rules (
+    id BIGSERIAL PRIMARY KEY,
+    rule_name VARCHAR(150) UNIQUE,
+    description TEXT,
+    metric_name VARCHAR(100),
+    operator VARCHAR(20),
+    threshold_value DECIMAL(10,2),
+    severity VARCHAR(50),
+    scope_level VARCHAR(50),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    org_id VARCHAR(100),
+    project_id VARCHAR(100)
+);
+✅ 19. MODEL_REGISTRY
+CREATE TABLE model_registry (
+    id VARCHAR(120) PRIMARY KEY,
+    provider_id VARCHAR(100),
+    model_name VARCHAR(150),
+    model_type VARCHAR(100),
+    context_window INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 20. MODEL_PRICING
+CREATE TABLE model_pricing (
+    id BIGSERIAL PRIMARY KEY,
+    model_id VARCHAR(120),
+    input_cost_per_1k DECIMAL(10,6),
+    output_cost_per_1k DECIMAL(10,6),
+    currency VARCHAR(10),
+    effective_from TIMESTAMP,
+    effective_to TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+✅ 21. DAILY_ORG_SUMMARY
+CREATE TABLE daily_org_summary (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100) NOT NULL,
+    project_id VARCHAR(100),
+    tool_name VARCHAR(150) NOT NULL,
+    date DATE NOT NULL,
+    total_events INT DEFAULT 0,
+    total_cost DECIMAL(14,6) DEFAULT 0,
+    llm_cost DECIMAL(14,6) DEFAULT 0,
+    infra_cost DECIMAL(14,6) DEFAULT 0,
+    external_cost DECIMAL(14,6) DEFAULT 0,
+    total_prompt_tokens INT DEFAULT 0,
+    total_completion_tokens INT DEFAULT 0,
+    total_tokens INT DEFAULT 0,
+    avg_latency_ms INT DEFAULT 0,
+    success_count INT DEFAULT 0,
+    failure_count INT DEFAULT 0,
+    anomaly_count INT DEFAULT 0,
+    misuse_count INT DEFAULT 0,
+    total_input_mb DECIMAL(12,4) DEFAULT 0,
+    total_output_mb DECIMAL(12,4) DEFAULT 0,
+    avg_risk_score DECIMAL(8,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(org_id, project_id, tool_name, date)
+);
+✅ 22. MONTHLY_ORG_SUMMARY
+CREATE TABLE monthly_org_summary (
+    id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(100) NOT NULL,
+    project_id VARCHAR(100),
+    tool_name VARCHAR(150) NOT NULL,
+    month DATE NOT NULL,
+    total_events INT DEFAULT 0,
+    total_cost DECIMAL(14,6) DEFAULT 0,
+    llm_cost DECIMAL(14,6) DEFAULT 0,
+    infra_cost DECIMAL(14,6) DEFAULT 0,
+    external_cost DECIMAL(14,6) DEFAULT 0,
+    total_tokens INT DEFAULT 0,
+    total_prompt_tokens INT DEFAULT 0,
+    total_completion_tokens INT DEFAULT 0,
+    avg_latency_ms INT DEFAULT 0,
+    success_count INT DEFAULT 0,
+    failure_count INT DEFAULT 0,
+    anomaly_count INT DEFAULT 0,
+    misuse_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(org_id, project_id, tool_name, month)
+);

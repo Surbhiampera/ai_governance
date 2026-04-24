@@ -46,11 +46,6 @@ function App() {
               </NavLink>
             ))}
           </nav>
-
-          <div className="sidebar-footer">
-            <span>Palette</span>
-            {/* <strong>#9E2A97 / #7C70AE</strong> */}
-          </div>
         </aside>
 
         <main className="content">

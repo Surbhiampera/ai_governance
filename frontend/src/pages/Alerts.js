@@ -80,8 +80,7 @@ function Alerts() {
                   <th>ID</th>
                   <th>Type</th>
                   <th>Severity</th>
-                  <th>Source</th>
-                  <th>Tool</th>
+                  <th>Telemetry ID</th>
                   <th>Message</th>
                   <th>Threshold</th>
                   <th>Actual</th>
@@ -97,8 +96,7 @@ function Alerts() {
                     <td>
                       <span className={`status-pill ${alert.severity}`}>{alert.severity}</span>
                     </td>
-                    <td>{alert.source || "system"}</td>
-                    <td>{alert.tool_name || "-"}</td>
+                    <td>{alert.telemetry_id ?? "-"}</td>
                     <td>{alert.message}</td>
                     <td>{alert.threshold_value ?? "-"}</td>
                     <td>{alert.actual_value ?? "-"}</td>

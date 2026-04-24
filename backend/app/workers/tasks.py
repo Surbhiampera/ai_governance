@@ -14,7 +14,7 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
         db.query(
             TelemetryEvent.org_id,
             TelemetryEvent.project_id,
-            TelemetryEvent.tool_name,
+            TelemetryEvent.model_name,
             func.count(TelemetryEvent.id).label("total_events"),
             func.sum(TelemetryEvent.total_cost).label("total_cost"),
             func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
@@ -33,7 +33,7 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
             func.avg(TelemetryEvent.risk_score).label("avg_risk_score"),
         )
         .filter(func.date(TelemetryEvent.created_at) == summary_date)
-        .group_by(TelemetryEvent.org_id, TelemetryEvent.project_id, TelemetryEvent.tool_name)
+        .group_by(TelemetryEvent.org_id, TelemetryEvent.project_id, TelemetryEvent.model_name)
         .all()
     )
 
@@ -44,7 +44,7 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
             DailyOrgSummary(
                 org_id=row.org_id,
                 project_id=row.project_id,
-                tool_name=row.tool_name,
+                tool_name=row.model_name or "",
                 date=summary_date,
                 total_events=row.total_events or 0,
                 total_cost=row.total_cost or Decimal("0"),

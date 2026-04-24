@@ -280,16 +280,14 @@ class AlertResponse(BaseModel):
 
     id: int
     org_id: Optional[str] = None
-    tool_name: Optional[str] = None
-    event_id: Optional[str] = None
     rule_id: Optional[int] = None
     alert_type: Optional[str] = None
     severity: Optional[str] = None
-    source: Optional[str] = None
     message: Optional[str] = None
     threshold_value: Optional[Decimal] = None
     actual_value: Optional[Decimal] = None
     status: Optional[str] = None
+    telemetry_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
 

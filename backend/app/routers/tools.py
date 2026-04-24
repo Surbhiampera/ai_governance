@@ -71,7 +71,7 @@ def create_connector(connector_data: ToolConnectorCreate, db: Session = Depends(
 def get_tool_usage(db: Session = Depends(get_db)):
     rows = (
         db.query(
-            TelemetryEvent.tool_name,
+            TelemetryEvent.model_name,
             func.max(ToolRegistry.vendor).label("vendor"),
             func.count(TelemetryEvent.id).label("total_events"),
             func.sum(TelemetryEvent.total_cost).label("total_cost"),
@@ -81,8 +81,8 @@ def get_tool_usage(db: Session = Depends(get_db)):
             func.avg(TelemetryEvent.latency_ms).label("avg_latency_ms"),
             func.sum(case((TelemetryEvent.status.in_(["success", "completed"]), 1), else_=0)).label("success_count"),
         )
-        .outerjoin(ToolRegistry, ToolRegistry.tool_name == TelemetryEvent.tool_name)
-        .group_by(TelemetryEvent.tool_name)
+        .outerjoin(ToolRegistry, ToolRegistry.tool_name == TelemetryEvent.model_name)
+        .group_by(TelemetryEvent.model_name)
         .order_by(func.sum(TelemetryEvent.total_cost).desc())
         .all()
     )
@@ -93,7 +93,7 @@ def get_tool_usage(db: Session = Depends(get_db)):
         success_rate = Decimal("100") if total_events == 0 else (Decimal(str(row.success_count or 0)) / Decimal(str(total_events))) * Decimal("100")
         results.append(
             ToolUsageResponse(
-                tool_name=row.tool_name,
+                tool_name=row.model_name or "",
                 vendor=row.vendor,
                 total_events=total_events,
                 total_cost=Decimal(str(row.total_cost or 0)),

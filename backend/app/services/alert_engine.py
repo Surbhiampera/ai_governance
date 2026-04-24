@@ -17,6 +17,7 @@ class AlertEngine:
         security_result: dict,
         anomaly_score: Decimal,
         abnormal_usage_spike: bool,
+        telemetry_id: int | None = None,
     ) -> None:
         event_metrics = {
             "total_cost": Decimal(str(cost_summary.total_cost)),
@@ -33,8 +34,7 @@ class AlertEngine:
             self._create_alert(
                 db=db,
                 org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                event_id=event_data.event_id,
+                telemetry_id=telemetry_id,
                 alert_type="pii_detected",
                 severity="critical",
                 message=f"PII detected for event {event_data.event_id} with risk score {security_result['risk_score']}.",
@@ -46,8 +46,7 @@ class AlertEngine:
             self._create_alert(
                 db=db,
                 org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                event_id=event_data.event_id,
+                telemetry_id=telemetry_id,
                 alert_type="data_out_violation",
                 severity="high",
                 message=f"Data out policy threshold exceeded for {event_data.event_id}.",
@@ -59,8 +58,7 @@ class AlertEngine:
             self._create_alert(
                 db=db,
                 org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                event_id=event_data.event_id,
+                telemetry_id=telemetry_id,
                 alert_type="misuse_pattern",
                 severity="critical",
                 message=f"Potential misuse pattern detected for event {event_data.event_id}.",
@@ -72,20 +70,19 @@ class AlertEngine:
             self._create_alert(
                 db=db,
                 org_id=event_data.org_id,
-                tool_name=event_data.tool_name,
-                event_id=event_data.event_id,
+                telemetry_id=telemetry_id,
                 alert_type="usage_spike",
                 severity="high",
-                message=f"Abnormal usage spike detected for {event_data.tool_name}.",
+                message=f"Abnormal usage spike detected for {event_data.model_name or event_data.tool_name}.",
                 threshold=Decimal("1.50"),
                 actual=Decimal(str(anomaly_score)),
             )
 
-        self._evaluate_budgets(db, event_data.org_id, event_data.project_id, event_data.tool_name)
-        self._evaluate_custom_rules(db, event_data, event_metrics)
+        self._evaluate_budgets(db, event_data.org_id, event_data.project_id, telemetry_id)
+        self._evaluate_custom_rules(db, event_data, event_metrics, telemetry_id)
         db.flush()
 
-    def _evaluate_budgets(self, db: Session, org_id: str, project_id: str | None, tool_name: str) -> None:
+    def _evaluate_budgets(self, db: Session, org_id: str, project_id: str | None, telemetry_id: int | None) -> None:
         today = date.today()
         budgets = db.query(Budget).filter(Budget.org_id == org_id).all()
         for budget in budgets:
@@ -110,8 +107,7 @@ class AlertEngine:
                 self._create_alert(
                     db=db,
                     org_id=org_id,
-                    tool_name=tool_name,
-                    event_id=None,
+                    telemetry_id=telemetry_id,
                     alert_type="budget_threshold",
                     severity="high",
                     message=f"{budget.budget_type.capitalize()} budget is at {percentage:.1f}% of limit.",
@@ -124,6 +120,7 @@ class AlertEngine:
         db: Session,
         event_data: TelemetryEventCreate,
         metrics: dict[str, Decimal],
+        telemetry_id: int | None = None,
     ) -> None:
         rules = db.query(GovernanceRule).filter(GovernanceRule.is_active.is_(True)).all()
         for rule in rules:
@@ -131,7 +128,7 @@ class AlertEngine:
             if metric_value is None:
                 continue
 
-            if rule.scope_level == "tool" and rule.scope_reference and rule.scope_reference != event_data.tool_name:
+            if rule.scope_level == "tool" and rule.scope_reference and rule.scope_reference != (event_data.model_name or event_data.tool_name):
                 continue
             if rule.scope_level == "project" and rule.scope_reference and rule.scope_reference != event_data.project_id:
                 continue
@@ -142,15 +139,13 @@ class AlertEngine:
                 self._create_alert(
                     db=db,
                     org_id=event_data.org_id,
-                    tool_name=event_data.tool_name,
-                    event_id=event_data.event_id,
+                    telemetry_id=telemetry_id,
                     alert_type=f"rule:{rule.metric_name}",
                     severity=rule.severity,
                     message=f"Rule '{rule.rule_name}' triggered on {rule.metric_name}.",
                     threshold=Decimal(str(rule.threshold_value)),
                     actual=metric_value,
                     rule_id=rule.id,
-                    source="rule_engine",
                 )
 
     def create_daily_anomaly_alerts(self, db: Session) -> int:
@@ -166,14 +161,12 @@ class AlertEngine:
             self._create_alert(
                 db=db,
                 org_id=anomaly.org_id,
-                tool_name=anomaly.tool_name,
-                event_id=anomaly.event_id,
+                telemetry_id=None,
                 alert_type=anomaly.anomaly_type,
                 severity=anomaly.severity,
                 message=anomaly.message or "Anomaly detected during scheduled scan.",
                 threshold=Decimal(str(anomaly.baseline_value)),
                 actual=Decimal(str(anomaly.observed_value)),
-                source="anomaly_scan",
             )
             created += 1
         db.flush()
@@ -196,22 +189,19 @@ class AlertEngine:
         self,
         db: Session,
         org_id: str | None,
-        tool_name: str | None,
-        event_id: str | None,
+        telemetry_id: int | None,
         alert_type: str,
         severity: str,
         message: str,
         threshold: Decimal | None,
         actual: Decimal | None,
         rule_id: int | None = None,
-        source: str = "system",
     ) -> None:
         recent_cutoff = date.today() - timedelta(days=1)
         existing = (
             db.query(Alert)
             .filter(
                 Alert.org_id == org_id,
-                Alert.tool_name == tool_name,
                 Alert.alert_type == alert_type,
                 Alert.status == "active",
                 func.date(Alert.created_at) >= recent_cutoff,
@@ -224,15 +214,13 @@ class AlertEngine:
         db.add(
             Alert(
                 org_id=org_id,
-                tool_name=tool_name,
-                event_id=event_id,
                 rule_id=rule_id,
                 alert_type=alert_type,
                 severity=severity,
-                source=source,
                 message=message,
                 threshold_value=threshold,
                 actual_value=actual,
                 status="active",
+                telemetry_id=telemetry_id,
             )
         )

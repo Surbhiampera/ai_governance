@@ -58,7 +58,7 @@ def list_telemetry_logs(
     if org_id:
         query = query.filter(TelemetryEvent.org_id == org_id)
     if tool_name:
-        query = query.filter(TelemetryEvent.tool_name == tool_name)
+        query = query.filter(TelemetryEvent.model_name == tool_name)
     if status:
         query = query.filter(TelemetryEvent.status == status)
     if start_date:
@@ -89,7 +89,7 @@ def delete_event(event_id: str, db: Session = Depends(get_db)):
     db.query(CostBreakdown).filter(CostBreakdown.event_id == event_id).delete()
     db.query(ExecutionPipeline).filter(ExecutionPipeline.event_id == event_id).delete()
     db.query(DataSecurityLog).filter(DataSecurityLog.event_id == event_id).delete()
-    db.query(Alert).filter(Alert.event_id == event_id).delete()
+    db.query(Alert).filter(Alert.telemetry_id == event.id).delete()
     db.query(UsageAnomaly).filter(UsageAnomaly.event_id == event_id).delete()
     db.delete(event)
     db.commit()
@@ -142,9 +142,8 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         project_id=event_data.project_id,
         user_id=event_data.user_id,
         api_key_id=event_data.api_key_id,
-        tool_name=event_data.tool_name,
         provider=event_data.provider,
-        model_name=event_data.model_name,
+        model_name=event_data.model_name or event_data.tool_name,
         service_type=event_data.service_type,
         component_name=event_data.component_name,
         execution_type=event_data.execution_type,
@@ -183,7 +182,7 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
     _save_pipeline_stages(db, event_data)
     _save_security_log(db, event_data, security_result, abnormal_usage_spike)
     _upsert_daily_summary(db, telemetry)
-    alert_engine.evaluate(db, event_data, cost_summary, security_result, anomaly_score, abnormal_usage_spike)
+    alert_engine.evaluate(db, event_data, cost_summary, security_result, anomaly_score, abnormal_usage_spike, telemetry_id=telemetry.id)
     db.flush()
     return telemetry
 
@@ -270,7 +269,7 @@ def _upsert_daily_summary(db: Session, event: TelemetryEvent) -> None:
         .filter(
             DailyOrgSummary.org_id == event.org_id,
             DailyOrgSummary.project_id == event.project_id,
-            DailyOrgSummary.tool_name == event.tool_name,
+            DailyOrgSummary.tool_name == (event.model_name or ""),
             DailyOrgSummary.date == summary_date,
         )
         .first()
@@ -285,7 +284,7 @@ def _upsert_daily_summary(db: Session, event: TelemetryEvent) -> None:
         summary = DailyOrgSummary(
             org_id=event.org_id,
             project_id=event.project_id,
-            tool_name=event.tool_name,
+            tool_name=event.model_name or "",
             date=summary_date,
             total_events=1,
             total_cost=event.total_cost,
@@ -336,7 +335,7 @@ def _detect_event_spike(db: Session, event_data: TelemetryEventCreate) -> tuple[
         db.query(func.date(TelemetryEvent.created_at), func.count(TelemetryEvent.id))
         .filter(
             TelemetryEvent.org_id == event_data.org_id,
-            TelemetryEvent.tool_name == event_data.tool_name,
+            TelemetryEvent.model_name == (event_data.model_name or event_data.tool_name),
             TelemetryEvent.created_at >= datetime.combine(today - timedelta(days=7), datetime.min.time()),
             TelemetryEvent.created_at < datetime.combine(today, datetime.min.time()),
         )
@@ -348,7 +347,7 @@ def _detect_event_spike(db: Session, event_data: TelemetryEventCreate) -> tuple[
         db.query(func.count(TelemetryEvent.id))
         .filter(
             TelemetryEvent.org_id == event_data.org_id,
-            TelemetryEvent.tool_name == event_data.tool_name,
+            TelemetryEvent.model_name == (event_data.model_name or event_data.tool_name),
             func.date(TelemetryEvent.created_at) == today,
         )
         .scalar()
@@ -381,7 +380,7 @@ def _build_event_response(db: Session, event: TelemetryEvent) -> TelemetryEventR
         project_id=event.project_id,
         user_id=event.user_id,
         api_key_id=event.api_key_id,
-        tool_name=event.tool_name,
+        tool_name=event.model_name or "",
         provider=event.provider,
         model_name=event.model_name,
         service_type=event.service_type,

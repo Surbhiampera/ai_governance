@@ -154,8 +154,7 @@ function AlertsSecurity() {
                 <th>ID</th>
                 <th>Type</th>
                 <th>Severity</th>
-                <th>Source</th>
-                <th>Tool</th>
+                <th>Telemetry ID</th>
                 <th>Message</th>
                 <th>Threshold</th>
                 <th>Actual</th>
@@ -167,7 +166,7 @@ function AlertsSecurity() {
               {alerts.length === 0 && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     style={{ textAlign: "center", color: "var(--gray-500)" }}
                   >
                     No alerts.
@@ -183,8 +182,7 @@ function AlertsSecurity() {
                       {a.severity}
                     </span>
                   </td>
-                  <td>{a.source || "system"}</td>
-                  <td>{a.tool_name || "-"}</td>
+                  <td>{a.telemetry_id ?? "-"}</td>
                   <td>{a.message}</td>
                   <td>{a.threshold_value ?? "-"}</td>
                   <td>{a.actual_value ?? "-"}</td>

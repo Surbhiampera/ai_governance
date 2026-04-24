@@ -3,9 +3,9 @@ from sqlalchemy import text
 
 with engine.connect() as conn:
     print("=== 1. telemetry_events ===")
-    rows = conn.execute(text("SELECT event_id, tool_name, component_name, service_type, latency_ms FROM telemetry_events")).fetchall()
+    rows = conn.execute(text("SELECT event_id, model_name, service_type, latency_ms FROM telemetry_events")).fetchall()
     for r in rows:
-        print(f"  {r[0][:12]}... | {r[1]} | {r[2]} | {r[3]} | {r[4]}ms")
+        print(f"  {r[0][:12]}... | {r[1]} | {r[2]} | {r[3]}ms")
     print(f"  Total: {len(rows)} rows\n")
 
     print("=== 2. cost_breakdown ===")
@@ -21,9 +21,9 @@ with engine.connect() as conn:
     print(f"  Total: {len(rows)} rows\n")
 
     print("=== 4. alerts ===")
-    rows = conn.execute(text("SELECT tool_name, alert_type, severity, status FROM alerts")).fetchall()
+    rows = conn.execute(text("SELECT alert_type, severity, status, telemetry_id FROM alerts")).fetchall()
     for r in rows:
-        print(f"  {r[0]} | {r[1]} | {r[2]} | {r[3]}")
+        print(f"  {r[0]} | {r[1]} | {r[2]} | telemetry_id={r[3]}")
     print(f"  Total: {len(rows)} rows\n")
 
     print("=== 5. daily_org_summary ===")
