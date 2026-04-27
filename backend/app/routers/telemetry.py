@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import Alert, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, UsageAnomaly
+from app.models import Alert, Budget, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, UsageAnomaly
 from app.schemas import (
     BatchTelemetryIngest,
     CostBreakdownResponse,
@@ -124,6 +124,61 @@ def super_admin_logs(
         }
         for row in rows
     ]
+
+
+@router.get("/admin/aggregate")
+def super_admin_aggregate(
+    org_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Aggregated token usage, cost, and budget remaining per org/tool.
+
+    Sourced entirely from tracing data — single source of truth for the
+    Super Admin Log Module's centralized cost and usage computation.
+    """
+    query = (
+        db.query(
+            TelemetryEvent.org_id,
+            TelemetryEvent.model_name.label("tool_name"),
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.prompt_tokens).label("prompt_tokens"),
+            func.sum(TelemetryEvent.completion_tokens).label("completion_tokens"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+            func.avg(TelemetryEvent.risk_score).label("avg_risk_score"),
+        )
+        .group_by(TelemetryEvent.org_id, TelemetryEvent.model_name)
+        .order_by(TelemetryEvent.org_id, TelemetryEvent.model_name)
+    )
+    if org_id:
+        query = query.filter(TelemetryEvent.org_id == org_id)
+
+    rows = query.all()
+
+    # First budget per org (project-level budgets excluded for org-wide view)
+    budgets: dict = {}
+    for b in db.query(Budget).filter(Budget.project_id.is_(None)).all():
+        if b.org_id not in budgets:
+            budgets[b.org_id] = b
+
+    result = []
+    for row in rows:
+        budget = budgets.get(row.org_id)
+        total_cost = round(float(row.total_cost or 0), 4)
+        budget_limit = round(float(budget.limit_amount), 2) if budget else None
+        result.append({
+            "org_id": row.org_id,
+            "tool_name": row.tool_name or "-",
+            "total_events": row.total_events or 0,
+            "total_tokens": int(row.total_tokens or 0),
+            "prompt_tokens": int(row.prompt_tokens or 0),
+            "completion_tokens": int(row.completion_tokens or 0),
+            "total_cost": total_cost,
+            "avg_risk_score": round(float(row.avg_risk_score or 0), 2),
+            "budget_limit": budget_limit,
+            "remaining_budget": round(budget_limit - total_cost, 2) if budget_limit is not None else None,
+        })
+    return result
 
 
 @router.get("/traces/{event_id}", response_model=TraceDetailResponse)

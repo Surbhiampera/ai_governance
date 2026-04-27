@@ -137,6 +137,13 @@ export const trackEvent = (data) => API.post("/telemetry/track", data);
 // --- Super Admin centralised log access (across every integrated tool) ---
 export const getSuperAdminLogs = (params) =>
   API.get("/telemetry/admin/logs", { params });
+export const getSuperAdminAggregate = (params) =>
+  API.get("/telemetry/admin/aggregate", { params });
+
+// --- Tracing-derived org/project context (single source of truth) ---
+export const getTracingOrgs = () => API.get("/lookups/tracing-orgs");
+export const getTracingProjects = (orgId) =>
+  API.get("/lookups/tracing-projects", { params: { org_id: orgId || undefined } });
 
 // --- Dynamic dropdown lookups (no hardcoded enums in the UI) ---
 export const getLookupAuthTypes = () => API.get("/lookups/auth-types");

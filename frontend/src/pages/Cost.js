@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
-import { getOrganizations, getProjects } from "../api";
+import { getTracingOrgs, getTracingProjects } from "../api";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
 const num = (v) => Number(v || 0).toLocaleString();
@@ -40,7 +40,7 @@ function Cost() {
           API.get("/costs/by-org"),
           API.get("/costs/daily", { params: { days: 14, org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
           API.get("/costs/monthly", { params: { org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
-          getOrganizations(),
+          getTracingOrgs(),
         ]);
       setTotals(totalsRes.data);
       setByModel(modelRes.data || []);
@@ -62,11 +62,7 @@ function Cost() {
   }, [selectedOrg, selectedProject]);
 
   useEffect(() => {
-    if (selectedOrg) {
-      getProjects(selectedOrg).then((res) => setProjects(res.data || []));
-    } else {
-      getProjects().then((res) => setProjects(res.data || []));
-    }
+    getTracingProjects(selectedOrg || "").then((res) => setProjects(res.data || []));
     setSelectedProject("");
   }, [selectedOrg]);
 
@@ -146,7 +142,7 @@ function Cost() {
             <select value={selectedOrg} onChange={(e) => { setSelectedOrg(e.target.value); setSelectedProject(""); }}>
               <option value="">All Organizations</option>
               {orgs.map((o) => (
-                <option key={o.id} value={o.id}>{o.org_name || o.id}</option>
+                <option key={o.id} value={o.id}>{o.label}</option>
               ))}
             </select>
           </div>
@@ -155,7 +151,7 @@ function Cost() {
             <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
               <option value="">All Projects</option>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.project_name || p.id}</option>
+                <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
           </div>

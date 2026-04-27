@@ -6,7 +6,7 @@ literals here because they are language tokens, not business data.
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.config import get_lookup_defaults
@@ -131,6 +131,37 @@ def list_environments(db: Session = Depends(get_db)) -> list[str]:
 @router.get("/budget-periods")
 def list_budget_periods(db: Session = Depends(get_db)) -> list[str]:
     return _merge(get_lookup_defaults("BUDGET_PERIODS"), _distinct(db, Budget.budget_type))
+
+
+@router.get("/tracing-orgs")
+def list_tracing_orgs(db: Session = Depends(get_db)) -> list[dict]:
+    """Distinct org_ids observed in telemetry — Tracing Module as single source of truth."""
+    rows = (
+        db.query(TelemetryEvent.org_id)
+        .distinct()
+        .filter(TelemetryEvent.org_id.isnot(None))
+        .order_by(TelemetryEvent.org_id)
+        .all()
+    )
+    return [{"id": r[0], "label": r[0]} for r in rows if r[0]]
+
+
+@router.get("/tracing-projects")
+def list_tracing_projects(
+    org_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Distinct project_ids observed in telemetry, optionally scoped to an org."""
+    query = (
+        db.query(TelemetryEvent.project_id)
+        .distinct()
+        .filter(TelemetryEvent.project_id.isnot(None))
+        .order_by(TelemetryEvent.project_id)
+    )
+    if org_id:
+        query = query.filter(TelemetryEvent.org_id == org_id)
+    rows = query.all()
+    return [{"id": r[0], "label": r[0]} for r in rows if r[0]]
 
 
 @router.get("/scope-references")

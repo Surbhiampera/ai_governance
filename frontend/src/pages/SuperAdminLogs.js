@@ -1,15 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   getLookupProviders,
-  getOrganizations,
+  getSuperAdminAggregate,
   getSuperAdminLogs,
   getToolsUsage,
+  getTracingOrgs,
 } from "../api";
 
 const STATUS_OPTIONS = ["", "success", "completed", "failed", "error"];
+const money = (v) => `$${Number(v || 0).toFixed(4)}`;
+const num = (v) => Number(v || 0).toLocaleString();
 
 function SuperAdminLogs() {
   const [logs, setLogs] = useState([]);
+  const [aggregate, setAggregate] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [tools, setTools] = useState([]);
   const [providers, setProviders] = useState([]);
@@ -23,11 +27,12 @@ function SuperAdminLogs() {
     limit: 200,
   });
   const [loading, setLoading] = useState(true);
+  const [loadingAggregate, setLoadingAggregate] = useState(true);
   const [error, setError] = useState("");
 
   const loadFilters = async () => {
     const [orgRes, toolRes, provRes] = await Promise.all([
-      getOrganizations(),
+      getTracingOrgs(),
       getToolsUsage(),
       getLookupProviders(),
     ]);
@@ -35,6 +40,19 @@ function SuperAdminLogs() {
     setTools(toolRes.data || []);
     setProviders(provRes.data || []);
   };
+
+  const fetchAggregate = useCallback(async (orgId) => {
+    setLoadingAggregate(true);
+    try {
+      const params = orgId ? { org_id: orgId } : {};
+      const res = await getSuperAdminAggregate(params);
+      setAggregate(res.data || []);
+    } catch {
+      setAggregate([]);
+    } finally {
+      setLoadingAggregate(false);
+    }
+  }, []);
 
   const fetchLogs = useCallback(async (currentFilters) => {
     setLoading(true);
@@ -63,12 +81,14 @@ function SuperAdminLogs() {
 
   useEffect(() => {
     fetchLogs(filters);
+    fetchAggregate(filters.org_id);
     // intentionally only run on mount; subsequent fetches go through Apply/Reset
-  }, [fetchLogs]); // eslint-disable-line
+  }, [fetchLogs, fetchAggregate]); // eslint-disable-line
 
   const apply = (e) => {
     e.preventDefault();
     fetchLogs(filters);
+    fetchAggregate(filters.org_id);
   };
 
   const reset = () => {
@@ -83,6 +103,7 @@ function SuperAdminLogs() {
     };
     setFilters(cleared);
     fetchLogs(cleared);
+    fetchAggregate("");
   };
 
   const totalCost = logs.reduce((s, r) => s + Number(r.total_cost || 0), 0);
@@ -151,7 +172,7 @@ function SuperAdminLogs() {
                   <option value="">All organizations</option>
                   {orgs.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.org_name || o.id}
+                      {o.label}
                     </option>
                   ))}
                 </select>
@@ -238,6 +259,100 @@ function SuperAdminLogs() {
       </section>
 
       {error && <div className="error-message">{error}</div>}
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Usage Aggregation by Tool</h3>
+            <p
+              style={{
+                margin: "2px 0 0",
+                color: "var(--gray-500)",
+                fontSize: 13,
+              }}
+            >
+              Centralized computation of token usage, cost consumption, and
+              remaining budget across all tools and projects — sourced from
+              tracing data.
+            </p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Org</th>
+                <th>Tool / Model</th>
+                <th>Events</th>
+                <th>Tokens In</th>
+                <th>Tokens Out</th>
+                <th>Total Tokens</th>
+                <th>Total Cost</th>
+                <th>Avg Risk</th>
+                <th>Budget Limit</th>
+                <th>Remaining</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingAggregate && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center" }}>
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!loadingAggregate && aggregate.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No aggregated data available.
+                  </td>
+                </tr>
+              )}
+              {aggregate.map((row, i) => {
+                const remaining = row.remaining_budget;
+                const remainingClass =
+                  remaining !== null && remaining < 0
+                    ? "critical"
+                    : remaining !== null && remaining < row.budget_limit * 0.1
+                    ? "high"
+                    : "";
+                return (
+                  <tr key={`${row.org_id}-${row.tool_name}-${i}`}>
+                    <td>{row.org_id}</td>
+                    <td>
+                      <strong>{row.tool_name}</strong>
+                    </td>
+                    <td>{num(row.total_events)}</td>
+                    <td>{num(row.prompt_tokens)}</td>
+                    <td>{num(row.completion_tokens)}</td>
+                    <td>{num(row.total_tokens)}</td>
+                    <td>{money(row.total_cost)}</td>
+                    <td>{row.avg_risk_score.toFixed(2)}</td>
+                    <td>
+                      {row.budget_limit !== null
+                        ? `$${row.budget_limit.toFixed(2)}`
+                        : "—"}
+                    </td>
+                    <td>
+                      {remaining !== null ? (
+                        <span className={`status-pill ${remainingClass}`}>
+                          ${remaining.toFixed(2)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="panel">
         <div className="section-head">

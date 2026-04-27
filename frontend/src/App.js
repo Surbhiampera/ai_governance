@@ -10,7 +10,6 @@ import Cost from "./pages/Cost";
 import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
-import Organizations from "./pages/Organizations";
 import SuperAdminLogs from "./pages/SuperAdminLogs";
 
 const navItems = [
@@ -20,7 +19,6 @@ const navItems = [
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/tracing", label: "Tracing" },
   { to: "/admin-logs", label: "Super Admin Logs" },
-  { to: "/organizations", label: "Organizations" },
 ];
 
 function App() {
@@ -58,7 +56,6 @@ function App() {
             <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/tracing" element={<TestEvent />} />
             <Route path="/admin-logs" element={<SuperAdminLogs />} />
-            <Route path="/organizations" element={<Organizations />} />
           </Routes>
         </main>
       </div>
