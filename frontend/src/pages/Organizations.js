@@ -12,12 +12,18 @@ import {
   getBudgets,
   createBudget,
   deleteBudget,
+  getLookupPlanTypes,
+  getLookupEnvironments,
+  getLookupBudgetPeriods,
+  getLookupProviders,
 } from "../api";
 
-const blankOrg = { id: "", org_name: "", plan_type: "free", budget_limit: "" };
-const blankProject = { id: "", org_id: "", project_name: "", environment: "development" };
+// Initial form values are empty — first option from each dynamic lookup is
+// selected once the lookups load (no hardcoded enum choice).
+const blankOrg = { id: "", org_name: "", plan_type: "", budget_limit: "" };
+const blankProject = { id: "", org_id: "", project_name: "", environment: "" };
 const blankKey = { id: "", org_id: "", project_id: "", key_name: "", provider: "" };
-const blankBudget = { org_id: "", project_id: "", budget_type: "monthly", limit_amount: "", alert_threshold_percent: 80 };
+const blankBudget = { org_id: "", project_id: "", budget_type: "", limit_amount: "", alert_threshold_percent: 80 };
 
 function Organizations() {
   const [orgs, setOrgs] = useState([]);
@@ -35,6 +41,34 @@ function Organizations() {
   const [budgetForm, setBudgetForm] = useState({ ...blankBudget });
 
   const [activeTab, setActiveTab] = useState("orgs");
+
+  // Dynamic lookups (DB + injected config)
+  const [planTypes, setPlanTypes] = useState([]);
+  const [environments, setEnvironments] = useState([]);
+  const [budgetPeriods, setBudgetPeriods] = useState([]);
+  const [providers, setProviders] = useState([]);
+
+  useEffect(() => {
+    Promise.all([
+      getLookupPlanTypes(),
+      getLookupEnvironments(),
+      getLookupBudgetPeriods(),
+      getLookupProviders(),
+    ])
+      .then(([planRes, envRes, budRes, provRes]) => {
+        const plans = planRes.data || [];
+        const envs = envRes.data || [];
+        const buds = budRes.data || [];
+        setPlanTypes(plans);
+        setEnvironments(envs);
+        setBudgetPeriods(buds);
+        setProviders(provRes.data || []);
+        setOrgForm((prev) => ({ ...prev, plan_type: prev.plan_type || plans[0] || "" }));
+        setProjForm((prev) => ({ ...prev, environment: prev.environment || envs[0] || "" }));
+        setBudgetForm((prev) => ({ ...prev, budget_type: prev.budget_type || buds[0] || "" }));
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -215,10 +249,9 @@ function Organizations() {
                 <div className="field">
                   <label>Plan Type</label>
                   <select value={orgForm.plan_type} onChange={(e) => setOrgForm({ ...orgForm, plan_type: e.target.value })}>
-                    <option value="free">Free</option>
-                    <option value="starter">Starter</option>
-                    <option value="pro">Pro</option>
-                    <option value="enterprise">Enterprise</option>
+                    {planTypes.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">

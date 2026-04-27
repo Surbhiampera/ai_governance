@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -30,6 +30,14 @@ const num = (value, decimals = 0) =>
     maximumFractionDigits: decimals,
   });
 
+const RANGE_OPTIONS = [
+  { value: "all", label: "All Time", days: 90 },
+  { value: "today", label: "Today", days: 1 },
+  { value: "7d", label: "Last 7 Days", days: 7 },
+  { value: "30d", label: "Last 30 Days", days: 30 },
+  { value: "90d", label: "Last 90 Days", days: 90 },
+];
+
 function Dashboard() {
   const [overview, setOverview] = useState(null);
   const [trends, setTrends] = useState([]);
@@ -40,41 +48,53 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  // Default = overall system activity (all-time) per spec.
+  const [range, setRange] = useState("all");
 
-  const load = async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+  const load = useCallback(
+    async (isRefresh = false, currentRange = range) => {
+      try {
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
 
-      const [overviewRes, trendsRes, securityRes, usageRes, logsRes] =
-        await Promise.all([
-          getGovernanceOverview(),
-          getUsageTrends(null, 14),
-          getSecuritySummary(),
-          getToolsUsage(),
-          getTelemetryLogs({ limit: 20 }),
-        ]);
+        const opt =
+          RANGE_OPTIONS.find((r) => r.value === currentRange) ||
+          RANGE_OPTIONS[0];
 
-      setOverview(overviewRes.data);
-      setTrends(trendsRes.data || []);
-      setSecurity(securityRes.data);
-      setToolUsage(usageRes.data || []);
-      setRecentLogs(logsRes.data || []);
-      setError("");
-    } catch (err) {
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to load governance data. Check whether the backend is running.",
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+        const [overviewRes, trendsRes, securityRes, usageRes, logsRes] =
+          await Promise.all([
+            getGovernanceOverview(null, opt.days, opt.value),
+            getUsageTrends(null, opt.days),
+            getSecuritySummary(),
+            getToolsUsage(),
+            getTelemetryLogs({ limit: 20 }),
+          ]);
+
+        setOverview(overviewRes.data);
+        setTrends(trendsRes.data || []);
+        setSecurity(securityRes.data);
+        setToolUsage(usageRes.data || []);
+        setRecentLogs(logsRes.data || []);
+        setError("");
+      } catch (err) {
+        setError(
+          err?.response?.data?.detail ||
+            "Unable to load governance data. Check whether the backend is running.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [range],
+  );
 
   useEffect(() => {
-    load();
-  }, []);
+    load(false, range);
+  }, [range, load]);
+
+  const rangeLabel =
+    (RANGE_OPTIONS.find((r) => r.value === range) || RANGE_OPTIONS[0]).label;
 
   if (loading) {
     return (
@@ -188,20 +208,46 @@ function Dashboard() {
     <div className="page-shell">
       <section className="hero">
         <div className="hero-card">
-          <h2>AI Governance Dashboard</h2>
-          <p>Live view of cost, tokens, latency, and security across all AI tools.</p>
+          <h2>AI Governance Overview</h2>
+          <p>
+            Comprehensive view of cost, tokens, latency, and security across
+            every integrated AI tool. Default scope is the full system
+            activity — adjust the range below to focus on a window.
+          </p>
+
+          <div className="action-row" style={{ marginTop: 16 }}>
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`btn ${range === opt.value ? "btn-primary" : "btn-ghost"}`}
+                style={
+                  range === opt.value
+                    ? { background: "#fff", color: "#9E2A97", fontWeight: 600 }
+                    : {
+                        background: "rgba(255,255,255,0.12)",
+                        color: "rgba(255,255,255,0.92)",
+                        border: "1px solid rgba(255,255,255,0.25)",
+                      }
+                }
+                onClick={() => setRange(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
 
           <div className="hero-metrics">
             <div className="hero-chip">
-              <span>Cost Today</span>
+              <span>Cost · {rangeLabel}</span>
               <strong>{money(overview?.total_cost_today)}</strong>
             </div>
             <div className="hero-chip">
-              <span>Events Today</span>
+              <span>Events · {rangeLabel}</span>
               <strong>{num(overview?.total_events_today)}</strong>
             </div>
             <div className="hero-chip">
-              <span>Tokens Today</span>
+              <span>Tokens · {rangeLabel}</span>
               <strong>{num(overview?.total_tokens_today)}</strong>
             </div>
             <div className="hero-chip">
@@ -562,7 +608,7 @@ function Dashboard() {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h3>Today&apos;s Tool Rollup</h3>
+            <h3>Tool Rollup · {rangeLabel}</h3>
           </div>
         </div>
         <div className="table-wrap">
@@ -585,7 +631,7 @@ function Dashboard() {
               {(overview?.tool_rollup || []).length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
-                    No tool data for today.
+                    No tool data for {rangeLabel.toLowerCase()}.
                   </td>
                 </tr>
               ) : null}

@@ -11,6 +11,7 @@ import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
 import Organizations from "./pages/Organizations";
+import SuperAdminLogs from "./pages/SuperAdminLogs";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
@@ -18,6 +19,7 @@ const navItems = [
   { to: "/controls", label: "Controls" },
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/tracing", label: "Tracing" },
+  { to: "/admin-logs", label: "Super Admin Logs" },
   { to: "/organizations", label: "Organizations" },
 ];
 
@@ -55,6 +57,7 @@ function App() {
             <Route path="/controls" element={<Tools />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/tracing" element={<TestEvent />} />
+            <Route path="/admin-logs" element={<SuperAdminLogs />} />
             <Route path="/organizations" element={<Organizations />} />
           </Routes>
         </main>

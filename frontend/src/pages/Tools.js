@@ -3,6 +3,15 @@ import {
   createConnector,
   createRule,
   getConnectors,
+  getLookupAuthTypes,
+  getLookupConnectorStatuses,
+  getLookupIngestionModes,
+  getLookupProviders,
+  getLookupRuleMetrics,
+  getLookupRuleOperators,
+  getLookupRuleScopes,
+  getLookupScopeReferences,
+  getLookupSeverities,
   getRules,
   getToolsUsage,
   triggerAlertScan,
@@ -16,19 +25,19 @@ const defaultConnector = {
   tool_name: "",
   provider: "",
   endpoint_url: "",
-  auth_type: "api_key",
-  ingestion_mode: "api",
-  status: "active",
+  auth_type: "",
+  ingestion_mode: "",
+  status: "",
 };
 
 const defaultRule = {
   rule_name: "",
   description: "",
-  metric_name: "risk_score",
-  operator: ">",
+  metric_name: "",
+  operator: "",
   threshold_value: "75",
-  severity: "high",
-  scope_level: "organization",
+  severity: "",
+  scope_level: "",
   scope_reference: "",
   is_active: true,
 };
@@ -42,20 +51,85 @@ function Tools() {
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState("");
 
+  // Dynamic dropdown options sourced from backend lookups
+  const [authTypes, setAuthTypes] = useState([]);
+  const [ingestionModes, setIngestionModes] = useState([]);
+  const [connectorStatuses, setConnectorStatuses] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [metrics, setMetrics] = useState([]);
+  const [operators, setOperators] = useState([]);
+  const [severities, setSeverities] = useState([]);
+  const [scopes, setScopes] = useState([]);
+  const [scopeRefs, setScopeRefs] = useState([]);
+
   const load = async () => {
-    const [connectorRes, rulesRes, usageRes] = await Promise.all([
+    const [
+      connectorRes,
+      rulesRes,
+      usageRes,
+      authRes,
+      modeRes,
+      statusRes,
+      provRes,
+      metricRes,
+      opRes,
+      sevRes,
+      scopeRes,
+    ] = await Promise.all([
       getConnectors(),
       getRules(),
       getToolsUsage(),
+      getLookupAuthTypes(),
+      getLookupIngestionModes(),
+      getLookupConnectorStatuses(),
+      getLookupProviders(),
+      getLookupRuleMetrics(),
+      getLookupRuleOperators(),
+      getLookupSeverities(),
+      getLookupRuleScopes(),
     ]);
     setConnectors(connectorRes.data || []);
     setRules(rulesRes.data || []);
     setUsage(usageRes.data || []);
+    setAuthTypes(authRes.data || []);
+    setIngestionModes(modeRes.data || []);
+    setConnectorStatuses(statusRes.data || []);
+    setProviders(provRes.data || []);
+    setMetrics(metricRes.data || []);
+    setOperators(opRes.data || []);
+    setSeverities(sevRes.data || []);
+    setScopes(scopeRes.data || []);
+
+    // Pre-fill defaults from the first option of each list (no hardcoding).
+    setConnectorForm((prev) => ({
+      ...prev,
+      auth_type: prev.auth_type || (authRes.data || [])[0] || "",
+      ingestion_mode: prev.ingestion_mode || (modeRes.data || [])[0] || "",
+      status: prev.status || (statusRes.data || [])[0] || "",
+    }));
+    setRuleForm((prev) => ({
+      ...prev,
+      metric_name: prev.metric_name || (metricRes.data || [])[0] || "",
+      operator: prev.operator || (opRes.data || [])[0] || "",
+      severity: prev.severity || (sevRes.data || [])[0] || "",
+      scope_level: prev.scope_level || (scopeRes.data || [])[0] || "",
+    }));
   };
 
   useEffect(() => {
     load().catch(() => setMessage("Unable to load controls right now."));
   }, []);
+
+  // Re-fetch scope references whenever the chosen scope changes.
+  useEffect(() => {
+    if (!ruleForm.scope_level) {
+      setScopeRefs([]);
+      return;
+    }
+    getLookupScopeReferences(ruleForm.scope_level)
+      .then((res) => setScopeRefs(res.data || []))
+      .catch(() => setScopeRefs([]));
+  }, [ruleForm.scope_level]);
 
   const saveConnector = async (event) => {
     event.preventDefault();
@@ -196,7 +270,7 @@ function Tools() {
               </div>
               <div className="field">
                 <label>Provider</label>
-                <input
+                <select
                   value={connectorForm.provider}
                   onChange={(e) =>
                     setConnectorForm({
@@ -204,7 +278,14 @@ function Tools() {
                       provider: e.target.value,
                     })
                   }
-                />
+                >
+                  <option value="">Select provider…</option>
+                  {providers.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="field">
                 <label>Auth Type</label>
@@ -217,9 +298,47 @@ function Tools() {
                     })
                   }
                 >
-                  <option value="api_key">api_key</option>
-                  <option value="oauth">oauth</option>
-                  <option value="service_account">service_account</option>
+                  {authTypes.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Ingestion Mode</label>
+                <select
+                  value={connectorForm.ingestion_mode}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      ingestion_mode: e.target.value,
+                    })
+                  }
+                >
+                  {ingestionModes.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select
+                  value={connectorForm.status}
+                  onChange={(e) =>
+                    setConnectorForm({
+                      ...connectorForm,
+                      status: e.target.value,
+                    })
+                  }
+                >
+                  {connectorStatuses.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -273,12 +392,11 @@ function Tools() {
                     setRuleForm({ ...ruleForm, metric_name: e.target.value })
                   }
                 >
-                  <option value="risk_score">risk_score</option>
-                  <option value="total_cost">total_cost</option>
-                  <option value="latency_ms">latency_ms</option>
-                  <option value="total_tokens">total_tokens</option>
-                  <option value="data_out_mb">data_out_mb</option>
-                  <option value="anomaly_score">anomaly_score</option>
+                  {metrics.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -289,10 +407,11 @@ function Tools() {
                     setRuleForm({ ...ruleForm, operator: e.target.value })
                   }
                 >
-                  <option value=">">&gt;</option>
-                  <option value=">=">&gt;=</option>
-                  <option value="<">&lt;</option>
-                  <option value="<=">&lt;=</option>
+                  {operators.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -316,10 +435,11 @@ function Tools() {
                     setRuleForm({ ...ruleForm, severity: e.target.value })
                   }
                 >
-                  <option value="critical">critical</option>
-                  <option value="high">high</option>
-                  <option value="medium">medium</option>
-                  <option value="low">low</option>
+                  {severities.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -327,12 +447,37 @@ function Tools() {
                 <select
                   value={ruleForm.scope_level}
                   onChange={(e) =>
-                    setRuleForm({ ...ruleForm, scope_level: e.target.value })
+                    setRuleForm({
+                      ...ruleForm,
+                      scope_level: e.target.value,
+                      scope_reference: "",
+                    })
                   }
                 >
-                  <option value="organization">organization</option>
-                  <option value="project">project</option>
-                  <option value="tool">tool</option>
+                  {scopes.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Scope Reference</label>
+                <select
+                  value={ruleForm.scope_reference}
+                  onChange={(e) =>
+                    setRuleForm({
+                      ...ruleForm,
+                      scope_reference: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">All {ruleForm.scope_level || "scopes"}</option>
+                  {scopeRefs.map((ref) => (
+                    <option key={ref.id} value={ref.id}>
+                      {ref.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

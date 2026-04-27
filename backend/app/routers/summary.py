@@ -116,11 +116,34 @@ def get_usage_trends(
 @router.get("/overview", response_model=GovernanceOverviewResponse)
 def get_governance_overview(
     org_id: Optional[str] = Query(None),
-    days: int = Query(14, ge=1, le=90),
+    days: int = Query(14, ge=1, le=365),
+    range: Optional[str] = Query(
+        None,
+        description="Optional time filter: 'today', '7d', '30d', '90d', 'all'. "
+        "When omitted or 'all' the overview reflects ALL telemetry data.",
+    ),
     db: Session = Depends(get_db),
 ):
     today = date.today()
-    today_query = db.query(DailyOrgSummary).filter(DailyOrgSummary.date == today)
+
+    # ---- Comprehensive Overview ----
+    # Default behaviour now shows the full system activity (not only "today").
+    # An optional `range` filter narrows the window for the headline metrics.
+    range_key = (range or "all").lower()
+    if range_key == "today":
+        cutoff_date: Optional[date] = today
+    elif range_key in {"7d", "week"}:
+        cutoff_date = today - timedelta(days=6)
+    elif range_key in {"30d", "month"}:
+        cutoff_date = today - timedelta(days=29)
+    elif range_key in {"90d", "quarter"}:
+        cutoff_date = today - timedelta(days=89)
+    else:
+        cutoff_date = None  # all-time
+
+    today_query = db.query(DailyOrgSummary)
+    if cutoff_date is not None:
+        today_query = today_query.filter(DailyOrgSummary.date >= cutoff_date)
     if org_id:
         today_query = today_query.filter(DailyOrgSummary.org_id == org_id)
     today_rows = today_query.all()

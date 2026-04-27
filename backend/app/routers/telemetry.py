@@ -48,10 +48,11 @@ def ingest_events_batch(batch: BatchTelemetryIngest, db: Session = Depends(get_d
 def list_telemetry_logs(
     org_id: Optional[str] = Query(None),
     tool_name: Optional[str] = Query(None),
+    provider: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, le=500),
     db: Session = Depends(get_db),
 ):
     query = db.query(TelemetryEvent)
@@ -59,6 +60,8 @@ def list_telemetry_logs(
         query = query.filter(TelemetryEvent.org_id == org_id)
     if tool_name:
         query = query.filter(TelemetryEvent.model_name == tool_name)
+    if provider:
+        query = query.filter(TelemetryEvent.provider == provider)
     if status:
         query = query.filter(TelemetryEvent.status == status)
     if start_date:
@@ -68,6 +71,59 @@ def list_telemetry_logs(
 
     rows = query.order_by(TelemetryEvent.created_at.desc()).limit(limit).all()
     return [_build_event_response(db, row) for row in rows]
+
+
+@router.get("/admin/logs")
+def super_admin_logs(
+    org_id: Optional[str] = Query(None),
+    tool_name: Optional[str] = Query(None),
+    provider: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    limit: int = Query(200, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Super-admin centralised log access across every integrated AI tool.
+
+    Returns redacted log records (no raw payloads, no code) for monitoring,
+    auditing and compliance.
+    """
+    query = db.query(TelemetryEvent)
+    if org_id:
+        query = query.filter(TelemetryEvent.org_id == org_id)
+    if tool_name:
+        query = query.filter(TelemetryEvent.model_name == tool_name)
+    if provider:
+        query = query.filter(TelemetryEvent.provider == provider)
+    if status:
+        query = query.filter(TelemetryEvent.status == status)
+    if start_date:
+        query = query.filter(TelemetryEvent.created_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date:
+        query = query.filter(TelemetryEvent.created_at <= datetime.combine(end_date, datetime.max.time()))
+
+    rows = query.order_by(TelemetryEvent.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "event_id": row.event_id,
+            "created_at": row.created_at,
+            "org_id": row.org_id,
+            "project_id": row.project_id,
+            "user_id": row.user_id,
+            "provider": row.provider,
+            "tool_name": row.model_name,
+            "service_type": row.service_type,
+            "status": row.status,
+            "latency_ms": row.latency_ms,
+            "total_tokens": row.total_tokens,
+            "total_cost": float(row.total_cost or 0),
+            "risk_score": float(row.risk_score or 0),
+            "misuse_detected": bool(row.misuse_detected),
+            "abnormal_usage_spike": bool(row.abnormal_usage_spike),
+        }
+        for row in rows
+    ]
 
 
 @router.get("/traces/{event_id}", response_model=TraceDetailResponse)
@@ -125,6 +181,12 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
     existing = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_data.event_id).first()
     if existing:
         raise HTTPException(status_code=409, detail="event_id already exists")
+
+    # --- org_id handling fix ---
+    # Never persist an empty org_id. Fall back to "default" so the telemetry
+    # event is still ingested for super-admin/cross-tool monitoring.
+    if not (event_data.org_id and str(event_data.org_id).strip()):
+        event_data.org_id = "default"
 
     started_at = event_data.started_at or datetime.utcnow()
     completed_at = event_data.completed_at or (started_at + timedelta(milliseconds=event_data.latency_ms))

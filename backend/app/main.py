@@ -5,7 +5,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cors_origins, get_log_level
-from app.routers import alerts, alerts_security, apikeys, auth, budgets, costs, governance, models, organizations, pricing, projects, security, summary, telemetry, tools, workers
+from app.routers import alerts, alerts_security, apikeys, auth, budgets, costs, governance, lookups, models, organizations, pricing, projects, security, summary, telemetry, tools, workers
 
 logging.basicConfig(
     level=get_log_level(),
@@ -58,13 +58,14 @@ app.include_router(budgets.router)
 app.include_router(pricing.router)
 app.include_router(apikeys.router)
 app.include_router(workers.router)
+app.include_router(lookups.router)
 
 # --- Versioned API aliases (/api/v1/...) ---
 api_v1 = APIRouter(prefix="/api/v1")
 for _router in [
     auth.router, telemetry.router, summary.router, tools.router, models.router, alerts.router,
     costs.router, security.router, alerts_security.router, governance.router, organizations.router,
-    projects.router, budgets.router, pricing.router, apikeys.router, workers.router,
+    projects.router, budgets.router, pricing.router, apikeys.router, workers.router, lookups.router,
 ]:
     api_v1.include_router(_router)
 app.include_router(api_v1)

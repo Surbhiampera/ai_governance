@@ -5,9 +5,9 @@ const API = axios.create({
   timeout: 8000,
 });
 
-export const getGovernanceOverview = (orgId, days = 14) =>
+export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
   API.get("/summary/overview", {
-    params: { org_id: orgId || undefined, days },
+    params: { org_id: orgId || undefined, days, range: range || undefined },
   });
 
 export const getTodaySummary = () => API.get("/summary/today");
@@ -133,5 +133,28 @@ export const createModelPricing = (data) => API.post("/pricing/", data);
 export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
 
 export const trackEvent = (data) => API.post("/telemetry/track", data);
+
+// --- Super Admin centralised log access (across every integrated tool) ---
+export const getSuperAdminLogs = (params) =>
+  API.get("/telemetry/admin/logs", { params });
+
+// --- Dynamic dropdown lookups (no hardcoded enums in the UI) ---
+export const getLookupAuthTypes = () => API.get("/lookups/auth-types");
+export const getLookupIngestionModes = () => API.get("/lookups/ingestion-modes");
+export const getLookupConnectorStatuses = () =>
+  API.get("/lookups/connector-statuses");
+export const getLookupToolTypes = () => API.get("/lookups/tool-types");
+export const getLookupProviders = () => API.get("/lookups/providers");
+export const getLookupRuleMetrics = () => API.get("/lookups/rule-metrics");
+export const getLookupRuleScopes = () => API.get("/lookups/rule-scopes");
+export const getLookupRuleOperators = () => API.get("/lookups/rule-operators");
+export const getLookupSeverities = () => API.get("/lookups/severities");
+export const getLookupScopeReferences = (scope) =>
+  API.get("/lookups/scope-references", { params: { scope } });
+export const getLookupEventStatuses = () => API.get("/lookups/event-statuses");
+export const getLookupPlanTypes = () => API.get("/lookups/plan-types");
+export const getLookupEnvironments = () => API.get("/lookups/environments");
+export const getLookupBudgetPeriods = () => API.get("/lookups/budget-periods");
+export const getLookupToolTypesEx = () => API.get("/lookups/tool-types");
 
 export default API;
