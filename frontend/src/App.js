@@ -27,8 +27,8 @@ function App() {
       <div className="shell">
         <aside className="sidebar">
           <div className="brand-block">
-            <p className="brand-kicker">Centralized AI Governance</p>
-            <h1>PulseBoard</h1>
+            <p className="brand-kicker">AI Governance</p>
+            {/* <h1>PulseBoard</h1> */}
             <p className="brand-copy">Multi-tool monitoring </p>
           </div>
 
