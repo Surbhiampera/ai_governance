@@ -59,6 +59,10 @@ def create_connector(connector_data: ToolConnectorCreate, db: Session = Depends(
         connector.auth_type = connector_data.auth_type
         connector.ingestion_mode = connector_data.ingestion_mode
         connector.status = connector_data.status
+        connector.org_id = connector_data.org_id
+        connector.project_id = connector_data.project_id
+        if connector_data.api_key is not None:
+            connector.api_key = connector_data.api_key
     else:
         connector = ToolConnector(**connector_data.model_dump())
         db.add(connector)

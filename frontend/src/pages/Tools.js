@@ -3,21 +3,15 @@ import {
   createConnector,
   createRule,
   getConnectors,
-  getLookupAuthTypes,
-  getLookupConnectorStatuses,
-  getLookupIngestionModes,
-  getLookupProviders,
-  getLookupRuleMetrics,
-  getLookupRuleOperators,
-  getLookupRuleScopes,
-  getLookupScopeReferences,
-  getLookupSeverities,
+  getIngestionStatus,
   getRules,
   getToolsUsage,
   triggerAlertScan,
   triggerAnomalyDetection,
+  triggerConnectorPull,
   triggerDailyAggregation,
   triggerMonthlyAggregation,
+  uploadFileToConnector,
 } from "../api";
 
 const defaultConnector = {
@@ -28,7 +22,12 @@ const defaultConnector = {
   auth_type: "",
   ingestion_mode: "",
   status: "",
+  org_id: "",
+  api_key: "",
 };
+
+const fmtDate = (iso) =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
 
 const defaultRule = {
   rule_name: "",
@@ -50,86 +49,30 @@ function Tools() {
   const [ruleForm, setRuleForm] = useState(defaultRule);
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState("");
-
-  // Dynamic dropdown options sourced from backend lookups
-  const [authTypes, setAuthTypes] = useState([]);
-  const [ingestionModes, setIngestionModes] = useState([]);
-  const [connectorStatuses, setConnectorStatuses] = useState([]);
-  const [providers, setProviders] = useState([]);
-  const [metrics, setMetrics] = useState([]);
-  const [operators, setOperators] = useState([]);
-  const [severities, setSeverities] = useState([]);
-  const [scopes, setScopes] = useState([]);
-  const [scopeRefs, setScopeRefs] = useState([]);
+  const [pulling, setPulling] = useState("");
+  const [statusMap, setStatusMap] = useState({});
+  const [uploadConnector, setUploadConnector] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
-    const [
-      connectorRes,
-      rulesRes,
-      usageRes,
-      authRes,
-      modeRes,
-      statusRes,
-      provRes,
-      metricRes,
-      opRes,
-      sevRes,
-      scopeRes,
-    ] = await Promise.all([
+    const [connectorRes, rulesRes, usageRes, ingestionRes] = await Promise.all([
       getConnectors(),
       getRules(),
       getToolsUsage(),
-      getLookupAuthTypes(),
-      getLookupIngestionModes(),
-      getLookupConnectorStatuses(),
-      getLookupProviders(),
-      getLookupRuleMetrics(),
-      getLookupRuleOperators(),
-      getLookupSeverities(),
-      getLookupRuleScopes(),
+      getIngestionStatus().catch(() => ({ data: [] })),
     ]);
     setConnectors(connectorRes.data || []);
     setRules(rulesRes.data || []);
     setUsage(usageRes.data || []);
-    setAuthTypes(authRes.data || []);
-    setIngestionModes(modeRes.data || []);
-    setConnectorStatuses(statusRes.data || []);
-    setProviders(provRes.data || []);
-    setMetrics(metricRes.data || []);
-    setOperators(opRes.data || []);
-    setSeverities(sevRes.data || []);
-    setScopes(scopeRes.data || []);
-
-    // Pre-fill defaults from the first option of each list (no hardcoding).
-    setConnectorForm((prev) => ({
-      ...prev,
-      auth_type: prev.auth_type || (authRes.data || [])[0] || "",
-      ingestion_mode: prev.ingestion_mode || (modeRes.data || [])[0] || "",
-      status: prev.status || (statusRes.data || [])[0] || "",
-    }));
-    setRuleForm((prev) => ({
-      ...prev,
-      metric_name: prev.metric_name || (metricRes.data || [])[0] || "",
-      operator: prev.operator || (opRes.data || [])[0] || "",
-      severity: prev.severity || (sevRes.data || [])[0] || "",
-      scope_level: prev.scope_level || (scopeRes.data || [])[0] || "",
-    }));
+    const map = {};
+    for (const s of ingestionRes.data || []) map[s.connector_name] = s;
+    setStatusMap(map);
   };
 
   useEffect(() => {
     load().catch(() => setMessage("Unable to load controls right now."));
   }, []);
-
-  // Re-fetch scope references whenever the chosen scope changes.
-  useEffect(() => {
-    if (!ruleForm.scope_level) {
-      setScopeRefs([]);
-      return;
-    }
-    getLookupScopeReferences(ruleForm.scope_level)
-      .then((res) => setScopeRefs(res.data || []))
-      .catch(() => setScopeRefs([]));
-  }, [ruleForm.scope_level]);
 
   const saveConnector = async (event) => {
     event.preventDefault();
@@ -166,6 +109,39 @@ function Tools() {
       setMessage(`${type} failed. Check backend worker connectivity.`);
     } finally {
       setRunning("");
+    }
+  };
+
+  const pullConnector = async (connectorName) => {
+    setPulling(connectorName);
+    try {
+      const res = await triggerConnectorPull(connectorName);
+      const { ingested } = res.data || {};
+      setMessage(`Pull complete for "${connectorName}": ${ingested ?? 0} event(s) ingested.`);
+      await load();
+    } catch {
+      setMessage(`Pull failed for "${connectorName}". Check connector config and API key.`);
+    } finally {
+      setPulling("");
+    }
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!uploadConnector || !uploadFile) return;
+    setUploading(true);
+    try {
+      const res = await uploadFileToConnector(uploadConnector, uploadFile);
+      const { ingested } = res.data || {};
+      setMessage(`Upload complete: ${ingested ?? 0} event(s) ingested via "${uploadConnector}".`);
+      setUploadFile(null);
+      e.target.reset();
+      await load();
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "Upload failed. Check file format and connector.";
+      setMessage(detail);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -243,118 +219,89 @@ function Tools() {
           <form className="stack" onSubmit={saveConnector}>
             <div className="form-grid">
               <div className="field">
-                <label>Connector Name</label>
+                <label>Connector Name *</label>
                 <input
                   value={connectorForm.connector_name}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      connector_name: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setConnectorForm({ ...connectorForm, connector_name: e.target.value })}
+                  placeholder="e.g. openai-prod"
                   required
                 />
               </div>
               <div className="field">
-                <label>Tool Name</label>
+                <label>Tool Name *</label>
                 <input
                   value={connectorForm.tool_name}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      tool_name: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setConnectorForm({ ...connectorForm, tool_name: e.target.value })}
+                  placeholder="e.g. LangChain"
                   required
                 />
               </div>
               <div className="field">
-                <label>Provider</label>
-                <select
+                <label>Provider *</label>
+                <input
                   value={connectorForm.provider}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      provider: e.target.value,
-                    })
-                  }
-                >
-                  <option value="">Select provider…</option>
-                  {providers.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setConnectorForm({ ...connectorForm, provider: e.target.value })}
+                  placeholder="e.g. OpenAI, Anthropic"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Auth Type</label>
-                <select
+                <label>Auth Type *</label>
+                <input
                   value={connectorForm.auth_type}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      auth_type: e.target.value,
-                    })
-                  }
-                >
-                  {authTypes.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setConnectorForm({ ...connectorForm, auth_type: e.target.value })}
+                  placeholder="e.g. API Key, Bearer Token"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Ingestion Mode</label>
-                <select
+                <label>Ingestion Mode *</label>
+                <input
                   value={connectorForm.ingestion_mode}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      ingestion_mode: e.target.value,
-                    })
-                  }
-                >
-                  {ingestionModes.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setConnectorForm({ ...connectorForm, ingestion_mode: e.target.value })}
+                  placeholder="e.g. api, webhook, batch"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Status</label>
-                <select
+                <label>Status *</label>
+                <input
                   value={connectorForm.status}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      status: e.target.value,
-                    })
-                  }
-                >
-                  {connectorStatuses.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setConnectorForm({ ...connectorForm, status: e.target.value })}
+                  placeholder="e.g. active, paused"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Org ID *</label>
+                <input
+                  value={connectorForm.org_id}
+                  onChange={(e) => setConnectorForm({ ...connectorForm, org_id: e.target.value })}
+                  placeholder="e.g. org-abc"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>API Key / Webhook Secret *</label>
+                <input
+                  type="password"
+                  value={connectorForm.api_key}
+                  onChange={(e) => setConnectorForm({ ...connectorForm, api_key: e.target.value })}
+                  placeholder="Vendor credential or webhook token"
+                  autoComplete="new-password"
+                  required
+                />
               </div>
             </div>
 
             <div className="form-grid full">
               <div className="field">
-                <label>Endpoint URL</label>
+                <label>Endpoint URL *</label>
                 <input
                   value={connectorForm.endpoint_url}
-                  onChange={(e) =>
-                    setConnectorForm({
-                      ...connectorForm,
-                      endpoint_url: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setConnectorForm({ ...connectorForm, endpoint_url: e.target.value })}
                   placeholder="https://api.vendor.com/logs"
+                  required
                 />
               </div>
             </div>
@@ -375,120 +322,77 @@ function Tools() {
           <form className="stack" onSubmit={saveRule}>
             <div className="form-grid">
               <div className="field">
-                <label>Rule Name</label>
+                <label>Rule Name *</label>
                 <input
                   value={ruleForm.rule_name}
-                  onChange={(e) =>
-                    setRuleForm({ ...ruleForm, rule_name: e.target.value })
-                  }
+                  onChange={(e) => setRuleForm({ ...ruleForm, rule_name: e.target.value })}
+                  placeholder="e.g. High Cost Alert"
                   required
                 />
               </div>
               <div className="field">
-                <label>Metric</label>
-                <select
+                <label>Metric *</label>
+                <input
                   value={ruleForm.metric_name}
-                  onChange={(e) =>
-                    setRuleForm({ ...ruleForm, metric_name: e.target.value })
-                  }
-                >
-                  {metrics.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setRuleForm({ ...ruleForm, metric_name: e.target.value })}
+                  placeholder="e.g. cost, tokens, latency"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Operator</label>
-                <select
+                <label>Operator *</label>
+                <input
                   value={ruleForm.operator}
-                  onChange={(e) =>
-                    setRuleForm({ ...ruleForm, operator: e.target.value })
-                  }
-                >
-                  {operators.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setRuleForm({ ...ruleForm, operator: e.target.value })}
+                  placeholder="e.g. >, >=, <, =="
+                  required
+                />
               </div>
               <div className="field">
-                <label>Threshold</label>
+                <label>Threshold *</label>
                 <input
                   value={ruleForm.threshold_value}
-                  onChange={(e) =>
-                    setRuleForm({
-                      ...ruleForm,
-                      threshold_value: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setRuleForm({ ...ruleForm, threshold_value: e.target.value })}
+                  placeholder="e.g. 75"
                   required
                 />
               </div>
               <div className="field">
-                <label>Severity</label>
-                <select
+                <label>Severity *</label>
+                <input
                   value={ruleForm.severity}
-                  onChange={(e) =>
-                    setRuleForm({ ...ruleForm, severity: e.target.value })
-                  }
-                >
-                  {severities.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setRuleForm({ ...ruleForm, severity: e.target.value })}
+                  placeholder="e.g. critical, high, medium, low"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Scope</label>
-                <select
+                <label>Scope *</label>
+                <input
                   value={ruleForm.scope_level}
-                  onChange={(e) =>
-                    setRuleForm({
-                      ...ruleForm,
-                      scope_level: e.target.value,
-                      scope_reference: "",
-                    })
-                  }
-                >
-                  {scopes.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setRuleForm({ ...ruleForm, scope_level: e.target.value })}
+                  placeholder="e.g. organization, project, user"
+                  required
+                />
               </div>
               <div className="field">
-                <label>Scope Reference</label>
-                <select
+                <label>Scope Reference *</label>
+                <input
                   value={ruleForm.scope_reference}
-                  onChange={(e) =>
-                    setRuleForm({
-                      ...ruleForm,
-                      scope_reference: e.target.value,
-                    })
-                  }
-                >
-                  <option value="">All {ruleForm.scope_level || "scopes"}</option>
-                  {scopeRefs.map((ref) => (
-                    <option key={ref.id} value={ref.id}>
-                      {ref.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => setRuleForm({ ...ruleForm, scope_reference: e.target.value })}
+                  placeholder="e.g. org-abc, proj-001"
+                  required
+                />
               </div>
             </div>
 
             <div className="field">
-              <label>Description</label>
+              <label>Description *</label>
               <textarea
                 value={ruleForm.description}
-                onChange={(e) =>
-                  setRuleForm({ ...ruleForm, description: e.target.value })
-                }
+                onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
+                placeholder="Describe what this rule monitors and when it fires"
+                required
               />
             </div>
 
@@ -514,23 +418,48 @@ function Tools() {
                   <th>Tool</th>
                   <th>Provider</th>
                   <th>Mode</th>
+                  <th>Org</th>
                   <th>Status</th>
+                  <th>Last Ingested</th>
+                  <th>Events</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {connectors.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.connector_name}</td>
-                    <td>{item.tool_name}</td>
-                    <td>{item.provider || "-"}</td>
-                    <td>{item.ingestion_mode}</td>
-                    <td>
-                      <span className={`status-pill ${item.status}`}>
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {connectors.map((item) => {
+                  const info = statusMap[item.connector_name] || {};
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.connector_name}</td>
+                      <td>{item.tool_name}</td>
+                      <td>{item.provider || "-"}</td>
+                      <td>{item.ingestion_mode}</td>
+                      <td>{item.org_id || "-"}</td>
+                      <td>
+                        <span className={`status-pill ${item.status}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {fmtDate(item.last_ingested_at)}
+                      </td>
+                      <td>{info.event_count ?? "-"}</td>
+                      <td>
+                        {item.ingestion_mode === "api" && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ fontSize: 11, padding: "3px 10px", fontWeight: 600 }}
+                            onClick={() => pullConnector(item.connector_name)}
+                            disabled={pulling === item.connector_name}
+                          >
+                            {pulling === item.connector_name ? "…" : "Pull Now"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -571,6 +500,55 @@ function Tools() {
             </table>
           </div>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Upload Log File</h3>
+            <p style={{ fontSize: 13, color: "var(--text-muted, #888)", marginTop: 2 }}>
+              Import a JSON, NDJSON, CSV, or Excel (.xlsx) file through a registered connector.
+            </p>
+          </div>
+        </div>
+        <form className="stack" onSubmit={handleUpload} style={{ maxWidth: 560 }}>
+          <div className="form-grid">
+            <div className="field">
+              <label>Connector</label>
+              <select
+                value={uploadConnector}
+                onChange={(e) => setUploadConnector(e.target.value)}
+                required
+              >
+                <option value="">Select connector…</option>
+                {connectors.map((c) => (
+                  <option key={c.id} value={c.connector_name}>
+                    {c.connector_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>File</label>
+              <input
+                type="file"
+                accept=".json,.jsonl,.ndjson,.csv,.xlsx,.xls"
+                required
+                onChange={(e) => setUploadFile(e.target.files[0] || null)}
+              />
+              <span style={{ fontSize: 12, color: "var(--text-muted, #888)", marginTop: 4 }}>
+                Accepted: .json, .jsonl, .ndjson, .csv, .xlsx, .xls
+              </span>
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={uploading || !uploadConnector || !uploadFile}
+          >
+            {uploading ? "Uploading…" : "Upload & Ingest"}
+          </button>
+        </form>
       </section>
 
       <section className="panel">

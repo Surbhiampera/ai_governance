@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  getLookupEventStatuses,
   getTelemetryLogs,
   getTrace,
   postTelemetryEvent,
@@ -49,6 +50,7 @@ function TestEvent() {
   const [editingEventId, setEditingEventId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
+  const [eventStatuses, setEventStatuses] = useState([]);
 
   const loadEvents = async () => {
     const response = await getTelemetryLogs({ limit: 12 });
@@ -57,6 +59,9 @@ function TestEvent() {
 
   useEffect(() => {
     loadEvents().catch(() => setMessage("Unable to load data."));
+    getLookupEventStatuses()
+      .then((res) => setEventStatuses(res.data || []))
+      .catch(() => {});
   }, []);
 
   /* ── Modal helpers ── */
@@ -281,11 +286,9 @@ function TestEvent() {
                 <div className="field">
                   <label>Status</label>
                   <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                    <option value="success">success</option>
-                    <option value="completed">completed</option>
-                    <option value="failed">failed</option>
-                    <option value="error">error</option>
-                    <option value="timeout">timeout</option>
+                    {eventStatuses.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">

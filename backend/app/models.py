@@ -99,6 +99,11 @@ class ToolConnector(Base):
     auth_type = Column(String(50), nullable=True)
     ingestion_mode = Column(String(50), nullable=False, default="api")
     status = Column(String(30), nullable=False, default="active")
+    # Routing context — org/project for events ingested through this connector
+    org_id = Column(String(100), nullable=True)
+    project_id = Column(String(100), nullable=True)
+    # Vendor credential (stored as-is; production deployments should encrypt)
+    api_key = Column(String(500), nullable=True)
     last_ingested_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 

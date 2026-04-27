@@ -334,9 +334,9 @@ function Organizations() {
                 <div className="field">
                   <label>Environment</label>
                   <select value={projForm.environment} onChange={(e) => setProjForm({ ...projForm, environment: e.target.value })}>
-                    <option value="development">Development</option>
-                    <option value="staging">Staging</option>
-                    <option value="production">Production</option>
+                    {environments.map((env) => (
+                      <option key={env} value={env}>{env}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -425,7 +425,12 @@ function Organizations() {
                 </div>
                 <div className="field">
                   <label>Provider</label>
-                  <input value={keyForm.provider} onChange={(e) => setKeyForm({ ...keyForm, provider: e.target.value })} placeholder="openai" />
+                  <select value={keyForm.provider} onChange={(e) => setKeyForm({ ...keyForm, provider: e.target.value })}>
+                    <option value="">Select provider…</option>
+                    {providers.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <button type="submit" className="btn btn-primary">Create API Key</button>
@@ -502,8 +507,9 @@ function Organizations() {
                 <div className="field">
                   <label>Budget Type</label>
                   <select value={budgetForm.budget_type} onChange={(e) => setBudgetForm({ ...budgetForm, budget_type: e.target.value })}>
-                    <option value="daily">Daily</option>
-                    <option value="monthly">Monthly</option>
+                    {budgetPeriods.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">

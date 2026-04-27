@@ -36,5 +36,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.run_alert_scan",
             "schedule": 1800.0,  # every 30 minutes
         },
+        "connector-poll": {
+            "task": "app.workers.tasks.run_connector_poll",
+            "schedule": 900.0,  # every 15 minutes
+        },
     },
 )

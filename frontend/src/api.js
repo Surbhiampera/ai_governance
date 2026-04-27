@@ -140,6 +140,20 @@ export const getSuperAdminLogs = (params) =>
 export const getSuperAdminAggregate = (params) =>
   API.get("/telemetry/admin/aggregate", { params });
 
+// --- Ingestion & Connector Layer ---
+export const triggerConnectorPull = (connectorName) =>
+  API.post(`/ingestion/pull/${connectorName}/sync`);
+export const getIngestionStatus = () => API.get("/ingestion/status");
+export const postConnectorWebhook = (connectorName, payload) =>
+  API.post(`/ingestion/webhook/${connectorName}`, payload);
+export const uploadFileToConnector = (connectorName, file) => {
+  const form = new FormData();
+  form.append("file", file);
+  return API.post(`/ingestion/upload/${connectorName}`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 // --- Tracing-derived org/project context (single source of truth) ---
 export const getTracingOrgs = () => API.get("/lookups/tracing-orgs");
 export const getTracingProjects = (orgId) =>
@@ -162,6 +176,5 @@ export const getLookupEventStatuses = () => API.get("/lookups/event-statuses");
 export const getLookupPlanTypes = () => API.get("/lookups/plan-types");
 export const getLookupEnvironments = () => API.get("/lookups/environments");
 export const getLookupBudgetPeriods = () => API.get("/lookups/budget-periods");
-export const getLookupToolTypesEx = () => API.get("/lookups/tool-types");
 
 export default API;

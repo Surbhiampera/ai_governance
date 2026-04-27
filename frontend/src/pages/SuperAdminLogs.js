@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  getLookupEventStatuses,
   getLookupProviders,
   getSuperAdminAggregate,
   getSuperAdminLogs,
   getToolsUsage,
   getTracingOrgs,
 } from "../api";
-
-const STATUS_OPTIONS = ["", "success", "completed", "failed", "error"];
 const money = (v) => `$${Number(v || 0).toFixed(4)}`;
 const num = (v) => Number(v || 0).toLocaleString();
 
@@ -17,6 +16,7 @@ function SuperAdminLogs() {
   const [orgs, setOrgs] = useState([]);
   const [tools, setTools] = useState([]);
   const [providers, setProviders] = useState([]);
+  const [eventStatuses, setEventStatuses] = useState([]);
   const [filters, setFilters] = useState({
     org_id: "",
     tool_name: "",
@@ -31,14 +31,16 @@ function SuperAdminLogs() {
   const [error, setError] = useState("");
 
   const loadFilters = async () => {
-    const [orgRes, toolRes, provRes] = await Promise.all([
+    const [orgRes, toolRes, provRes, statusRes] = await Promise.all([
       getTracingOrgs(),
       getToolsUsage(),
       getLookupProviders(),
+      getLookupEventStatuses(),
     ]);
     setOrgs(orgRes.data || []);
     setTools(toolRes.data || []);
     setProviders(provRes.data || []);
+    setEventStatuses(["", ...(statusRes.data || [])]);
   };
 
   const fetchAggregate = useCallback(async (orgId) => {
@@ -217,7 +219,7 @@ function SuperAdminLogs() {
                     setFilters({ ...filters, status: e.target.value })
                   }
                 >
-                  {STATUS_OPTIONS.map((s) => (
+                  {eventStatuses.map((s) => (
                     <option key={s || "all"} value={s}>
                       {s || "All statuses"}
                     </option>

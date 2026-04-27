@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.workers.tasks import run_alert_scan, run_anomaly_detection, run_daily_aggregation, run_monthly_aggregation
+from app.workers.tasks import run_alert_scan, run_anomaly_detection, run_connector_poll, run_daily_aggregation, run_monthly_aggregation
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -50,4 +50,16 @@ def trigger_alert_scan():
 @router.post("/alert-scan/sync")
 def trigger_alert_scan_sync():
     result = run_alert_scan()
+    return {"status": "completed", "result": result}
+
+
+@router.post("/connector-poll")
+def trigger_connector_poll():
+    run_connector_poll.delay()
+    return {"status": "queued", "task": "connector_poll"}
+
+
+@router.post("/connector-poll/sync")
+def trigger_connector_poll_sync():
+    result = run_connector_poll()
     return {"status": "completed", "result": result}

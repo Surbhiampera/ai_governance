@@ -246,6 +246,9 @@ class ToolConnectorCreate(BaseModel):
     auth_type: Optional[str] = None
     ingestion_mode: str = "api"
     status: str = "active"
+    org_id: Optional[str] = None
+    project_id: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 class ToolConnectorResponse(BaseModel):
@@ -259,6 +262,8 @@ class ToolConnectorResponse(BaseModel):
     auth_type: Optional[str] = None
     ingestion_mode: str
     status: str
+    org_id: Optional[str] = None
+    project_id: Optional[str] = None
     last_ingested_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 

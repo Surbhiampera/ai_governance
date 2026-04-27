@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -5,8 +6,10 @@ from sqlalchemy import case, func
 
 from app.celery_app import celery_app
 from app.database import SessionLocal
-from app.models import DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent, UsageAnomaly
+from app.models import DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent, ToolConnector, UsageAnomaly
 from app.services.alert_engine import AlertEngine
+
+logger = logging.getLogger(__name__)
 
 
 def _rebuild_daily_summary(db, summary_date: date) -> int:
@@ -214,5 +217,35 @@ def run_alert_scan():
         created = engine.create_daily_anomaly_alerts(db)
         db.commit()
         return {"status": "ok", "alerts_created": created}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.run_connector_poll")
+def run_connector_poll():
+    """Pull events from all active API-mode connectors."""
+    from app.services.ingestion import IngestionNormalizer
+
+    db = SessionLocal()
+    try:
+        connectors = (
+            db.query(ToolConnector)
+            .filter(ToolConnector.ingestion_mode == "api", ToolConnector.status == "active")
+            .all()
+        )
+        normalizer = IngestionNormalizer(db)
+        total_ingested = 0
+        for connector in connectors:
+            try:
+                ingested, _ = normalizer.pull_from_connector(connector)
+                total_ingested += ingested
+            except Exception as exc:
+                logger.warning("Poll failed for connector '%s': %s", connector.connector_name, exc)
+        db.commit()
+        return {
+            "status": "ok",
+            "connectors_polled": len(connectors),
+            "events_ingested": total_ingested,
+        }
     finally:
         db.close()

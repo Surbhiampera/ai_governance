@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -25,6 +25,26 @@ router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 cost_engine = CostEngine()
 security_engine = SecurityEngine()
 alert_engine = AlertEngine()
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert any value to JSON-serializable types.
+
+    Handles datetime/date → ISO string, Decimal → float, and nested
+    dicts/lists.  Called before storing any JSON column so PostgreSQL
+    never receives a non-serializable Python object.
+    """
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 @router.post("/event", response_model=TelemetryEventResponse)
@@ -281,9 +301,9 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         started_at=started_at,
         completed_at=completed_at,
         latency_ms=event_data.latency_ms,
-        tags=event_data.tags,
-        metadata_json=event_data.metadata_json,
-        raw_usage_json=event_data.raw_usage_json if event_data.raw_usage_json else {
+        tags=_json_safe(event_data.tags),
+        metadata_json=_json_safe(event_data.metadata_json),
+        raw_usage_json=_json_safe(event_data.raw_usage_json) if event_data.raw_usage_json else {
             "prompt_tokens": event_data.prompt_tokens,
             "completion_tokens": event_data.completion_tokens,
             "total_tokens": total_tokens,
@@ -352,7 +372,7 @@ def _save_pipeline_stages(db: Session, event_data: TelemetryEventCreate) -> None
                 status=stage.status,
                 stage_latency_ms=stage.stage_latency_ms,
                 retry_count=stage.retry_count,
-                details=stage.details,
+                details=_json_safe(stage.details),
             )
         )
 
