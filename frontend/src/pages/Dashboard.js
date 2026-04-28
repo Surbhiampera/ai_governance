@@ -93,8 +93,9 @@ function Dashboard() {
     load(false, range);
   }, [range, load]);
 
-  const rangeLabel =
-    (RANGE_OPTIONS.find((r) => r.value === range) || RANGE_OPTIONS[0]).label;
+  const rangeLabel = (
+    RANGE_OPTIONS.find((r) => r.value === range) || RANGE_OPTIONS[0]
+  ).label;
 
   if (loading) {
     return (
@@ -210,9 +211,9 @@ function Dashboard() {
         <div className="hero-card">
           <h2>AI Governance Overview</h2>
           <p>
-            Comprehensive view of cost, tokens, latency, and security across
+            {/* Comprehensive view of cost, tokens, latency, and security across
             every integrated AI tool. Default scope is the full system
-            activity — adjust the range below to focus on a window.
+            activity — adjust the range below to focus on a window. */}
           </p>
 
           <div className="action-row" style={{ marginTop: 16 }}>
@@ -277,16 +278,22 @@ function Dashboard() {
 
           <div className="pill-row">
             <div className="pill">
-              Active alerts <span className="highlight">{overview?.active_alerts || 0}</span>
+              Active alerts{" "}
+              <span className="highlight">{overview?.active_alerts || 0}</span>
             </div>
             <div className="pill">
-              Open anomalies <span className="highlight">{overview?.anomalies_open || 0}</span>
+              Open anomalies{" "}
+              <span className="highlight">{overview?.anomalies_open || 0}</span>
             </div>
             <div className="pill">
-              Connectors <span className="highlight">{overview?.connectors_active || 0}</span>
+              Connectors{" "}
+              <span className="highlight">
+                {overview?.connectors_active || 0}
+              </span>
             </div>
             <div className="pill">
-              Rules <span className="highlight">{overview?.rules_active || 0}</span>
+              Rules{" "}
+              <span className="highlight">{overview?.rules_active || 0}</span>
             </div>
           </div>
 
@@ -294,9 +301,11 @@ function Dashboard() {
             <div className="list-item">
               <strong>Health</strong>
               <div className="list-meta">
-                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}% ·
-                Failure {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
-                latency {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
+                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}
+                % · Failure{" "}
+                {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
+                latency{" "}
+                {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
               </div>
             </div>
             <div className="list-item">
@@ -326,8 +335,14 @@ function Dashboard() {
       </section>
 
       {activeMetricData ? (
-        <div className="modal-backdrop metric-modal-backdrop" onClick={() => setActiveMetric(null)}>
-          <div className="modal-dialog metric-modal" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="modal-backdrop metric-modal-backdrop"
+          onClick={() => setActiveMetric(null)}
+        >
+          <div
+            className="modal-dialog metric-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal-header">
               <div>
                 <div className="metric-eyebrow">{activeMetricData.title}</div>
@@ -385,7 +400,10 @@ function Dashboard() {
             <tbody>
               {recentLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={17} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                  <td
+                    colSpan={17}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
                     No events recorded yet.
                   </td>
                 </tr>
@@ -400,7 +418,9 @@ function Dashboard() {
                   <td>{row.provider || "-"}</td>
                   <td>{row.model_name || "-"}</td>
                   <td>
-                    <span className={`status-pill ${(row.status || "").toLowerCase()}`}>
+                    <span
+                      className={`status-pill ${(row.status || "").toLowerCase()}`}
+                    >
                       {row.status || "-"}
                     </span>
                   </td>
@@ -415,7 +435,9 @@ function Dashboard() {
                   <td>{num(row.output_data_size_mb, 2)}</td>
                   <td>
                     {row.pii_type ? (
-                      <span className="status-pill critical">{row.pii_type}</span>
+                      <span className="status-pill critical">
+                        {row.pii_type}
+                      </span>
                     ) : (
                       <span style={{ color: "var(--gray-500)" }}>none</span>
                     )}
@@ -448,8 +470,14 @@ function Dashboard() {
                     <stop offset="95%" stopColor="#9E2A97" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <CartesianGrid
+                  stroke="rgba(124,112,174,0.12)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#6d6782", fontSize: 12 }}
+                />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip />
                 <Area
@@ -513,8 +541,14 @@ function Dashboard() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topTools}>
-                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                <XAxis dataKey="tool" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <CartesianGrid
+                  stroke="rgba(124,112,174,0.12)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="tool"
+                  tick={{ fill: "#6d6782", fontSize: 12 }}
+                />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip
                   formatter={(value, name) =>
@@ -630,7 +664,10 @@ function Dashboard() {
             <tbody>
               {(overview?.tool_rollup || []).length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
                     No tool data for {rangeLabel.toLowerCase()}.
                   </td>
                 </tr>

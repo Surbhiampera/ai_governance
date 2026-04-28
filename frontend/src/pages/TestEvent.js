@@ -198,7 +198,7 @@ function TestEvent() {
 
   const fieldError = (name) =>
     validationErrors[name]
-      ? { border: "1px solid #c0392b" }
+      ? { borderColor: "var(--brand-primary)" }
       : {};
 
   return (
@@ -219,7 +219,7 @@ function TestEvent() {
           </div>
         </div>
         {message && (
-          <div className="list-meta" style={{ marginTop: 10 }}>{message}</div>
+          <div className="feedback-msg" style={{ marginTop: 10 }}>{message}</div>
         )}
       </section>
 
@@ -242,38 +242,34 @@ function TestEvent() {
               )}
 
               {/* ── Required Fields ── */}
-              <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                Required fields
-              </p>
+              <p className="form-section-label">Required fields</p>
               <div className="form-grid">
                 <div className="field">
                   <label>Organization *</label>
                   <input value={form.org_id} onChange={(e) => setForm({ ...form, org_id: e.target.value })} placeholder="e.g. org-acme" style={fieldError("org_id")} />
-                  {validationErrors.org_id && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.org_id}</span>}
+                  {validationErrors.org_id && <span className="field-error">{validationErrors.org_id}</span>}
                 </div>
                 <div className="field">
                   <label>Project *</label>
                   <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="e.g. proj-main" style={fieldError("project_id")} />
-                  {validationErrors.project_id && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.project_id}</span>}
+                  {validationErrors.project_id && <span className="field-error">{validationErrors.project_id}</span>}
                 </div>
               </div>
               <div className="form-grid">
                 <div className="field">
                   <label>Tool *</label>
                   <input value={form.tool_name} onChange={(e) => setForm({ ...form, tool_name: e.target.value })} placeholder="e.g. LangChain, OpenAI" style={fieldError("tool_name")} />
-                  {validationErrors.tool_name && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.tool_name}</span>}
+                  {validationErrors.tool_name && <span className="field-error">{validationErrors.tool_name}</span>}
                 </div>
                 <div className="field">
                   <label>Model *</label>
                   <input value={form.model_name} onChange={(e) => setForm({ ...form, model_name: e.target.value })} placeholder="e.g. gpt-4, claude-3" style={fieldError("model_name")} />
-                  {validationErrors.model_name && <span style={{ color: "#c0392b", fontSize: 12 }}>{validationErrors.model_name}</span>}
+                  {validationErrors.model_name && <span className="field-error">{validationErrors.model_name}</span>}
                 </div>
               </div>
 
               {/* ── Optional Details ── */}
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                Optional details
-              </p>
+              <p className="form-section-label">Optional details</p>
               <div className="form-grid">
                 <div className="field">
                   <label>Provider</label>
@@ -310,9 +306,7 @@ function TestEvent() {
               </div>
 
               {/* ── Metrics ── */}
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                Metrics
-              </p>
+              <p className="form-section-label">Metrics</p>
               <div className="form-grid">
                 <div className="field">
                   <label>Prompt Tokens</label>
@@ -341,9 +335,7 @@ function TestEvent() {
               </div>
 
               {/* ── Security & Tags ── */}
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                Security &amp; tags
-              </p>
+              <p className="form-section-label">Security &amp; tags</p>
               <div className="form-grid">
                 <div className="field">
                   <label>PII Type</label>
@@ -433,9 +425,11 @@ function TestEvent() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <strong>{item.tool_name || "—"}</strong>
-                  <div className="list-meta">
-                    {item.event_id} &nbsp;·&nbsp; {item.total_tokens} tokens &nbsp;·&nbsp; $
-                    {Number(item.total_cost || 0).toFixed(2)} &nbsp;·&nbsp; {item.latency_ms} ms
+                  <div className="list-meta" style={{ fontSize: 12 }}>{item.event_id}</div>
+                  <div className="metric-chip-row">
+                    <span className="metric-chip"><b>{item.total_tokens ?? 0}</b> tokens</span>
+                    <span className="metric-chip">$<b>{Number(item.total_cost || 0).toFixed(4)}</b></span>
+                    <span className="metric-chip"><b>{item.latency_ms ?? 0}</b> ms</span>
                   </div>
                 </div>
                 <span
@@ -455,7 +449,7 @@ function TestEvent() {
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  style={{ color: "#c0392b" }}
+                  style={{ color: "var(--brand-primary)" }}
                   onClick={() => setDeleteConfirm(item.event_id)}
                 >
                   ✕ Delete
@@ -482,29 +476,46 @@ function TestEvent() {
 
         {selectedTrace ? (
           <div className="stack">
-            <div className="mini-grid">
-              <div className="list-item">
-                <strong>Event</strong>
-                <div className="list-meta">{selectedTrace.event.event_id}</div>
+            <div className="trace-summary-bar">
+              <div className="trace-summary-item" style={{ minWidth: 160, flex: 2 }}>
+                <span>Event ID</span>
+                <strong style={{ fontSize: 13, wordBreak: "break-all", fontFamily: "monospace" }}>
+                  {selectedTrace.event.event_id}
+                </strong>
               </div>
-              <div className="list-item">
-                <strong>Total Cost</strong>
-                <div className="list-meta">${Number(selectedTrace.event.total_cost || 0).toFixed(2)}</div>
+              <div className="trace-summary-item">
+                <span>Total Cost</span>
+                <strong>${Number(selectedTrace.event.total_cost || 0).toFixed(4)}</strong>
               </div>
-              <div className="list-item">
-                <strong>Latency</strong>
-                <div className="list-meta">{selectedTrace.event.latency_ms} ms</div>
+              <div className="trace-summary-item">
+                <span>Latency</span>
+                <strong>{selectedTrace.event.latency_ms ?? "—"} ms</strong>
               </div>
-              <div className="list-item">
-                <strong>Risk Score</strong>
-                <div className="list-meta">{Number(selectedTrace.event.risk_score || 0).toFixed(1)}</div>
+              <div className="trace-summary-item">
+                <span>Risk Score</span>
+                <strong className={`risk-${Number(selectedTrace.event.risk_score || 0) >= 7 ? "high" : Number(selectedTrace.event.risk_score || 0) >= 4 ? "med" : "low"}`}>
+                  {Number(selectedTrace.event.risk_score || 0).toFixed(1)}
+                </strong>
               </div>
+              {selectedTrace.event.tool_name && (
+                <div className="trace-summary-item">
+                  <span>Tool</span>
+                  <strong>{selectedTrace.event.tool_name}</strong>
+                </div>
+              )}
+              {selectedTrace.event.model_name && (
+                <div className="trace-summary-item">
+                  <span>Model</span>
+                  <strong>{selectedTrace.event.model_name}</strong>
+                </div>
+              )}
             </div>
 
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: 40 }}>#</th>
                     <th>Stage</th>
                     <th>System</th>
                     <th>Status</th>
@@ -515,9 +526,16 @@ function TestEvent() {
                 <tbody>
                   {(selectedTrace.event.stages || []).map((stage) => (
                     <tr key={`${stage.stage_order}-${stage.stage_name}`}>
+                      <td><span className="stage-num">{stage.stage_order ?? "·"}</span></td>
                       <td>{stage.stage_name}</td>
-                      <td>{stage.system_name || "-"}</td>
-                      <td>{stage.status}</td>
+                      <td style={{ color: stage.system_name ? "var(--gray-700)" : "var(--gray-300)" }}>
+                        {stage.system_name || "—"}
+                      </td>
+                      <td>
+                        <span className={`status-pill ${(stage.status || "").toLowerCase()}`}>
+                          {stage.status}
+                        </span>
+                      </td>
                       <td>{stage.stage_latency_ms} ms</td>
                       <td>{stage.retry_count}</td>
                     </tr>

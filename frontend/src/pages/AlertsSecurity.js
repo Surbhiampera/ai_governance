@@ -143,7 +143,7 @@ function AlertsSecurity() {
           </div>
         </div>
         {message && (
-          <div className="list-meta" style={{ marginBottom: 12 }}>
+          <div className="feedback-msg" style={{ marginBottom: 12 }}>
             {message}
           </div>
         )}
@@ -216,7 +216,14 @@ function AlertsSecurity() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3> Open Anomalies</h3>
+              <h3>
+                Open Anomalies{" "}
+                {anomalies.length > 0 && (
+                  <span className="status-pill open" style={{ fontSize: 11, padding: "3px 9px", verticalAlign: "middle" }}>
+                    {anomalies.length}
+                  </span>
+                )}
+              </h3>
               <p
                 style={{
                   margin: "2px 0 0",
@@ -251,7 +258,14 @@ function AlertsSecurity() {
         <div className="panel">
           <div className="section-head">
             <div>
-              <h3> Security Logs</h3>
+              <h3>
+                Security Logs{" "}
+                {logs.length > 0 && (
+                  <span className="status-pill" style={{ fontSize: 11, padding: "3px 9px", verticalAlign: "middle" }}>
+                    {logs.length}
+                  </span>
+                )}
+              </h3>
               <p
                 style={{
                   margin: "2px 0 0",
@@ -289,13 +303,37 @@ function AlertsSecurity() {
                 )}
                 {logs.map((item) => (
                   <tr key={item.id}>
-                    <td>{item.event_id}</td>
-                    <td>{item.pii_detected ? "yes" : "no"}</td>
-                    <td>{item.pii_type || "-"}</td>
-                    <td>{item.data_out_violation ? "yes" : "no"}</td>
-                    <td>{item.misuse_pattern_detected ? "yes" : "no"}</td>
-                    <td>{item.abnormal_usage_spike ? "yes" : "no"}</td>
-                    <td>{Number(item.risk_score || 0).toFixed(1)}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{item.event_id}</td>
+                    <td>
+                      <span className={item.pii_detected ? "badge-yes" : "badge-no"}>
+                        {item.pii_detected ? "Yes" : "—"}
+                      </span>
+                    </td>
+                    <td style={{ color: item.pii_type ? "var(--gray-700)" : "var(--gray-300)" }}>
+                      {item.pii_type || "—"}
+                    </td>
+                    <td>
+                      <span className={item.data_out_violation ? "badge-yes" : "badge-no"}>
+                        {item.data_out_violation ? "Yes" : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={item.misuse_pattern_detected ? "badge-yes" : "badge-no"}>
+                        {item.misuse_pattern_detected ? "Yes" : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={item.abnormal_usage_spike ? "badge-yes" : "badge-no"}>
+                        {item.abnormal_usage_spike ? "Yes" : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      {(() => {
+                        const score = Number(item.risk_score || 0);
+                        const cls = score >= 7 ? "risk-high" : score >= 4 ? "risk-med" : "risk-low";
+                        return <span className={cls}>{score.toFixed(1)}</span>;
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
