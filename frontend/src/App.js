@@ -11,8 +11,10 @@ import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
 import SuperAdminLogs from "./pages/SuperAdminLogs";
+import Flow from "./pages/Flow";
 
 const navItems = [
+  { to: "/flow", label: "Flow" },
   { to: "/", label: "Overview", end: true },
   { to: "/cost", label: "Cost" },
   { to: "/controls", label: "Controls" },
@@ -51,6 +53,7 @@ function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/flow" element={<Flow />} />
             <Route path="/cost" element={<Cost />} />
             <Route path="/controls" element={<Tools />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />

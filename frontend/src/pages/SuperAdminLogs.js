@@ -120,9 +120,8 @@ function SuperAdminLogs() {
         <div className="hero-card">
           <h2>Super Admin · Centralized Logs</h2>
           <p>
-            Unified, read-only log access across every integrated AI tool.
-            Designed for monitoring, auditing, and compliance — log records
-            only, never raw code or prompts.
+            Unified read-only access to logs across all AI tools for monitoring,
+            auditing, and compliance no code or prompt access.
           </p>
 
           <div className="hero-metrics">
@@ -320,8 +319,8 @@ function SuperAdminLogs() {
                   remaining !== null && remaining < 0
                     ? "critical"
                     : remaining !== null && remaining < row.budget_limit * 0.1
-                    ? "high"
-                    : "";
+                      ? "high"
+                      : "";
                 return (
                   <tr key={`${row.org_id}-${row.tool_name}-${i}`}>
                     <td>{row.org_id}</td>

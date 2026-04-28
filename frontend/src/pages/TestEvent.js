@@ -412,9 +412,6 @@ function TestEvent() {
             <h3>Recent Events</h3>
             <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>Select an event to inspect, edit, or delete.</p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={openAddModal}>
-            ＋ Add Event
-          </button>
         </div>
         <div className="list-grid">
           {events.length === 0 && (
@@ -460,117 +457,129 @@ function TestEvent() {
         </div>
       </section>
 
-      {/* ── Selected Trace ── */}
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Selected Trace</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>Request-level view of tokens, cost, latency, pipeline stages, and security.</p>
-          </div>
-          {selectedTrace && (
-            <button type="button" className="btn btn-ghost" onClick={() => setSelectedTrace(null)}>
-              ✕ Close
-            </button>
-          )}
-        </div>
-
-        {selectedTrace ? (
-          <div className="stack">
-            <div className="trace-summary-bar">
-              <div className="trace-summary-item" style={{ minWidth: 160, flex: 2 }}>
-                <span>Event ID</span>
-                <strong style={{ fontSize: 13, wordBreak: "break-all", fontFamily: "monospace" }}>
-                  {selectedTrace.event.event_id}
-                </strong>
-              </div>
-              <div className="trace-summary-item">
-                <span>Total Cost</span>
-                <strong>${Number(selectedTrace.event.total_cost || 0).toFixed(4)}</strong>
-              </div>
-              <div className="trace-summary-item">
-                <span>Latency</span>
-                <strong>{selectedTrace.event.latency_ms ?? "—"} ms</strong>
-              </div>
-              <div className="trace-summary-item">
-                <span>Risk Score</span>
-                <strong className={`risk-${Number(selectedTrace.event.risk_score || 0) >= 7 ? "high" : Number(selectedTrace.event.risk_score || 0) >= 4 ? "med" : "low"}`}>
-                  {Number(selectedTrace.event.risk_score || 0).toFixed(1)}
-                </strong>
-              </div>
-              {selectedTrace.event.tool_name && (
-                <div className="trace-summary-item">
-                  <span>Tool</span>
-                  <strong>{selectedTrace.event.tool_name}</strong>
-                </div>
-              )}
-              {selectedTrace.event.model_name && (
-                <div className="trace-summary-item">
-                  <span>Model</span>
-                  <strong>{selectedTrace.event.model_name}</strong>
-                </div>
-              )}
+      {/* ── Trace Modal ── */}
+      {selectedTrace && (
+        <div className="modal-backdrop" onClick={() => setSelectedTrace(null)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Trace Details</h3>
+              <button type="button" className="btn-close" onClick={() => setSelectedTrace(null)}>
+                ✕
+              </button>
             </div>
 
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: 40 }}>#</th>
-                    <th>Stage</th>
-                    <th>System</th>
-                    <th>Status</th>
-                    <th>Latency</th>
-                    <th>Retry</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selectedTrace.event.stages || []).map((stage) => (
-                    <tr key={`${stage.stage_order}-${stage.stage_name}`}>
-                      <td><span className="stage-num">{stage.stage_order ?? "·"}</span></td>
-                      <td>{stage.stage_name}</td>
-                      <td style={{ color: stage.system_name ? "var(--gray-700)" : "var(--gray-300)" }}>
-                        {stage.system_name || "—"}
-                      </td>
-                      <td>
-                        <span className={`status-pill ${(stage.status || "").toLowerCase()}`}>
-                          {stage.status}
-                        </span>
-                      </td>
-                      <td>{stage.stage_latency_ms} ms</td>
-                      <td>{stage.retry_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {selectedTrace.event.raw_usage_json &&
-              Object.keys(selectedTrace.event.raw_usage_json).length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <strong style={{ fontSize: 13, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                    Raw Usage (Audit)
+            <div className="stack">
+              <div className="trace-summary-bar">
+                <div className="trace-summary-item" style={{ minWidth: 160, flex: 2 }}>
+                  <span>Event ID</span>
+                  <strong style={{ fontSize: 13, wordBreak: "break-all", fontFamily: "monospace" }}>
+                    {selectedTrace.event.event_id}
                   </strong>
-                  <pre
-                    style={{
-                      marginTop: 8,
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "var(--gray-50)",
-                      border: "1px solid rgba(124,112,174,0.16)",
-                      fontSize: 13,
-                      overflow: "auto",
-                      maxHeight: 220,
-                    }}
-                  >
-                    {JSON.stringify(selectedTrace.event.raw_usage_json, null, 2)}
-                  </pre>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Total Cost</span>
+                  <strong>${Number(selectedTrace.event.total_cost || 0).toFixed(4)}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Latency</span>
+                  <strong>{selectedTrace.event.latency_ms ?? "—"} ms</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Risk Score</span>
+                  <strong className={`risk-${Number(selectedTrace.event.risk_score || 0) >= 7 ? "high" : Number(selectedTrace.event.risk_score || 0) >= 4 ? "med" : "low"}`}>
+                    {Number(selectedTrace.event.risk_score || 0).toFixed(1)}
+                  </strong>
+                </div>
+                {selectedTrace.event.tool_name && (
+                  <div className="trace-summary-item">
+                    <span>Tool</span>
+                    <strong>{selectedTrace.event.tool_name}</strong>
+                  </div>
+                )}
+                {selectedTrace.event.model_name && (
+                  <div className="trace-summary-item">
+                    <span>Model</span>
+                    <strong>{selectedTrace.event.model_name}</strong>
+                  </div>
+                )}
+              </div>
+
+              {(selectedTrace.event.stages || []).length > 0 && (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}>#</th>
+                        <th>Stage</th>
+                        <th>System</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                        <th>Retry</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedTrace.event.stages || []).map((stage) => (
+                        <tr key={`${stage.stage_order}-${stage.stage_name}`}>
+                          <td><span className="stage-num">{stage.stage_order ?? "·"}</span></td>
+                          <td>{stage.stage_name}</td>
+                          <td style={{ color: stage.system_name ? "var(--gray-700)" : "var(--gray-300)" }}>
+                            {stage.system_name || "—"}
+                          </td>
+                          <td>
+                            <span className={`status-pill ${(stage.status || "").toLowerCase()}`}>
+                              {stage.status}
+                            </span>
+                          </td>
+                          <td>{stage.stage_latency_ms} ms</td>
+                          <td>{stage.retry_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
+
+              {selectedTrace.event.raw_usage_json &&
+                Object.keys(selectedTrace.event.raw_usage_json).length > 0 && (
+                  <details style={{ marginTop: 4 }}>
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        fontSize: 13,
+                        color: "var(--gray-500)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.14em",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Raw Usage (Audit)
+                    </summary>
+                    <pre
+                      style={{
+                        marginTop: 8,
+                        padding: 14,
+                        borderRadius: 14,
+                        background: "var(--gray-50)",
+                        border: "1px solid rgba(124,112,174,0.16)",
+                        fontSize: 13,
+                        overflow: "auto",
+                        maxHeight: 220,
+                      }}
+                    >
+                      {JSON.stringify(selectedTrace.event.raw_usage_json, null, 2)}
+                    </pre>
+                  </details>
+                )}
+
+              <div className="action-row">
+                <button type="button" className="btn btn-ghost" onClick={() => setSelectedTrace(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="empty-state">Pick a recent event to inspect its full trace.</div>
-        )}
-      </section>
+        </div>
+      )}
     </div>
   );
 }
