@@ -48,6 +48,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeSnapshot, setActiveSnapshot] = useState(null);
   // Default = overall system activity (all-time) per spec.
   const [range, setRange] = useState("all");
 
@@ -277,24 +278,22 @@ function Dashboard() {
           </div>
 
           <div className="pill-row">
-            <div className="pill">
-              Active alerts{" "}
-              <span className="highlight">{overview?.active_alerts || 0}</span>
-            </div>
-            <div className="pill">
-              Open anomalies{" "}
-              <span className="highlight">{overview?.anomalies_open || 0}</span>
-            </div>
-            <div className="pill">
-              Connectors{" "}
-              <span className="highlight">
-                {overview?.connectors_active || 0}
-              </span>
-            </div>
-            <div className="pill">
-              Rules{" "}
-              <span className="highlight">{overview?.rules_active || 0}</span>
-            </div>
+            {[
+              { id: "alerts", label: "Active alerts", value: overview?.active_alerts || 0 },
+              { id: "anomalies", label: "Open anomalies", value: overview?.anomalies_open || 0 },
+              { id: "connectors", label: "Connectors", value: overview?.connectors_active || 0 },
+              { id: "rules", label: "Rules", value: overview?.rules_active || 0 },
+            ].map((pill) => (
+              <button
+                key={pill.id}
+                type="button"
+                className="pill pill-btn"
+                onClick={() => setActiveSnapshot(pill.id)}
+              >
+                {pill.label}{" "}
+                <span className="highlight">{pill.value}</span>
+              </button>
+            ))}
           </div>
 
           <div className="stack" style={{ marginTop: 18 }}>
@@ -353,7 +352,7 @@ function Dashboard() {
                 className="btn-close"
                 onClick={() => setActiveMetric(null)}
               >
-                x
+                ×
               </button>
             </div>
             <div className="metric-modal-grid">
@@ -367,6 +366,178 @@ function Dashboard() {
           </div>
         </div>
       ) : null}
+
+      {activeSnapshot && (
+        <div
+          className="modal-backdrop metric-modal-backdrop"
+          onClick={() => setActiveSnapshot(null)}
+        >
+          <div
+            className="modal-dialog metric-modal"
+            style={{ maxWidth: 720 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">Control Snapshot</div>
+                <h3 style={{ marginTop: 8 }}>
+                  {activeSnapshot === "alerts" && `Active Alerts · ${overview?.active_alerts || 0}`}
+                  {activeSnapshot === "anomalies" && `Open Anomalies · ${overview?.anomalies_open || 0}`}
+                  {activeSnapshot === "connectors" && `Connectors · ${overview?.connectors_active || 0}`}
+                  {activeSnapshot === "rules" && `Governance Rules · ${overview?.rules_active || 0}`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setActiveSnapshot(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            {activeSnapshot === "alerts" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Total Active</strong>
+                    <div>{overview?.active_alerts || 0}</div>
+                  </div>
+                  {Object.entries(overview?.alerts_by_severity || {}).map(([sev, count]) => (
+                    <div key={sev} className="tool-cost-chip">
+                      <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
+                      <div>
+                        <span className={`status-pill ${sev}`}>{count} alert{count !== 1 ? "s" : ""}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Alerts</div>
+                <div className="list-grid">
+                  {recentAlerts.length ? (
+                    recentAlerts.map((a) => (
+                      <div key={a.id} className="list-item">
+                        <strong>{a.alert_type}</strong>
+                        <div className="list-meta">
+                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
+                          {a.message}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No recent alerts.</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeSnapshot === "anomalies" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Total Open</strong>
+                    <div>{overview?.anomalies_open || 0}</div>
+                  </div>
+                </div>
+                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Anomalies</div>
+                <div className="list-grid">
+                  {recentAnomalies.length ? (
+                    recentAnomalies.map((a) => (
+                      <div key={a.id} className="list-item">
+                        <strong>{a.anomaly_type}</strong>
+                        <div className="list-meta">
+                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
+                          {a.message}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No open anomalies.</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeSnapshot === "connectors" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Active Connectors</strong>
+                    <div>{overview?.connectors_active || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Tools Tracked</strong>
+                    <div>{toolUsage.length}</div>
+                  </div>
+                </div>
+                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Tool Breakdown</div>
+                {toolUsage.length ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Tool</th>
+                          <th>Total Cost</th>
+                          <th>Tokens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {toolUsage.map((t) => (
+                          <tr key={t.tool_name}>
+                            <td><strong>{t.tool_name}</strong></td>
+                            <td>{money(t.total_cost)}</td>
+                            <td>{num(t.total_tokens)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-state">No tools tracked.</div>
+                )}
+              </>
+            )}
+
+            {activeSnapshot === "rules" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Active Rules</strong>
+                    <div>{overview?.rules_active || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Active Alerts</strong>
+                    <div>{overview?.active_alerts || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Avg Risk Score</strong>
+                    <div>{Number(overview?.avg_risk_score || 0).toFixed(1)}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Highest Risk Score</strong>
+                    <div>{Number(overview?.highest_risk_score || 0).toFixed(1)}</div>
+                  </div>
+                </div>
+                {Object.keys(overview?.alerts_by_severity || {}).length > 0 && (
+                  <>
+                    <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Alerts by Severity</div>
+                    <div className="list-grid">
+                      {Object.entries(overview?.alerts_by_severity || {}).map(([sev, count]) => (
+                        <div key={sev} className="list-item">
+                          <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
+                          <div className="list-meta">
+                            <span className={`status-pill ${sev}`}>{count} alert{count !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <section className="panel">
         <div className="section-head">

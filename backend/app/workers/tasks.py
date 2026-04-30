@@ -6,7 +6,7 @@ from sqlalchemy import case, func
 
 from app.celery_app import celery_app
 from app.database import SessionLocal
-from app.models import DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent, ToolConnector, UsageAnomaly
+from app.models import DailyOrgSummary, MonthlyOrgSummary, Organization, TelemetryEvent, ToolConnector, UsageAnomaly
 from app.services.alert_engine import AlertEngine
 
 logger = logging.getLogger(__name__)
@@ -35,19 +35,29 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
             func.sum(TelemetryEvent.output_data_size_mb).label("total_output_mb"),
             func.avg(TelemetryEvent.risk_score).label("avg_risk_score"),
         )
-        .filter(func.date(TelemetryEvent.created_at) == summary_date)
+        .filter(
+            func.date(TelemetryEvent.created_at) == summary_date,
+            TelemetryEvent.org_id.isnot(None),
+            func.trim(TelemetryEvent.org_id) != "",
+        )
         .group_by(TelemetryEvent.org_id, TelemetryEvent.project_id, TelemetryEvent.model_name)
         .all()
     )
 
     db.query(DailyOrgSummary).filter(DailyOrgSummary.date == summary_date).delete(synchronize_session=False)
 
+    inserted = 0
     for row in rows:
+        org_id = (row.org_id or "").strip()
+        if not org_id:
+            logger.warning("Skipping daily summary row with empty org_id (date=%s, tool=%s)", summary_date, row.model_name)
+            continue
+        tool_name = (row.model_name or "").strip() or "unknown"
         db.add(
             DailyOrgSummary(
-                org_id=row.org_id,
+                org_id=org_id,
                 project_id=row.project_id,
-                tool_name=row.model_name or "",
+                tool_name=tool_name,
                 date=summary_date,
                 total_events=row.total_events or 0,
                 total_cost=row.total_cost or Decimal("0"),
@@ -67,8 +77,9 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
                 avg_risk_score=Decimal(str(row.avg_risk_score or 0)).quantize(Decimal("0.01")),
             )
         )
+        inserted += 1
     db.flush()
-    return len(rows)
+    return inserted
 
 
 @celery_app.task(name="app.workers.tasks.run_daily_aggregation")
@@ -88,6 +99,8 @@ def run_monthly_aggregation():
     try:
         today = date.today()
         month_start = today.replace(day=1)
+        valid_org_ids = db.query(Organization.id).subquery()
+
         rows = (
             db.query(
                 DailyOrgSummary.org_id,
@@ -107,19 +120,31 @@ def run_monthly_aggregation():
                 func.sum(DailyOrgSummary.anomaly_count).label("anomaly_count"),
                 func.sum(DailyOrgSummary.misuse_count).label("misuse_count"),
             )
-            .filter(DailyOrgSummary.date >= month_start, DailyOrgSummary.date <= today)
+            .filter(
+                DailyOrgSummary.date >= month_start,
+                DailyOrgSummary.date <= today,
+                DailyOrgSummary.org_id.isnot(None),
+                func.trim(DailyOrgSummary.org_id) != "",
+                DailyOrgSummary.org_id.in_(valid_org_ids),
+            )
             .group_by(DailyOrgSummary.org_id, DailyOrgSummary.project_id, DailyOrgSummary.tool_name)
             .all()
         )
 
         db.query(MonthlyOrgSummary).filter(MonthlyOrgSummary.month == month_start).delete(synchronize_session=False)
 
+        inserted = 0
         for row in rows:
+            org_id = (row.org_id or "").strip()
+            if not org_id:
+                logger.warning("Skipping monthly summary row with empty org_id (month=%s, tool=%s)", month_start, row.tool_name)
+                continue
+            tool_name = (row.tool_name or "").strip() or "unknown"
             db.add(
                 MonthlyOrgSummary(
-                    org_id=row.org_id,
+                    org_id=org_id,
                     project_id=row.project_id,
-                    tool_name=row.tool_name,
+                    tool_name=tool_name,
                     month=month_start,
                     total_events=row.total_events or 0,
                     total_cost=row.total_cost or Decimal("0"),
@@ -136,8 +161,9 @@ def run_monthly_aggregation():
                     misuse_count=row.misuse_count or 0,
                 )
             )
+            inserted += 1
         db.commit()
-        return {"status": "ok", "rows_processed": len(rows)}
+        return {"status": "ok", "rows_processed": inserted}
     finally:
         db.close()
 

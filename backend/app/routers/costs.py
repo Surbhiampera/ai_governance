@@ -7,9 +7,17 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent
+from app.models import DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent, ToolRegistry
 
 router = APIRouter(prefix="/costs", tags=["costs"])
+
+
+def _scope(query, model, org_id, project_id=None):
+    if org_id:
+        query = query.filter(model.org_id == org_id)
+    if project_id and hasattr(model, "project_id"):
+        query = query.filter(model.project_id == project_id)
+    return query
 
 
 @router.get("/by-model")
@@ -238,4 +246,211 @@ def cost_totals(db: Session = Depends(get_db)):
             "tokens": int(all_time.tokens or 0) if all_time else 0,
             "events": int(all_time.events or 0) if all_time else 0,
         },
+    }
+
+
+# -------------------------------------------------------------------------
+# Additional cost dimensions — surfaced so users can interpret cost from
+# every relevant angle (tool, provider, execution type, service type) and
+# see the underlying LLM/Infra/External split that produced each total.
+# All endpoints use the same simple formula:  total = llm + infra + external
+# -------------------------------------------------------------------------
+
+
+@router.get("/by-tool")
+def cost_by_tool(
+    org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Cost grouped by registered tool (joined to the Control Module's
+    ToolRegistry so vendor and pricing model are visible). Tools without
+    telemetry yet show as zero — making the full integrated surface area
+    transparent.
+    """
+    rows = (
+        db.query(
+            TelemetryEvent.model_name.label("tool_name"),
+            func.max(ToolRegistry.vendor).label("vendor"),
+            func.max(ToolRegistry.cost_model).label("cost_model"),
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        )
+        .outerjoin(ToolRegistry, ToolRegistry.tool_name == TelemetryEvent.model_name)
+        .filter(TelemetryEvent.model_name.isnot(None), TelemetryEvent.model_name != "")
+        .group_by(TelemetryEvent.model_name)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+    )
+    rows = _scope(rows, TelemetryEvent, org_id, project_id)
+    return [
+        {
+            "tool_name": r.tool_name,
+            "vendor": r.vendor or "—",
+            "cost_model": r.cost_model or "per_token",
+            "total_events": r.total_events or 0,
+            "total_tokens": int(r.total_tokens or 0),
+            "llm_cost": float(r.llm_cost or 0),
+            "infra_cost": float(r.infra_cost or 0),
+            "external_cost": float(r.external_cost or 0),
+            "total_cost": float(r.total_cost or 0),
+        }
+        for r in rows.all()
+    ]
+
+
+@router.get("/by-provider")
+def cost_by_provider(
+    org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Cost grouped by vendor/provider (OpenAI, Anthropic, internal, …)."""
+    rows = (
+        db.query(
+            TelemetryEvent.provider,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        )
+        .group_by(TelemetryEvent.provider)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+    )
+    rows = _scope(rows, TelemetryEvent, org_id, project_id)
+    return [
+        {
+            "provider": r.provider or "—",
+            "total_events": r.total_events or 0,
+            "total_tokens": int(r.total_tokens or 0),
+            "llm_cost": float(r.llm_cost or 0),
+            "infra_cost": float(r.infra_cost or 0),
+            "external_cost": float(r.external_cost or 0),
+            "total_cost": float(r.total_cost or 0),
+        }
+        for r in rows.all()
+    ]
+
+
+@router.get("/by-execution-type")
+def cost_by_execution_type(
+    org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Cost grouped by execution_type (sync, async, batch, stream, …)."""
+    rows = (
+        db.query(
+            TelemetryEvent.execution_type,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+            func.avg(TelemetryEvent.latency_ms).label("avg_latency_ms"),
+        )
+        .group_by(TelemetryEvent.execution_type)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+    )
+    rows = _scope(rows, TelemetryEvent, org_id, project_id)
+    return [
+        {
+            "execution_type": r.execution_type or "—",
+            "total_events": r.total_events or 0,
+            "total_tokens": int(r.total_tokens or 0),
+            "total_cost": float(r.total_cost or 0),
+            "avg_latency_ms": round(float(r.avg_latency_ms or 0), 1),
+        }
+        for r in rows.all()
+    ]
+
+
+@router.get("/by-service-type")
+def cost_by_service_type(
+    org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Cost grouped by service_type (chat, completion, embedding, …)."""
+    rows = (
+        db.query(
+            TelemetryEvent.service_type,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        )
+        .group_by(TelemetryEvent.service_type)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+    )
+    rows = _scope(rows, TelemetryEvent, org_id, project_id)
+    return [
+        {
+            "service_type": r.service_type or "—",
+            "total_events": r.total_events or 0,
+            "total_tokens": int(r.total_tokens or 0),
+            "total_cost": float(r.total_cost or 0),
+        }
+        for r in rows.all()
+    ]
+
+
+@router.get("/breakdown")
+def cost_breakdown_summary(
+    org_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Aggregated cost split (LLM / Infra / External) plus the simple
+    formulas used to derive each component. Designed to be fully
+    transparent — no hidden multipliers, no opaque adjustments.
+    """
+    q = db.query(
+        func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+        func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+        func.sum(TelemetryEvent.external_cost).label("external_cost"),
+        func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        func.count(TelemetryEvent.id).label("total_events"),
+        func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+    )
+    q = _scope(q, TelemetryEvent, org_id, project_id)
+    row = q.first()
+
+    llm = float(row.llm_cost or 0) if row else 0.0
+    infra = float(row.infra_cost or 0) if row else 0.0
+    external = float(row.external_cost or 0) if row else 0.0
+    total = float(row.total_cost or 0) if row else 0.0
+    events = int(row.total_events or 0) if row else 0
+    tokens = int(row.total_tokens or 0) if row else 0
+    pct = lambda v: round((v / total * 100), 2) if total > 0 else 0.0
+
+    return {
+        "components": [
+            {
+                "name": "llm_cost",
+                "amount": round(llm, 6),
+                "percent": pct(llm),
+                "formula": "(prompt_tokens × input_rate + completion_tokens × output_rate) ÷ 1000",
+            },
+            {
+                "name": "infra_cost",
+                "amount": round(infra, 6),
+                "percent": pct(infra),
+                "formula": "latency_ms × $0.00008",
+            },
+            {
+                "name": "external_cost",
+                "amount": round(external, 6),
+                "percent": pct(external),
+                "formula": "Σ external_tools[i].cost (passed through, no mark-up)",
+            },
+        ],
+        "total_cost": round(total, 6),
+        "total_events": events,
+        "total_tokens": tokens,
+        "avg_cost_per_event": round(total / events, 6) if events else 0.0,
+        "avg_cost_per_1k_tokens": round((total / tokens) * 1000, 6) if tokens else 0.0,
+        "formula": "total_cost = llm_cost + infra_cost + external_cost",
     }

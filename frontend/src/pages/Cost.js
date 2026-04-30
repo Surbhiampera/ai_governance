@@ -12,6 +12,7 @@ import API from "../api";
 import { getTracingOrgs, getTracingProjects } from "../api";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
+const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
 const num = (v) => Number(v || 0).toLocaleString();
 
 function Cost() {
@@ -19,6 +20,11 @@ function Cost() {
   const [byModel, setByModel] = useState([]);
   const [byProject, setByProject] = useState([]);
   const [byOrg, setByOrg] = useState([]);
+  const [byTool, setByTool] = useState([]);
+  const [byProvider, setByProvider] = useState([]);
+  const [byExecutionType, setByExecutionType] = useState([]);
+  const [byServiceType, setByServiceType] = useState([]);
+  const [breakdown, setBreakdown] = useState(null);
   const [dailyCost, setDailyCost] = useState([]);
   const [monthlyCost, setMonthlyCost] = useState([]);
   const [activeMetric, setActiveMetric] = useState(null);
@@ -32,16 +38,34 @@ function Cost() {
   const load = async () => {
     try {
       setLoading(true);
-      const [totalsRes, modelRes, projectRes, orgRes, dailyRes, monthlyRes, orgsRes] =
-        await Promise.all([
-          API.get("/costs/totals"),
-          API.get("/costs/by-model", { params: { org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
-          API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
-          API.get("/costs/by-org"),
-          API.get("/costs/daily", { params: { days: 14, org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
-          API.get("/costs/monthly", { params: { org_id: selectedOrg || undefined, project_id: selectedProject || undefined } }),
-          getTracingOrgs(),
-        ]);
+      const scope = { org_id: selectedOrg || undefined, project_id: selectedProject || undefined };
+      const [
+        totalsRes,
+        modelRes,
+        projectRes,
+        orgRes,
+        dailyRes,
+        monthlyRes,
+        orgsRes,
+        toolRes,
+        providerRes,
+        execRes,
+        serviceRes,
+        breakdownRes,
+      ] = await Promise.all([
+        API.get("/costs/totals"),
+        API.get("/costs/by-model", { params: scope }),
+        API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
+        API.get("/costs/by-org"),
+        API.get("/costs/daily", { params: { days: 14, ...scope } }),
+        API.get("/costs/monthly", { params: scope }),
+        getTracingOrgs(),
+        API.get("/costs/by-tool", { params: scope }),
+        API.get("/costs/by-provider", { params: scope }),
+        API.get("/costs/by-execution-type", { params: scope }),
+        API.get("/costs/by-service-type", { params: scope }),
+        API.get("/costs/breakdown", { params: scope }),
+      ]);
       setTotals(totalsRes.data);
       setByModel(modelRes.data || []);
       setByProject(projectRes.data || []);
@@ -49,6 +73,11 @@ function Cost() {
       setDailyCost(dailyRes.data || []);
       setMonthlyCost(monthlyRes.data || []);
       setOrgs(orgsRes.data || []);
+      setByTool(toolRes.data || []);
+      setByProvider(providerRes.data || []);
+      setByExecutionType(execRes.data || []);
+      setByServiceType(serviceRes.data || []);
+      setBreakdown(breakdownRes.data || null);
       setError("");
     } catch {
       setError("Unable to load cost data. Check backend connectivity.");
@@ -199,6 +228,286 @@ function Cost() {
           </div>
         </div>
       ) : null}
+
+      {breakdown && breakdown.total_cost > 0 ? (
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Where the cost goes</h3>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                Total spend
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 600 }}>
+                {money4(breakdown.total_cost)}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              height: 14,
+              borderRadius: 8,
+              overflow: "hidden",
+              background: "rgba(124,112,174,0.12)",
+            }}
+          >
+            {breakdown.components.map((c, i) => {
+              const colors = ["#9E2A97", "#3FB6D4", "#F2A33C"];
+              const width = breakdown.total_cost
+                ? (c.amount / breakdown.total_cost) * 100
+                : 0;
+              if (width <= 0) return null;
+              return (
+                <div
+                  key={c.name}
+                  title={`${c.name}: ${money4(c.amount)} (${c.percent}%)`}
+                  style={{ width: `${width}%`, background: colors[i % colors.length] }}
+                />
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 18,
+              marginTop: 12,
+              fontSize: 13,
+            }}
+          >
+            {breakdown.components.map((c, i) => {
+              const colors = ["#9E2A97", "#3FB6D4", "#F2A33C"];
+              return (
+                <div
+                  key={c.name}
+                  style={{ display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: colors[i % colors.length],
+                    }}
+                  />
+                  <span>
+                    <strong>{c.name}</strong>{" "}
+                    <span style={{ color: "var(--gray-500)" }}>
+                      {money4(c.amount)} · {c.percent}%
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Cost by Tool</h3>
+            <p
+              style={{
+                margin: "2px 0 0",
+                color: "var(--gray-500)",
+                fontSize: 13,
+              }}
+            >
+              LLM + Infrastructure + External split for every tool registered
+              through the Control Module.
+            </p>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Vendor</th>
+                <th>Cost Model</th>
+                <th>Events</th>
+                <th>Tokens</th>
+                <th>LLM</th>
+                <th>Infra</th>
+                <th>External</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byTool.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={9}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No tool data yet.
+                  </td>
+                </tr>
+              )}
+              {byTool.map((r) => (
+                <tr key={r.tool_name}>
+                  <td>
+                    <strong>{r.tool_name}</strong>
+                  </td>
+                  <td>{r.vendor}</td>
+                  <td>{r.cost_model}</td>
+                  <td>{num(r.total_events)}</td>
+                  <td>{num(r.total_tokens)}</td>
+                  <td>{money4(r.llm_cost)}</td>
+                  <td>{money4(r.infra_cost)}</td>
+                  <td>{money4(r.external_cost)}</td>
+                  <td>
+                    <strong>{money(r.total_cost)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Cost by Provider</h3>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Events</th>
+                <th>Tokens</th>
+                <th>LLM</th>
+                <th>Infra</th>
+                <th>External</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byProvider.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No provider data yet.
+                  </td>
+                </tr>
+              )}
+              {byProvider.map((r) => (
+                <tr key={r.provider}>
+                  <td>
+                    <strong>{r.provider}</strong>
+                  </td>
+                  <td>{num(r.total_events)}</td>
+                  <td>{num(r.total_tokens)}</td>
+                  <td>{money4(r.llm_cost)}</td>
+                  <td>{money4(r.infra_cost)}</td>
+                  <td>{money4(r.external_cost)}</td>
+                  <td>
+                    <strong>{money(r.total_cost)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="two-column">
+        <div className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Cost by Execution Type</h3>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Execution Type</th>
+                  <th>Events</th>
+                  <th>Tokens</th>
+                  <th>Avg Latency</th>
+                  <th>Total Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byExecutionType.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      style={{ textAlign: "center", color: "var(--gray-500)" }}
+                    >
+                      No execution-type data yet.
+                    </td>
+                  </tr>
+                )}
+                {byExecutionType.map((r) => (
+                  <tr key={r.execution_type}>
+                    <td>
+                      <strong>{r.execution_type}</strong>
+                    </td>
+                    <td>{num(r.total_events)}</td>
+                    <td>{num(r.total_tokens)}</td>
+                    <td>{r.avg_latency_ms} ms</td>
+                    <td>{money(r.total_cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Cost by Service Type</h3>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service Type</th>
+                  <th>Events</th>
+                  <th>Tokens</th>
+                  <th>Total Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byServiceType.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{ textAlign: "center", color: "var(--gray-500)" }}
+                    >
+                      No service-type data yet.
+                    </td>
+                  </tr>
+                )}
+                {byServiceType.map((r) => (
+                  <tr key={r.service_type}>
+                    <td>
+                      <strong>{r.service_type}</strong>
+                    </td>
+                    <td>{num(r.total_events)}</td>
+                    <td>{num(r.total_tokens)}</td>
+                    <td>{money(r.total_cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <section className="panel">
         <div className="section-head">

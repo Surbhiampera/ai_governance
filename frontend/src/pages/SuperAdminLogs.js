@@ -4,6 +4,7 @@ import {
   getLookupProviders,
   getSuperAdminAggregate,
   getSuperAdminLogs,
+  getSuperAdminRegisteredTools,
   getToolsUsage,
   getTracingOrgs,
 } from "../api";
@@ -13,6 +14,8 @@ const num = (v) => Number(v || 0).toLocaleString();
 function SuperAdminLogs() {
   const [logs, setLogs] = useState([]);
   const [aggregate, setAggregate] = useState([]);
+  const [registeredTools, setRegisteredTools] = useState([]);
+  const [loadingRegistered, setLoadingRegistered] = useState(true);
   const [orgs, setOrgs] = useState([]);
   const [tools, setTools] = useState([]);
   const [providers, setProviders] = useState([]);
@@ -56,6 +59,19 @@ function SuperAdminLogs() {
     }
   }, []);
 
+  const fetchRegisteredTools = useCallback(async (orgId) => {
+    setLoadingRegistered(true);
+    try {
+      const params = orgId ? { org_id: orgId } : {};
+      const res = await getSuperAdminRegisteredTools(params);
+      setRegisteredTools(res.data || []);
+    } catch {
+      setRegisteredTools([]);
+    } finally {
+      setLoadingRegistered(false);
+    }
+  }, []);
+
   const fetchLogs = useCallback(async (currentFilters) => {
     setLoading(true);
     try {
@@ -84,13 +100,15 @@ function SuperAdminLogs() {
   useEffect(() => {
     fetchLogs(filters);
     fetchAggregate(filters.org_id);
+    fetchRegisteredTools(filters.org_id);
     // intentionally only run on mount; subsequent fetches go through Apply/Reset
-  }, [fetchLogs, fetchAggregate]); // eslint-disable-line
+  }, [fetchLogs, fetchAggregate, fetchRegisteredTools]); // eslint-disable-line
 
   const apply = (e) => {
     e.preventDefault();
     fetchLogs(filters);
     fetchAggregate(filters.org_id);
+    fetchRegisteredTools(filters.org_id);
   };
 
   const reset = () => {
@@ -106,6 +124,7 @@ function SuperAdminLogs() {
     setFilters(cleared);
     fetchLogs(cleared);
     fetchAggregate("");
+    fetchRegisteredTools("");
   };
 
   const totalCost = logs.reduce((s, r) => s + Number(r.total_cost || 0), 0);
@@ -260,6 +279,111 @@ function SuperAdminLogs() {
       </section>
 
       {error && <div className="error-message">{error}</div>}
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Registered Tools (via Connector)</h3>
+            <p
+              style={{
+                margin: "2px 0 0",
+                color: "var(--gray-500)",
+                fontSize: 13,
+              }}
+            >
+              Every AI tool integrated through the Control Module Connector —
+              shown here even before any telemetry has been ingested. Includes
+              connector status, ingestion mode and live usage roll-ups.
+            </p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Vendor</th>
+                <th>Type</th>
+                <th>Cost Model</th>
+                <th>Connectors</th>
+                <th>Ingestion</th>
+                <th>Status</th>
+                <th>Events</th>
+                <th>Total Cost</th>
+                <th>Last Activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingRegistered && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center" }}>
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!loadingRegistered && registeredTools.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No tools registered through the Control Module yet.
+                  </td>
+                </tr>
+              )}
+              {registeredTools.map((t) => {
+                const ingestionModes = Array.from(
+                  new Set(
+                    (t.connectors || [])
+                      .map((c) => c.ingestion_mode)
+                      .filter(Boolean),
+                  ),
+                ).join(", ");
+                const status = t.unregistered
+                  ? "unregistered"
+                  : t.is_ingesting
+                    ? "active"
+                    : t.connector_count > 0
+                      ? "idle"
+                      : "no-connector";
+                const statusClass =
+                  status === "active"
+                    ? "low"
+                    : status === "unregistered"
+                      ? "high"
+                      : status === "no-connector"
+                        ? "critical"
+                        : "";
+                return (
+                  <tr key={t.tool_name}>
+                    <td>
+                      <strong>{t.tool_name}</strong>
+                    </td>
+                    <td>{t.vendor || "—"}</td>
+                    <td>{t.tool_type || "—"}</td>
+                    <td>{t.cost_model || "—"}</td>
+                    <td>{num(t.connector_count)}</td>
+                    <td>{ingestionModes || "—"}</td>
+                    <td>
+                      <span className={`status-pill ${statusClass}`}>
+                        {status}
+                      </span>
+                    </td>
+                    <td>{num(t.total_events)}</td>
+                    <td>{money(t.total_cost)}</td>
+                    <td>
+                      {t.last_event_at
+                        ? new Date(t.last_event_at).toLocaleString()
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="panel">
         <div className="section-head">

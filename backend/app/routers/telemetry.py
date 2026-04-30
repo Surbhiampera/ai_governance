@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import Alert, Budget, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, UsageAnomaly
+from app.models import Alert, Budget, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, ToolConnector, ToolRegistry, UsageAnomaly
 from app.schemas import (
     BatchTelemetryIngest,
     CostBreakdownResponse,
@@ -199,6 +199,118 @@ def super_admin_aggregate(
             "remaining_budget": round(budget_limit - total_cost, 2) if budget_limit is not None else None,
         })
     return result
+
+
+@router.get("/admin/registered-tools")
+def super_admin_registered_tools(
+    org_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Centralised view of every tool registered through the Control Module
+    (via the Connector). Always surfaces the tool catalog — even when no
+    telemetry events have been ingested yet — and joins live usage stats
+    from `telemetry_events` plus connector metadata so the Super Admin
+    can audit the full integrated AI surface area, not only injected events.
+    """
+    # Per-tool usage stats from telemetry (optionally scoped by org)
+    usage_query = db.query(
+        TelemetryEvent.model_name.label("tool_name"),
+        TelemetryEvent.org_id.label("org_id"),
+        func.count(TelemetryEvent.id).label("total_events"),
+        func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+        func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        func.max(TelemetryEvent.created_at).label("last_event_at"),
+    ).group_by(TelemetryEvent.model_name, TelemetryEvent.org_id)
+    if org_id:
+        usage_query = usage_query.filter(TelemetryEvent.org_id == org_id)
+    usage_by_tool: dict = {}
+    for row in usage_query.all():
+        if not row.tool_name:
+            continue
+        usage_by_tool.setdefault(row.tool_name, []).append({
+            "org_id": row.org_id,
+            "total_events": int(row.total_events or 0),
+            "total_tokens": int(row.total_tokens or 0),
+            "total_cost": float(row.total_cost or 0),
+            "last_event_at": row.last_event_at,
+        })
+
+    # All registered tools (from the Control Module catalog)
+    tools = db.query(ToolRegistry).order_by(ToolRegistry.tool_name.asc()).all()
+
+    # All connectors that integrate those tools
+    connector_query = db.query(ToolConnector)
+    if org_id:
+        connector_query = connector_query.filter(
+            (ToolConnector.org_id == org_id) | (ToolConnector.org_id.is_(None))
+        )
+    connectors_by_tool: dict = {}
+    for c in connector_query.all():
+        connectors_by_tool.setdefault(c.tool_name, []).append({
+            "connector_name": c.connector_name,
+            "provider": c.provider,
+            "ingestion_mode": c.ingestion_mode,
+            "status": c.status,
+            "endpoint_url": c.endpoint_url,
+            "org_id": c.org_id,
+            "project_id": c.project_id,
+            "last_ingested_at": c.last_ingested_at,
+        })
+
+    results = []
+    for tool in tools:
+        usages = usage_by_tool.get(tool.tool_name, [])
+        connectors = connectors_by_tool.get(tool.tool_name, [])
+        total_events = sum(u["total_events"] for u in usages)
+        total_cost = round(sum(u["total_cost"] for u in usages), 6)
+        total_tokens = sum(u["total_tokens"] for u in usages)
+        last_event_at = max((u["last_event_at"] for u in usages if u["last_event_at"]), default=None)
+        results.append({
+            "tool_name": tool.tool_name,
+            "tool_type": tool.tool_type,
+            "vendor": tool.vendor,
+            "cost_model": tool.cost_model,
+            "base_cost": float(tool.base_cost or 0),
+            "registered_at": tool.created_at,
+            "connector_count": len(connectors),
+            "connectors": connectors,
+            "total_events": total_events,
+            "total_tokens": total_tokens,
+            "total_cost": total_cost,
+            "last_event_at": last_event_at,
+            "is_ingesting": any((c["status"] or "").lower() == "active" for c in connectors),
+        })
+
+    # Also surface "shadow" tools — tools that have generated telemetry
+    # events but were never formally registered in the catalog.
+    registered_names = {t.tool_name for t in tools}
+    for tool_name, usages in usage_by_tool.items():
+        if tool_name in registered_names:
+            continue
+        connectors = connectors_by_tool.get(tool_name, [])
+        total_events = sum(u["total_events"] for u in usages)
+        total_cost = round(sum(u["total_cost"] for u in usages), 6)
+        total_tokens = sum(u["total_tokens"] for u in usages)
+        last_event_at = max((u["last_event_at"] for u in usages if u["last_event_at"]), default=None)
+        results.append({
+            "tool_name": tool_name,
+            "tool_type": None,
+            "vendor": None,
+            "cost_model": None,
+            "base_cost": 0.0,
+            "registered_at": None,
+            "connector_count": len(connectors),
+            "connectors": connectors,
+            "total_events": total_events,
+            "total_tokens": total_tokens,
+            "total_cost": total_cost,
+            "last_event_at": last_event_at,
+            "is_ingesting": False,
+            "unregistered": True,
+        })
+
+    results.sort(key=lambda r: (-(r["total_cost"] or 0), r["tool_name"] or ""))
+    return results
 
 
 @router.get("/traces/{event_id}", response_model=TraceDetailResponse)

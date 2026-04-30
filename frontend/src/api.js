@@ -41,7 +41,9 @@ export const getUsageAnomalies = (status = "open") =>
 
 // Combined alerts & security endpoints
 export const getAlertsSecurity = (status) =>
-  API.get("/alerts-security/alerts", { params: { status: status || undefined } });
+  API.get("/alerts-security/alerts", {
+    params: { status: status || undefined },
+  });
 export const resolveAlertCombined = (id) =>
   API.patch(`/alerts-security/alerts/${id}/resolve`);
 export const getSecuritySummaryCombined = () =>
@@ -116,7 +118,11 @@ export const getCostByProject = (orgId) =>
   API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
 export const getCostDaily = (days, orgId, projectId) =>
   API.get("/costs/daily", {
-    params: { days, org_id: orgId || undefined, project_id: projectId || undefined },
+    params: {
+      days,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+    },
   });
 export const getCostMonthly = (orgId, projectId) =>
   API.get("/costs/monthly", {
@@ -127,6 +133,26 @@ export const getCostByModel = (orgId, projectId) =>
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
 export const getCostTotals = () => API.get("/costs/totals");
+export const getCostByTool = (orgId, projectId) =>
+  API.get("/costs/by-tool", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostByProvider = (orgId, projectId) =>
+  API.get("/costs/by-provider", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostByExecutionType = (orgId, projectId) =>
+  API.get("/costs/by-execution-type", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostByServiceType = (orgId, projectId) =>
+  API.get("/costs/by-service-type", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostBreakdown = (orgId, projectId) =>
+  API.get("/costs/breakdown", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
 
 export const getModelPricing = () => API.get("/pricing/");
 export const createModelPricing = (data) => API.post("/pricing/", data);
@@ -139,6 +165,8 @@ export const getSuperAdminLogs = (params) =>
   API.get("/telemetry/admin/logs", { params });
 export const getSuperAdminAggregate = (params) =>
   API.get("/telemetry/admin/aggregate", { params });
+export const getSuperAdminRegisteredTools = (params) =>
+  API.get("/telemetry/admin/registered-tools", { params });
 
 // --- Ingestion & Connector Layer ---
 export const triggerConnectorPull = (connectorName) =>
@@ -157,11 +185,14 @@ export const uploadFileToConnector = (connectorName, file) => {
 // --- Tracing-derived org/project context (single source of truth) ---
 export const getTracingOrgs = () => API.get("/lookups/tracing-orgs");
 export const getTracingProjects = (orgId) =>
-  API.get("/lookups/tracing-projects", { params: { org_id: orgId || undefined } });
+  API.get("/lookups/tracing-projects", {
+    params: { org_id: orgId || undefined },
+  });
 
 // --- Dynamic dropdown lookups (no hardcoded enums in the UI) ---
 export const getLookupAuthTypes = () => API.get("/lookups/auth-types");
-export const getLookupIngestionModes = () => API.get("/lookups/ingestion-modes");
+export const getLookupIngestionModes = () =>
+  API.get("/lookups/ingestion-modes");
 export const getLookupConnectorStatuses = () =>
   API.get("/lookups/connector-statuses");
 export const getLookupToolTypes = () => API.get("/lookups/tool-types");

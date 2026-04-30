@@ -32,6 +32,13 @@ const steps = [
   },
   {
     n: 5,
+    title: "Rule Engine",
+    to: "/controls",
+    cta: "Open Controls",
+    desc: "Define rules in Controls, then the Alert Engine evaluates every event in real time and triggers scoped alerts based on thresholds A 30-min scheduled scan also converts anomalies into alerts (manual trigger: Run Alert Scan).",
+  },
+  {
+    n: 6,
     title: "Unified Monitoring",
     to: "/admin-logs",
     cta: "Super Admin Logs",

@@ -15,6 +15,7 @@ function AlertsSecurity() {
   const [alertFilter, setAlertFilter] = useState("active");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [activeModal, setActiveModal] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -75,30 +76,34 @@ function AlertsSecurity() {
             </p>
           </div>
           <div className="pill-row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <div className="pill">
-              Active Alerts{" "}
-              <span className="highlight">{summary?.active_alerts || 0}</span>
-            </div>
-            <div className="pill">
-              Anomalies{" "}
-              <span className="highlight">{summary?.open_anomalies || 0}</span>
-            </div>
-            <div className="pill">
-              PII{" "}
-              <span className="highlight">{summary?.total_with_pii || 0}</span>
-            </div>
-            <div className="pill">
-              Misuse{" "}
-              <span className="highlight">{summary?.misuse_events || 0}</span>
-            </div>
-            <div className="pill">
-              Data Out{" "}
-              <span className="highlight">{summary?.data_out_events || 0}</span>
-            </div>
-            <div className="pill">
-              Risk {Number(summary?.average_risk_score || 0).toFixed(1)} /{" "}
-              {Number(summary?.highest_risk_score || 0).toFixed(1)}
-            </div>
+            {[
+              { id: "alerts", label: "Active Alerts", value: summary?.active_alerts || 0 },
+              { id: "anomalies", label: "Anomalies", value: summary?.open_anomalies || 0 },
+              { id: "pii", label: "PII", value: summary?.total_with_pii || 0 },
+              { id: "misuse", label: "Misuse", value: summary?.misuse_events || 0 },
+              { id: "dataout", label: "Data Out", value: summary?.data_out_events || 0 },
+            ].map((pill) => (
+              <button
+                key={pill.id}
+                type="button"
+                className="pill pill-btn"
+                onClick={() => setActiveModal(pill.id)}
+              >
+                {pill.label}{" "}
+                <span className="highlight">{pill.value}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="pill pill-btn"
+              onClick={() => setActiveModal("risk")}
+            >
+              Risk{" "}
+              <span className="highlight">
+                {Number(summary?.average_risk_score || 0).toFixed(1)} /{" "}
+                {Number(summary?.highest_risk_score || 0).toFixed(1)}
+              </span>
+            </button>
           </div>
         </div>
       </section>
@@ -210,6 +215,178 @@ function AlertsSecurity() {
           </table>
         </div>
       </section>
+
+      {/* ═══════════ SNAPSHOT MODALS ═══════════ */}
+      {activeModal && (() => {
+        const piiLogs = logs.filter((l) => l.pii_detected);
+        const misuseLogs = logs.filter((l) => l.misuse_pattern_detected);
+        const dataOutLogs = logs.filter((l) => l.data_out_violation);
+        const riskLow = logs.filter((l) => Number(l.risk_score || 0) < 4).length;
+        const riskMed = logs.filter((l) => { const s = Number(l.risk_score || 0); return s >= 4 && s < 7; }).length;
+        const riskHigh = logs.filter((l) => Number(l.risk_score || 0) >= 7).length;
+
+        const modalTitles = {
+          alerts: `Active Alerts · ${summary?.active_alerts || 0}`,
+          anomalies: `Open Anomalies · ${summary?.open_anomalies || 0}`,
+          pii: `PII Detections · ${summary?.total_with_pii || 0}`,
+          misuse: `Misuse Events · ${summary?.misuse_events || 0}`,
+          dataout: `Data-Out Violations · ${summary?.data_out_events || 0}`,
+          risk: `Risk Summary`,
+        };
+
+        const SecurityLogsTable = ({ rows, emptyMsg }) => (
+          rows.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>PII</th>
+                    <th>Type</th>
+                    <th>Data Out</th>
+                    <th>Misuse</th>
+                    <th>Spike</th>
+                    <th>Risk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((item) => {
+                    const score = Number(item.risk_score || 0);
+                    const cls = score >= 7 ? "risk-high" : score >= 4 ? "risk-med" : "risk-low";
+                    return (
+                      <tr key={item.id}>
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{item.event_id}</td>
+                        <td><span className={item.pii_detected ? "badge-yes" : "badge-no"}>{item.pii_detected ? "Yes" : "—"}</span></td>
+                        <td style={{ color: item.pii_type ? "var(--gray-700)" : "var(--gray-300)" }}>{item.pii_type || "—"}</td>
+                        <td><span className={item.data_out_violation ? "badge-yes" : "badge-no"}>{item.data_out_violation ? "Yes" : "—"}</span></td>
+                        <td><span className={item.misuse_pattern_detected ? "badge-yes" : "badge-no"}>{item.misuse_pattern_detected ? "Yes" : "—"}</span></td>
+                        <td><span className={item.abnormal_usage_spike ? "badge-yes" : "badge-no"}>{item.abnormal_usage_spike ? "Yes" : "—"}</span></td>
+                        <td><span className={cls}>{score.toFixed(1)}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="empty-state">{emptyMsg}</div>
+        );
+
+        return (
+          <div
+            className="modal-backdrop metric-modal-backdrop"
+            onClick={() => setActiveModal(null)}
+          >
+            <div
+              className="modal-dialog metric-modal"
+              style={{ maxWidth: 860 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <div>
+                  <div className="metric-eyebrow">Alerts &amp; Security</div>
+                  <h3 style={{ marginTop: 8 }}>{modalTitles[activeModal]}</h3>
+                </div>
+                <button type="button" className="btn-close" onClick={() => setActiveModal(null)}>×</button>
+              </div>
+
+              {activeModal === "alerts" && (
+                alerts.length ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Severity</th>
+                          <th>Message</th>
+                          <th>Threshold</th>
+                          <th>Actual</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {alerts.map((a) => (
+                          <tr key={a.id}>
+                            <td>{a.alert_type}</td>
+                            <td><span className={`status-pill ${a.severity}`}>{a.severity}</span></td>
+                            <td>{a.message}</td>
+                            <td>{a.threshold_value ?? "—"}</td>
+                            <td>{a.actual_value ?? "—"}</td>
+                            <td><span className={`status-pill ${a.status}`}>{a.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div className="empty-state">No alerts.</div>
+              )}
+
+              {activeModal === "anomalies" && (
+                anomalies.length ? (
+                  <div className="list-grid">
+                    {anomalies.map((item) => (
+                      <div key={item.id} className="list-item">
+                        <strong>{item.anomaly_type}</strong>
+                        <div className="list-meta">
+                          <span className={`status-pill ${item.severity}`}>{item.severity}</span>{"  "}{item.message}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="empty-state">No open anomalies.</div>
+              )}
+
+              {activeModal === "pii" && (
+                <SecurityLogsTable rows={piiLogs} emptyMsg="No PII detections." />
+              )}
+
+              {activeModal === "misuse" && (
+                <SecurityLogsTable rows={misuseLogs} emptyMsg="No misuse events." />
+              )}
+
+              {activeModal === "dataout" && (
+                <SecurityLogsTable rows={dataOutLogs} emptyMsg="No data-out violations." />
+              )}
+
+              {activeModal === "risk" && (
+                <>
+                  <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                    <div className="tool-cost-chip">
+                      <strong>Avg Risk Score</strong>
+                      <div>{Number(summary?.average_risk_score || 0).toFixed(1)}</div>
+                    </div>
+                    <div className="tool-cost-chip">
+                      <strong>Highest Risk Score</strong>
+                      <div>{Number(summary?.highest_risk_score || 0).toFixed(1)}</div>
+                    </div>
+                    <div className="tool-cost-chip">
+                      <strong>Low Risk</strong>
+                      <div><span className="risk-low">{riskLow} event{riskLow !== 1 ? "s" : ""}</span></div>
+                    </div>
+                    <div className="tool-cost-chip">
+                      <strong>Medium Risk</strong>
+                      <div><span className="risk-med">{riskMed} event{riskMed !== 1 ? "s" : ""}</span></div>
+                    </div>
+                    <div className="tool-cost-chip">
+                      <strong>High Risk</strong>
+                      <div><span className="risk-high">{riskHigh} event{riskHigh !== 1 ? "s" : ""}</span></div>
+                    </div>
+                    <div className="tool-cost-chip">
+                      <strong>Total Events Scored</strong>
+                      <div>{logs.length}</div>
+                    </div>
+                  </div>
+                  {logs.length > 0 && (
+                    <>
+                      <div className="metric-eyebrow" style={{ marginBottom: 12 }}>All Events by Risk</div>
+                      <SecurityLogsTable rows={[...logs].sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0))} emptyMsg="No logs." />
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ═══════════ SECURITY SECTION ═══════════ */}
       <section className="two-column">

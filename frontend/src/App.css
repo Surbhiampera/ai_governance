@@ -337,6 +337,20 @@ textarea {
   font-size: 13px;
 }
 
+.pill-btn {
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.pill-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 14px rgba(158, 42, 151, 0.15);
+}
+.pill-btn:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
 .highlight {
   color: var(--brand-primary);
   font-weight: 700;
@@ -873,7 +887,7 @@ td {
   font-size: 15px;
 }
 
-/* ===== Getting Started · End-to-End Flow ===== */
+/* ===== Getting Started ï¿½ End-to-End Flow ===== */
 .flow-stack {
   display: grid;
   gap: 12px;
