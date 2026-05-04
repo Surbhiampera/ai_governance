@@ -19,6 +19,8 @@ import {
   getTelemetryLogs,
   getToolsUsage,
   getUsageTrends,
+  getCostTotals,
+  getCostByProject,
 } from "../api";
 
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4"];
@@ -44,11 +46,14 @@ function Dashboard() {
   const [security, setSecurity] = useState(null);
   const [toolUsage, setToolUsage] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [costTotals, setCostTotals] = useState(null);
+  const [costByProject, setCostByProject] = useState([]);
   const [activeMetric, setActiveMetric] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState(null);
+  const [activeCostTile, setActiveCostTile] = useState(null);
   // Default = overall system activity (all-time) per spec.
   const [range, setRange] = useState("all");
 
@@ -62,13 +67,15 @@ function Dashboard() {
           RANGE_OPTIONS.find((r) => r.value === currentRange) ||
           RANGE_OPTIONS[0];
 
-        const [overviewRes, trendsRes, securityRes, usageRes, logsRes] =
+        const [overviewRes, trendsRes, securityRes, usageRes, logsRes, costTotalsRes, costProjectRes] =
           await Promise.all([
             getGovernanceOverview(null, opt.days, opt.value),
             getUsageTrends(null, opt.days),
             getSecuritySummary(),
             getToolsUsage(),
             getTelemetryLogs({ limit: 20 }),
+            getCostTotals(),
+            getCostByProject(),
           ]);
 
         setOverview(overviewRes.data);
@@ -76,6 +83,8 @@ function Dashboard() {
         setSecurity(securityRes.data);
         setToolUsage(usageRes.data || []);
         setRecentLogs(logsRes.data || []);
+        setCostTotals(costTotalsRes.data || null);
+        setCostByProject(costProjectRes.data || []);
         setError("");
       } catch (err) {
         setError(
@@ -333,6 +342,116 @@ function Dashboard() {
         ))}
       </section>
 
+      {/* ── Total Cost Overview ── */}
+      {costTotals && (
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Total Cost Overview</h3>
+              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                Aggregated spend across all projects, tools, and models.
+              </p>
+            </div>
+          </div>
+
+          {/* Today / This Month / All-Time tiles */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 20 }}>
+            {[
+              { label: "Today", data: costTotals.today },
+              { label: "This Month", data: costTotals.this_month },
+              { label: "All Time", data: costTotals.all_time },
+            ].map(({ label, data }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setActiveCostTile({ label, data })}
+                style={{
+                  background: "var(--gray-50)",
+                  border: "1px solid rgba(124,112,174,0.18)",
+                  padding: "14px 18px",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "box-shadow 0.15s",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 0 0 2px rgba(158,42,151,0.25)"}
+                onMouseLeave={(e) => e.currentTarget.style.boxShadow = "none"}
+              >
+                <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{money(data?.cost)}</div>
+                <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 4 }}>
+                  {num(data?.tokens)} tokens · {num(data?.events)} events
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Top projects by cost */}
+          {costByProject.length > 0 && (
+            <>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Cost by Project
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Project</th>
+                      <th>Org</th>
+                      <th>Tools</th>
+                      <th>Events</th>
+                      <th>LLM</th>
+                      <th>Infra</th>
+                      <th>External</th>
+                      <th>Total Cost</th>
+                      <th>Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const grandTotal = costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0);
+                      return costByProject.map((r) => {
+                        const share = grandTotal > 0 ? Math.round((Number(r.total_cost) / grandTotal) * 100) : 0;
+                        return (
+                          <tr key={`${r.project_id}-${r.org_id}`}>
+                            <td><strong>{r.project_id}</strong></td>
+                            <td>{r.org_id}</td>
+                            <td>{r.tool_count}</td>
+                            <td>{num(r.total_events)}</td>
+                            <td>{money(r.llm_cost)}</td>
+                            <td>{money(r.infra_cost)}</td>
+                            <td>{money(r.external_cost)}</td>
+                            <td><strong>{money(r.total_cost)}</strong></td>
+                            <td style={{ minWidth: 110 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <div style={{ flex: 1, background: "rgba(124,112,174,0.12)", borderRadius: 4, height: 6, overflow: "hidden" }}>
+                                  <div style={{ width: `${share}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
+                                </div>
+                                <span style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{share}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                      <td colSpan={4}><strong>Grand Total</strong></td>
+                      <td>{money(costByProject.reduce((s, r) => s + Number(r.llm_cost || 0), 0))}</td>
+                      <td>{money(costByProject.reduce((s, r) => s + Number(r.infra_cost || 0), 0))}</td>
+                      <td>{money(costByProject.reduce((s, r) => s + Number(r.external_cost || 0), 0))}</td>
+                      <td><strong>{money(costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0))}</strong></td>
+                      <td><span style={{ fontSize: 12, color: "var(--gray-500)" }}>100%</span></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
       {activeMetricData ? (
         <div
           className="modal-backdrop metric-modal-backdrop"
@@ -535,6 +654,47 @@ function Dashboard() {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeCostTile && (
+        <div
+          className="modal-backdrop metric-modal-backdrop"
+          onClick={() => setActiveCostTile(null)}
+        >
+          <div
+            className="modal-dialog metric-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">Total Cost Overview</div>
+                <h3 style={{ marginTop: 8 }}>{activeCostTile.label}</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setActiveCostTile(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="metric-modal-grid">
+              {[
+                { label: "Total Cost", value: money(activeCostTile.data?.cost) },
+                { label: "Tokens", value: num(activeCostTile.data?.tokens) },
+                { label: "Events", value: num(activeCostTile.data?.events) },
+              ].map((row) => (
+                <div key={row.label} className="tool-cost-chip">
+                  <strong>{row.label}</strong>
+                  <div>{row.value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="action-row" style={{ marginTop: 16 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setActiveCostTile(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}

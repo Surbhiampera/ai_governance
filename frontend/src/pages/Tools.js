@@ -168,9 +168,10 @@ function Tools() {
                   <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "var(--gray-600)", lineHeight: 1.8 }}>
                     <li>A single project can use <strong>any number of models</strong> from different providers simultaneously.</li>
                     <li>A single project can call <strong>multiple tools</strong> (web search, code executor, embeddings) in one workflow.</li>
-                    <li>Models and tools are registered <strong>dynamically</strong> — no static config required.</li>
-                    <li>Cost is resolved automatically from <code>model_pricing</code> and <code>tool_registry</code> DB tables.</li>
-                    <li>Per-model and per-tool cost breakdown is stored in <code>trace_model_usage</code> / <code>trace_tool_usage</code> for drill-down queries.</li>
+                    <li>Models and tools are registered <strong>directly</strong> — no connector or external dependency required.</li>
+                    <li>Total cost per tool, total cost per model, and overall project cost are calculated automatically.</li>
+                    <li>Per-model and per-tool breakdown is stored in <code>trace_model_usage</code> / <code>trace_tool_usage</code> for drill-down queries.</li>
+                    <li>Token allocation, tokens used, and remaining tokens are tracked in real time via the quota endpoint.</li>
                   </ul>
                 </div>
 
@@ -185,15 +186,17 @@ function Tools() {
                 </div>
 
                 <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                  <h4 style={{ marginTop: 0 }}>Dynamic Registration APIs</h4>
+                  <h4 style={{ marginTop: 0 }}>Direct Registration APIs</h4>
                   <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 0 }}>
-                    Register models and tools at runtime — no restart required. Use the <strong>Tracing → Model &amp; Tool Config</strong> tab for UI-based registration.
+                    Register models and tools directly — no connector or external integration required.
+                    Use the <strong>Tracing → Model-Tool Configuration</strong> tab for UI-based management.
                   </p>
                   <div style={{ fontSize: 12, fontFamily: "monospace", lineHeight: 2 }}>
                     <div><code>POST /pricing/</code> — register a model with per-token pricing</div>
-                    <div><code>POST /tools/register</code> — register a tool with cost model</div>
+                    <div><code>POST /tools/register</code> — register a tool with its cost model</div>
                     <div><code>GET  /models/</code> — list all registered models</div>
                     <div><code>GET  /tools/</code> — list all registered tools</div>
+                    <div><code>GET  /tools/usage</code> — aggregated cost and token metrics per tool</div>
                   </div>
                 </div>
               </div>
@@ -234,26 +237,20 @@ function Tools() {
               </div>
 
               <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0 }}>Unified Multi-Model Trace — <code>POST /control/ingest/trace</code></h4>
-                <pre style={{ fontSize: 12, overflow: "auto", margin: 0 }}>{`{
-  "org_id":        "org-acme",
-  "project_id":    "proj-rag",
-  "workflow_name": "rag-pipeline",
-  "models": [
-    { "model_name": "text-embedding-3-small",
-      "provider": "openai",
-      "input_tokens": 3200, "output_tokens": 0 },
-    { "model_name": "gpt-4o",
-      "provider": "openai",
-      "input_tokens": 1800, "output_tokens": 420 }
-  ],
-  "tools": [
-    { "tool_name": "vector-search",
-      "invocation_count": 5, "cost": 0.001 }
-  ]
-}`}</pre>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", marginBottom: 0 }}>
-                  One parent event + per-model and per-tool breakdown stored automatically.
+                <h4 style={{ marginTop: 0 }}>Model-Tool Configuration</h4>
+                <p style={{ fontSize: 13, color: "var(--gray-600)", marginTop: 0 }}>
+                  Add and manage multiple models and tools within a single project — directly,
+                  with no connector or external integration in between.
+                </p>
+                <div style={{ fontSize: 12, fontFamily: "monospace", lineHeight: 2 }}>
+                  <div><code>POST /pricing/</code> — attach a model (with per-token pricing) to a project</div>
+                  <div><code>POST /tools/register</code> — attach a tool (with its cost model) to a project</div>
+                  <div><code>GET  /models/?project_id=…</code> — list models configured for a project</div>
+                  <div><code>GET  /tools/?project_id=…</code> — list tools configured for a project</div>
+                  <div><code>DELETE /models/{"{id}"}</code> / <code>DELETE /tools/{"{id}"}</code> — remove from project</div>
+                </div>
+                <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 10, marginBottom: 0 }}>
+                  Use the <strong>Tracing → Model-Tool Configuration</strong> tab for the UI workflow.
                 </p>
               </div>
             </div>

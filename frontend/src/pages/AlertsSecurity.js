@@ -51,6 +51,7 @@ function AlertsSecurity() {
   const [quotaList, setQuotaList] = useState([]);
   const [quotaLoading, setQuotaLoading] = useState(false);
   const [notifStatus, setNotifStatus] = useState(null);
+  const [tokenPopupDismissed, setTokenPopupDismissed] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -102,8 +103,59 @@ function AlertsSecurity() {
 
   if (loading) return <div className="loading">Loading alerts &amp; security…</div>;
 
+  const criticalQuotas = quotaList.filter(
+    (q) => Number(q.usage_percent || 0) >= 80 || Number(q.token_quota_percent || 0) >= 80
+  );
+
   return (
     <div className="page-shell">
+      {/* ── Token Exhaustion Popup Banner ── */}
+      {!tokenPopupDismissed && criticalQuotas.length > 0 && (
+        <div style={{
+          position: "fixed", top: 16, right: 16, zIndex: 9999,
+          background: "#fff3cd", border: "2px solid #e67e22",
+          borderRadius: 12, padding: "14px 18px", maxWidth: 380,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#92400e", marginBottom: 6 }}>
+                Token / Budget Limit Warning
+              </div>
+              {criticalQuotas.map((q) => {
+                const costPct = Number(q.usage_percent || 0);
+                const tokPct = Number(q.token_quota_percent || 0);
+                return (
+                  <div key={q.org_id} style={{ fontSize: 13, color: "#78350f", marginBottom: 4 }}>
+                    <strong>{q.org}</strong>
+                    {costPct >= 80 && (
+                      <span style={{ marginLeft: 6, background: costPct >= 100 ? "#fee2e2" : "#fef3c7", color: costPct >= 100 ? "#991b1b" : "#92400e", borderRadius: 6, padding: "1px 7px", fontSize: 11 }}>
+                        Budget {costPct.toFixed(0)}%
+                      </span>
+                    )}
+                    {tokPct >= 80 && (
+                      <span style={{ marginLeft: 4, background: tokPct >= 100 ? "#fee2e2" : "#fef3c7", color: tokPct >= 100 ? "#991b1b" : "#92400e", borderRadius: 6, padding: "1px 7px", fontSize: 11 }}>
+                        Tokens {tokPct.toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 12, color: "#92400e", marginTop: 6 }}>
+                Alerts dispatched via configured channels.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTokenPopupDismissed(true)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#92400e", fontSize: 18, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header + Snapshot ── */}
       <section className="panel" style={{ padding: "18px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
@@ -136,13 +188,10 @@ function AlertsSecurity() {
 
       {/* ══════════ TOKEN QUOTA & BUDGET SECTION ══════════ */}
       <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Token Quota &amp; Budget Status</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Real-time usage vs budget with velocity-based end-of-month forecast. All limits from DB.
-            </p>
-          </div>
+        <div className="section-head" style={{ alignItems: "center" }}>
+          <h3 style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.01em", margin: 0 }}>
+            Token Quota &amp; Budget Status
+          </h3>
           <button type="button" className="btn btn-ghost" onClick={loadQuotas} disabled={quotaLoading}>
             {quotaLoading ? "Refreshing…" : "Refresh"}
           </button>
@@ -153,74 +202,57 @@ function AlertsSecurity() {
         ) : quotaList.length === 0 ? (
           <div className="empty-state">No organizations with budget config found.</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, marginTop: 8 }}>
             {quotaList.map((q) => {
               const willExceed = q.will_exceed_budget;
               const usagePct = Number(q.usage_percent || 0);
               const forecastPct = Number(q.forecast_usage_percent || 0);
               const tokenPct = Number(q.token_quota_percent || 0);
-              const borderColor = willExceed ? "#e74c3c" : usagePct >= 90 ? "#e67e22" : "rgba(124,112,174,0.2)";
+              const borderColor = willExceed ? "#e74c3c" : usagePct >= 90 ? "#e67e22" : "rgba(124,112,174,0.18)";
 
               return (
                 <div
                   key={q.org_id}
-                  className="panel"
-                  style={{ background: "var(--gray-50)", border: `1px solid ${borderColor}`, padding: 16 }}
+                  style={{
+                    background: "#fff",
+                    border: `1px solid ${borderColor}`,
+                    borderRadius: 10,
+                    padding: 18,
+                  }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{q.org}</div>
-                      <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>{q.org_id}</div>
-                    </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: "-0.01em" }}>{q.org}</div>
                     {willExceed && (
-                      <span className="status-pill critical" style={{ fontSize: 11 }}>Overrun Risk</span>
+                      <span className="status-pill critical" style={{ fontSize: 11, fontWeight: 700 }}>Overrun Risk</span>
                     )}
                     {!willExceed && usagePct >= 90 && (
-                      <span className="status-pill high" style={{ fontSize: 11 }}>Near Limit</span>
+                      <span className="status-pill high" style={{ fontSize: 11, fontWeight: 700 }}>Near Limit</span>
                     )}
                   </div>
 
                   {/* Cost budget bar */}
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ fontWeight: 600 }}>Cost Budget</span>
-                      <span style={{ color: "var(--gray-600)" }}>
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                      <span style={{ fontWeight: 700 }}>Cost Budget</span>
+                      <span style={{ fontWeight: 600, color: "var(--gray-700)" }}>
                         ${Number(q.month_cost || 0).toFixed(2)} / ${Number(q.budget_limit || 0).toFixed(2)}
                       </span>
                     </div>
                     <QuotaBar pct={usagePct} forecast={forecastPct} />
-                    {q.will_exceed_budget && (
-                      <div style={{ fontSize: 12, color: "#c0392b", marginTop: 4 }}>
-                        Forecast ${Number(q.forecast_month_cost || 0).toFixed(2)} exceeds limit — {q.days_remaining_in_month}d remaining
-                      </div>
-                    )}
                   </div>
 
                   {/* Token quota bar */}
                   {q.token_quota_daily && (
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                        <span style={{ fontWeight: 600 }}>Daily Token Quota</span>
-                        <span style={{ color: "var(--gray-600)" }}>
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ fontWeight: 700 }}>Daily Token Quota</span>
+                        <span style={{ fontWeight: 600, color: "var(--gray-700)" }}>
                           {(q.token_quota_used_today || 0).toLocaleString()} / {(q.token_quota_daily || 0).toLocaleString()}
                         </span>
                       </div>
                       <QuotaBar pct={tokenPct} forecast={null} />
                     </div>
                   )}
-
-                  {/* Velocity stats */}
-                  <div className="metric-chip-row" style={{ marginTop: 10, flexWrap: "wrap" }}>
-                    <span className="metric-chip">
-                      Velocity <b>${Number(q.daily_velocity_cost || 0).toFixed(4)}/day</b>
-                    </span>
-                    <span className="metric-chip">
-                      Tokens today <b>{(q.today_tokens || 0).toLocaleString()}</b>
-                    </span>
-                    <span className="metric-chip">
-                      Remaining <b>${Number(q.cost_remaining || 0).toFixed(2)}</b>
-                    </span>
-                  </div>
                 </div>
               );
             })}
@@ -495,6 +527,52 @@ function AlertsSecurity() {
           ) : (
             <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.2)", padding: 16 }}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>WhatsApp (Twilio)</div>
+              <div style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading channel status…</div>
+            </div>
+          )}
+
+          {/* Microsoft Teams channel */}
+          {notifStatus ? (
+            <div className="panel" style={{
+              background: "var(--gray-50)",
+              border: `1px solid ${notifStatus.channels.teams.enabled ? "#27ae60" : "rgba(124,112,174,0.2)"}`,
+              padding: 16,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Microsoft Teams</div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>
+                    {notifStatus.channels.teams.enabled
+                      ? `${notifStatus.channels.teams.webhooks} webhook(s) configured`
+                      : "Not configured"}
+                  </div>
+                </div>
+                <span className={`status-pill ${notifStatus.channels.teams.enabled ? "success" : "warning"}`} style={{ fontSize: 11 }}>
+                  {notifStatus.channels.teams.enabled ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--gray-600)", marginBottom: 8 }}>
+                {notifStatus.channels.teams.description}
+              </div>
+              {!notifStatus.channels.teams.enabled && (
+                <details style={{ marginTop: 8 }}>
+                  <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--gray-500)", fontWeight: 600 }}>
+                    Required env vars
+                  </summary>
+                  <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                    {notifStatus.channels.teams.config_vars.map((v) => (
+                      <code key={v} style={{ fontSize: 11, background: "var(--gray-100)", padding: "2px 6px", borderRadius: 4 }}>{v}</code>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 6 }}>
+                    Comma-separate multiple webhook URLs to notify multiple channels.
+                  </div>
+                </details>
+              )}
+            </div>
+          ) : (
+            <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.2)", padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Microsoft Teams</div>
               <div style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading channel status…</div>
             </div>
           )}

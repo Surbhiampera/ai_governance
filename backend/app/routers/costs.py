@@ -76,8 +76,12 @@ def cost_by_project(
             TelemetryEvent.org_id,
             func.count(TelemetryEvent.id).label("total_events"),
             func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
             func.sum(TelemetryEvent.total_cost).label("total_cost"),
             func.avg(TelemetryEvent.latency_ms).label("avg_latency_ms"),
+            func.count(TelemetryEvent.model_name.distinct()).label("tool_count"),
         )
         .filter(TelemetryEvent.project_id.isnot(None), TelemetryEvent.project_id != "")
         .group_by(TelemetryEvent.project_id, TelemetryEvent.org_id)
@@ -92,11 +96,101 @@ def cost_by_project(
             "org_id": r.org_id,
             "total_events": r.total_events or 0,
             "total_tokens": r.total_tokens or 0,
+            "llm_cost": float(r.llm_cost or 0),
+            "infra_cost": float(r.infra_cost or 0),
+            "external_cost": float(r.external_cost or 0),
             "total_cost": float(r.total_cost or 0),
             "avg_latency_ms": round(float(r.avg_latency_ms or 0), 1),
+            "tool_count": int(r.tool_count or 0),
         }
         for r in rows.all()
     ]
+
+
+@router.get("/project-breakdown")
+def project_cost_breakdown(
+    project_id: str = Query(...),
+    org_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Full cost breakdown for a single project: total aggregates + per-tool split
+    with each tool's % share of the project total cost."""
+    filters = [TelemetryEvent.project_id == project_id]
+    if org_id:
+        filters.append(TelemetryEvent.org_id == org_id)
+
+    totals = (
+        db.query(
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.avg(TelemetryEvent.latency_ms).label("avg_latency_ms"),
+        )
+        .filter(*filters)
+        .first()
+    )
+
+    total_cost = float(totals.total_cost or 0) if totals else 0.0
+    llm = float(totals.llm_cost or 0) if totals else 0.0
+    infra = float(totals.infra_cost or 0) if totals else 0.0
+    external = float(totals.external_cost or 0) if totals else 0.0
+    pct = lambda v: round((v / total_cost * 100), 1) if total_cost > 0 else 0.0
+
+    tool_rows = (
+        db.query(
+            TelemetryEvent.model_name.label("tool_name"),
+            func.max(ToolRegistry.vendor).label("vendor"),
+            func.max(ToolRegistry.cost_model).label("cost_model"),
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        )
+        .outerjoin(ToolRegistry, ToolRegistry.tool_name == TelemetryEvent.model_name)
+        .filter(*filters)
+        .filter(TelemetryEvent.model_name.isnot(None), TelemetryEvent.model_name != "")
+        .group_by(TelemetryEvent.model_name)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+        .all()
+    )
+
+    tools = [
+        {
+            "tool_name": r.tool_name,
+            "vendor": r.vendor or "—",
+            "cost_model": r.cost_model or "per_token",
+            "total_events": r.total_events or 0,
+            "total_tokens": int(r.total_tokens or 0),
+            "llm_cost": float(r.llm_cost or 0),
+            "infra_cost": float(r.infra_cost or 0),
+            "external_cost": float(r.external_cost or 0),
+            "total_cost": float(r.total_cost or 0),
+            "cost_share_pct": pct(float(r.total_cost or 0)),
+        }
+        for r in tool_rows
+    ]
+
+    return {
+        "project_id": project_id,
+        "org_id": org_id,
+        "total_cost": round(total_cost, 6),
+        "llm_cost": round(llm, 6),
+        "infra_cost": round(infra, 6),
+        "external_cost": round(external, 6),
+        "llm_pct": pct(llm),
+        "infra_pct": pct(infra),
+        "external_pct": pct(external),
+        "total_events": int(totals.total_events or 0) if totals else 0,
+        "total_tokens": int(totals.total_tokens or 0) if totals else 0,
+        "avg_latency_ms": round(float(totals.avg_latency_ms or 0), 1) if totals else 0.0,
+        "tool_count": len(tools),
+        "tools": tools,
+    }
 
 
 @router.get("/daily")

@@ -1,4 +1,4 @@
-"""Notification Service — email (SMTP) and WhatsApp (Twilio) alert delivery.
+"""Notification Service — email (SMTP), WhatsApp (Twilio), and Microsoft Teams alert delivery.
 
 Configuration is entirely via environment variables — zero hardcoded credentials.
 
@@ -15,6 +15,9 @@ Optional (WhatsApp via Twilio):
   TWILIO_AUTH_TOKEN    Twilio Auth Token
   TWILIO_WHATSAPP_FROM WhatsApp-enabled number, e.g. whatsapp:+14155238886
   TWILIO_WHATSAPP_TO   Comma-separated recipient numbers, e.g. whatsapp:+1234567890
+
+Optional (Microsoft Teams via Incoming Webhooks):
+  TEAMS_WEBHOOK_URLS   Comma-separated Incoming Webhook URLs for one or more Teams channels
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ from email.mime.text import MIMEText
 logger = logging.getLogger(__name__)
 
 _EMOJI = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}
+_TEAMS_COLOR = {"critical": "FF0000", "high": "FF6600", "medium": "FFCC00", "low": "00AA44"}
 
 
 class NotificationService:
@@ -45,6 +49,9 @@ class NotificationService:
         self.twilio_to_numbers = [
             n.strip() for n in os.getenv("TWILIO_WHATSAPP_TO", "").split(",") if n.strip()
         ]
+        self.teams_webhooks = [
+            u.strip() for u in os.getenv("TEAMS_WEBHOOK_URLS", "").split(",") if u.strip()
+        ]
 
     def notify(
         self,
@@ -54,7 +61,7 @@ class NotificationService:
         org_id: str = "",
         project_id: str | None = None,
     ) -> None:
-        """Dispatch email + WhatsApp for high/critical alerts; silently skip lower severities."""
+        """Dispatch email + WhatsApp + Teams for high/critical alerts; silently skip lower severities."""
         if severity not in ("critical", "high"):
             return
 
@@ -69,6 +76,7 @@ class NotificationService:
 
         self._send_email(subject, body)
         self._send_whatsapp(f"{emoji} {subject}\n{message[:400]}")
+        self._send_teams(subject, body, severity)
 
     # ─────────────────── email ───────────────────
 
@@ -107,6 +115,42 @@ class NotificationService:
             logger.warning("twilio package not installed — WhatsApp notifications disabled. pip install twilio")
         except Exception as exc:
             logger.error("WhatsApp notification failed: %s", exc)
+
+    # ─────────────────── microsoft teams ───────────────────
+
+    def _send_teams(self, title: str, body: str, severity: str) -> None:
+        if not self.teams_webhooks:
+            return
+        try:
+            import urllib.request
+            import json as _json
+            color = _TEAMS_COLOR.get(severity, "FFCC00")
+            payload = {
+                "@type": "MessageCard",
+                "@context": "http://schema.org/extensions",
+                "themeColor": color,
+                "summary": title,
+                "sections": [
+                    {
+                        "activityTitle": f"**{title}**",
+                        "activityText": body.replace("\n", "<br>"),
+                        "markdown": True,
+                    }
+                ],
+            }
+            data = _json.dumps(payload).encode("utf-8")
+            for webhook_url in self.teams_webhooks:
+                req = urllib.request.Request(
+                    webhook_url,
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10):
+                    pass
+            logger.info("Teams alert sent to %d webhook(s)", len(self.teams_webhooks))
+        except Exception as exc:
+            logger.error("Teams notification failed: %s", exc)
 
 
 notification_service = NotificationService()

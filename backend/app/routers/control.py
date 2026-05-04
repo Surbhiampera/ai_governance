@@ -507,9 +507,11 @@ def get_notification_status():
     twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     twilio_from = os.getenv("TWILIO_WHATSAPP_FROM", "")
     twilio_to = [n.strip() for n in os.getenv("TWILIO_WHATSAPP_TO", "").split(",") if n.strip()]
+    teams_webhooks = [u.strip() for u in os.getenv("TEAMS_WEBHOOK_URLS", "").split(",") if u.strip()]
 
     email_ok = bool(smtp_host and notification_emails)
     wa_ok = bool(twilio_sid and twilio_from and twilio_to)
+    teams_ok = bool(teams_webhooks)
 
     return {
         "channels": {
@@ -534,9 +536,16 @@ def get_notification_status():
                 "description": "WhatsApp notifications via Twilio for high/critical alerts.",
                 "config_vars": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "TWILIO_WHATSAPP_TO"],
             },
+            "teams": {
+                "enabled": teams_ok,
+                "status": "active" if teams_ok else "not_configured",
+                "webhooks": len(teams_webhooks),
+                "description": "Microsoft Teams notifications via Incoming Webhooks for high/critical alerts.",
+                "config_vars": ["TEAMS_WEBHOOK_URLS"],
+            },
         },
         "alert_severities_notified": ["critical", "high"],
-        "note": "Email and WhatsApp fire automatically for 'critical' and 'high' severity only. All severities appear in the dashboard.",
+        "note": "Email, WhatsApp, and Teams fire automatically for 'critical' and 'high' severity only. All severities appear in the dashboard.",
     }
 
 

@@ -78,6 +78,10 @@ export const getControlCostBreakdown = (orgId, projectId) =>
   API.get("/control/cost-breakdown", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
+export const getProjectCostBreakdown = (projectId, orgId) =>
+  API.get("/costs/project-breakdown", {
+    params: { project_id: projectId, org_id: orgId || undefined },
+  });
 export const getNotificationStatus = () => API.get("/control/notifications/status");
 
 // ─────────────────────── Tools / Models ───────────────────────
