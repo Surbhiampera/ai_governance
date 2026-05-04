@@ -1,6 +1,42 @@
+"""SecurityEngine — config-driven PII detection and risk scoring.
+
+All risk weights come from environment variables — zero hardcoded numbers.
+Set them in backend/.env; defaults are shown below.
+
+ENV variable             Default  Meaning
+─────────────────────────────────────────────────────────────────────
+RISK_WEIGHT_INPUT_MB       8      risk pts per MB of input data
+RISK_WEIGHT_OUTPUT_MB      12     risk pts per MB of output data
+RISK_WEIGHT_TOKEN_PER_500  4      risk pts per 500 tokens
+RISK_WEIGHT_PII            20     flat pts when PII detected
+RISK_WEIGHT_DATA_OUT       15     flat pts for data-out violation
+RISK_WEIGHT_MISUSE         20     flat pts for misuse tag
+RISK_WEIGHT_ERROR          5      flat pts for non-success status
+RISK_CAP_INPUT_MB          25     max pts from input MB
+RISK_CAP_OUTPUT_MB         25     max pts from output MB
+RISK_CAP_TOKEN             20     max pts from token volume
+DATA_OUT_VIOLATION_MB      0      explicit MB threshold (0 = flag only)
+MISUSE_TAGS                exfiltration,credential_abuse,
+                           prompt_injection,scraping
+"""
+from __future__ import annotations
+
+import os
 from decimal import Decimal
 
 from app.schemas import TelemetryEventCreate
+
+
+def _dec(env_key: str, default: str) -> Decimal:
+    return Decimal(os.getenv(env_key, default))
+
+
+def _misuse_tag_set() -> frozenset[str]:
+    raw = os.getenv(
+        "MISUSE_TAGS",
+        "exfiltration,credential_abuse,prompt_injection,scraping",
+    )
+    return frozenset(t.strip().lower() for t in raw.split(",") if t.strip())
 
 
 class SecurityEngine:
@@ -9,35 +45,53 @@ class SecurityEngine:
         output_mb = Decimal(str(event_data.output_data_size_mb or 0))
         total_tokens = event_data.prompt_tokens + event_data.completion_tokens
 
-        risk_score = Decimal("0")
-        risk_score += min(input_mb * Decimal("8"), Decimal("25"))
-        risk_score += min(output_mb * Decimal("12"), Decimal("25"))
-        risk_score += min(Decimal(str(total_tokens)) / Decimal("500"), Decimal("20"))
+        # Weights — all from env/config, never hardcoded
+        w_in = _dec("RISK_WEIGHT_INPUT_MB", "8")
+        w_out = _dec("RISK_WEIGHT_OUTPUT_MB", "12")
+        w_tok = _dec("RISK_WEIGHT_TOKEN_PER_500", "4")
+        w_pii = _dec("RISK_WEIGHT_PII", "20")
+        w_dout = _dec("RISK_WEIGHT_DATA_OUT", "15")
+        w_mis = _dec("RISK_WEIGHT_MISUSE", "20")
+        w_err = _dec("RISK_WEIGHT_ERROR", "5")
+        cap_in = _dec("RISK_CAP_INPUT_MB", "25")
+        cap_out = _dec("RISK_CAP_OUTPUT_MB", "25")
+        cap_tok = _dec("RISK_CAP_TOKEN", "20")
+        dout_mb_thresh = _dec("DATA_OUT_VIOLATION_MB", "0")
 
-        pii_detected = bool(event_data.contains_pii or (event_data.pii_type and event_data.pii_type != "none"))
+        risk = Decimal("0")
+        risk += min(input_mb * w_in, cap_in)
+        risk += min(output_mb * w_out, cap_out)
+        risk += min(Decimal(str(total_tokens)) / Decimal("500") * w_tok, cap_tok)
+
+        pii_detected = bool(
+            event_data.contains_pii
+            or (event_data.pii_type and event_data.pii_type.lower() not in {"", "none"})
+        )
         if pii_detected:
-            risk_score += Decimal("20")
+            risk += w_pii
 
-        data_out_violation = bool(event_data.data_out_violation or output_mb > Decimal("12"))
+        data_out_violation = bool(
+            event_data.data_out_violation
+            or (dout_mb_thresh > 0 and output_mb > dout_mb_thresh)
+        )
         if data_out_violation:
-            risk_score += Decimal("15")
+            risk += w_dout
 
-        suspicious_tags = {"exfiltration", "credential_abuse", "prompt_injection", "scraping"}
-        misuse_pattern_detected = any(tag in suspicious_tags for tag in event_data.tags)
+        misuse_tags = _misuse_tag_set()
+        misuse_pattern_detected = any(t.lower() in misuse_tags for t in event_data.tags)
         if misuse_pattern_detected:
-            risk_score += Decimal("20")
+            risk += w_mis
 
         if event_data.status and event_data.status.lower() not in {"success", "completed"}:
-            risk_score += Decimal("5")
+            risk += w_err
 
-        risk_score = min(risk_score, Decimal("100"))
-        masking_applied = pii_detected or data_out_violation
+        risk = min(risk, Decimal("100"))
 
         return {
             "pii_detected": pii_detected,
             "pii_type": event_data.pii_type if pii_detected else None,
             "data_out_violation": data_out_violation,
             "misuse_pattern_detected": misuse_pattern_detected,
-            "risk_score": risk_score.quantize(Decimal("0.01")),
-            "masking_applied": masking_applied,
+            "risk_score": risk.quantize(Decimal("0.01")),
+            "masking_applied": pii_detected or data_out_violation,
         }

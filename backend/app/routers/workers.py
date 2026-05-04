@@ -1,65 +1,43 @@
-from fastapi import APIRouter
+"""Workers router — on-demand manual triggers for scheduled jobs.
 
-from app.workers.tasks import run_alert_scan, run_anomaly_detection, run_connector_poll, run_daily_aggregation, run_monthly_aggregation
+The same jobs run automatically via APScheduler (app.scheduler).
+These endpoints let operators trigger them manually from the UI or API.
+"""
+import datetime
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_db
+from app.services.alert_engine import AlertEngine
+from app.workers.tasks import _detect_anomalies, _rebuild_daily_summary, _rebuild_monthly_summary
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
 
-@router.post("/daily-aggregation")
-def trigger_daily_aggregation():
-    run_daily_aggregation.delay()
-    return {"status": "queued", "task": "daily_aggregation"}
-
-
-@router.post("/monthly-aggregation")
-def trigger_monthly_aggregation():
-    run_monthly_aggregation.delay()
-    return {"status": "queued", "task": "monthly_aggregation"}
-
-
 @router.post("/daily-aggregation/sync")
-def trigger_daily_aggregation_sync():
-    result = run_daily_aggregation()
-    return {"status": "completed", "result": result}
+def trigger_daily_aggregation_sync(db: Session = Depends(get_db)):
+    rows = _rebuild_daily_summary(db, datetime.date.today())
+    db.commit()
+    return {"status": "completed", "result": {"rows_processed": rows}}
 
 
 @router.post("/monthly-aggregation/sync")
-def trigger_monthly_aggregation_sync():
-    result = run_monthly_aggregation()
-    return {"status": "completed", "result": result}
-
-
-@router.post("/anomaly-detection")
-def trigger_anomaly_detection():
-    run_anomaly_detection.delay()
-    return {"status": "queued", "task": "anomaly_detection"}
+def trigger_monthly_aggregation_sync(db: Session = Depends(get_db)):
+    rows = _rebuild_monthly_summary(db)
+    db.commit()
+    return {"status": "completed", "result": {"rows_processed": rows}}
 
 
 @router.post("/anomaly-detection/sync")
-def trigger_anomaly_detection_sync():
-    result = run_anomaly_detection()
-    return {"status": "completed", "result": result}
-
-
-@router.post("/alert-scan")
-def trigger_alert_scan():
-    run_alert_scan.delay()
-    return {"status": "queued", "task": "alert_scan"}
+def trigger_anomaly_detection_sync(db: Session = Depends(get_db)):
+    created = _detect_anomalies(db)
+    db.commit()
+    return {"status": "completed", "result": {"anomalies_created": created}}
 
 
 @router.post("/alert-scan/sync")
-def trigger_alert_scan_sync():
-    result = run_alert_scan()
-    return {"status": "completed", "result": result}
-
-
-@router.post("/connector-poll")
-def trigger_connector_poll():
-    run_connector_poll.delay()
-    return {"status": "queued", "task": "connector_poll"}
-
-
-@router.post("/connector-poll/sync")
-def trigger_connector_poll_sync():
-    result = run_connector_poll()
-    return {"status": "completed", "result": result}
+def trigger_alert_scan_sync(db: Session = Depends(get_db)):
+    created = AlertEngine().create_daily_anomaly_alerts(db)
+    db.commit()
+    return {"status": "completed", "result": {"alerts_created": created}}

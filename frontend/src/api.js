@@ -5,6 +5,7 @@ const API = axios.create({
   timeout: 8000,
 });
 
+// ─────────────────────── Summary / Dashboard ───────────────────────
 export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
   API.get("/summary/overview", {
     params: { org_id: orgId || undefined, days, range: range || undefined },
@@ -12,51 +13,39 @@ export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
 
 export const getTodaySummary = () => API.get("/summary/today");
 export const getDailySummary = (start, end, orgId) =>
-  API.get("/summary/daily", {
-    params: { start, end, org_id: orgId || undefined },
-  });
+  API.get("/summary/daily", { params: { start, end, org_id: orgId || undefined } });
 export const getMonthlySummary = (orgId, projectId) =>
   API.get("/summary/monthly", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
 export const getUsageTrends = (orgId, days) =>
-  API.get("/summary/trends", {
-    params: { org_id: orgId || undefined, days: days || 30 },
-  });
+  API.get("/summary/trends", { params: { org_id: orgId || undefined, days: days || 30 } });
 
+// ─────────────────────── Alerts ───────────────────────
 export const getAlerts = (status) =>
   API.get("/alerts/", { params: { status: status || undefined } });
 export const resolveAlert = (id) => API.patch(`/alerts/${id}/resolve`);
 
+// ─────────────────────── Security ───────────────────────
 export const getSecuritySummary = () => API.get("/security/summary");
 export const getSecurityLogs = (piiDetected, misuseDetected) =>
-  API.get("/security/logs", {
-    params: {
-      pii_detected: piiDetected,
-      misuse_detected: misuseDetected,
-    },
-  });
+  API.get("/security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected } });
 export const getUsageAnomalies = (status = "open") =>
   API.get("/security/anomalies", { params: { status } });
 
-// Combined alerts & security endpoints
+// Combined alerts & security
 export const getAlertsSecurity = (status) =>
-  API.get("/alerts-security/alerts", {
-    params: { status: status || undefined },
-  });
+  API.get("/alerts-security/alerts", { params: { status: status || undefined } });
 export const resolveAlertCombined = (id) =>
   API.patch(`/alerts-security/alerts/${id}/resolve`);
-export const getSecuritySummaryCombined = () =>
-  API.get("/alerts-security/summary");
+export const getSecuritySummaryCombined = () => API.get("/alerts-security/summary");
 export const getSecurityLogsCombined = (piiDetected, misuseDetected) =>
-  API.get("/alerts-security/logs", {
-    params: { pii_detected: piiDetected, misuse_detected: misuseDetected },
-  });
+  API.get("/alerts-security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected } });
 export const getAnomaliesCombined = (status = "open") =>
   API.get("/alerts-security/anomalies", { params: { status } });
 
-export const getTelemetryLogs = (params) =>
-  API.get("/telemetry/logs", { params });
+// ─────────────────────── Telemetry / Tracing ───────────────────────
+export const getTelemetryLogs = (params) => API.get("/telemetry/logs", { params });
 export const getTrace = (eventId) => API.get(`/telemetry/traces/${eventId}`);
 export const postTelemetryEvent = (data) => API.post("/telemetry/event", data);
 export const postTelemetryBatch = (events) =>
@@ -65,7 +54,33 @@ export const updateTelemetryEvent = (eventId, data) =>
   API.put(`/telemetry/event/${eventId}`, data);
 export const deleteTelemetryEvent = (eventId) =>
   API.delete(`/telemetry/event/${eventId}`);
+export const trackEvent = (data) => API.post("/telemetry/track", data);
 
+// Super Admin
+export const getSuperAdminLogs = (params) =>
+  API.get("/telemetry/admin/logs", { params });
+export const getSuperAdminAggregate = (params) =>
+  API.get("/telemetry/admin/aggregate", { params });
+export const getSuperAdminRegisteredTools = (params) =>
+  API.get("/telemetry/admin/registered-tools", { params });
+
+// ─────────────────────── Control (vendor-agnostic ingestion) ───────────────────────
+export const controlIngest = (data) => API.post("/control/ingest", data);
+export const controlIngestBatch = (events) => API.post("/control/ingest/batch", { events });
+export const controlIngestTrace = (data) => API.post("/control/ingest/trace", data);
+export const getControlQuota = (orgId, projectId) =>
+  API.get(`/control/quota/${orgId}`, { params: { project_id: projectId || undefined } });
+export const getProjectTrace = (projectId, orgId) =>
+  API.get(`/control/project/${projectId}/trace`, { params: { org_id: orgId || undefined } });
+export const getControlTraceDetail = (traceId, orgId) =>
+  API.get(`/control/trace/${traceId}`, { params: { org_id: orgId || undefined } });
+export const getControlCostBreakdown = (orgId, projectId) =>
+  API.get("/control/cost-breakdown", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getNotificationStatus = () => API.get("/control/notifications/status");
+
+// ─────────────────────── Tools / Models ───────────────────────
 export const getTools = () => API.get("/tools/");
 export const registerTool = (data) => API.post("/tools/register", data);
 export const getToolsUsage = () => API.get("/tools/usage");
@@ -75,14 +90,15 @@ export const createConnector = (data) => API.post("/tools/connectors", data);
 export const getModels = () => API.get("/models/");
 export const registerModel = (data) => API.post("/models/register", data);
 
+// ─────────────────────── Governance rules ───────────────────────
 export const getRules = () => API.get("/governance/rules");
 export const createRule = (data) => API.post("/governance/rules", data);
 
+// ─────────────────────── Organizations / Projects ───────────────────────
 export const getOrganizations = () => API.get("/organizations/");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
 export const createOrganization = (data) => API.post("/organizations/", data);
-export const updateOrganization = (id, data) =>
-  API.put(`/organizations/${id}`, data);
+export const updateOrganization = (id, data) => API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
 
 export const getProjects = (orgId) =>
@@ -92,6 +108,7 @@ export const createProject = (data) => API.post("/projects/", data);
 export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
 export const deleteProject = (id) => API.delete(`/projects/${id}`);
 
+// ─────────────────────── Budgets / API Keys ───────────────────────
 export const getBudgets = (orgId) =>
   API.get("/budgets/", { params: { org_id: orgId || undefined } });
 export const createBudget = (data) => API.post("/budgets/", data);
@@ -105,24 +122,13 @@ export const getApiKeys = (orgId, projectId) =>
 export const createApiKey = (data) => API.post("/api-keys/", data);
 export const deleteApiKey = (id) => API.delete(`/api-keys/${id}`);
 
-export const triggerDailyAggregation = () =>
-  API.post("/workers/daily-aggregation/sync");
-export const triggerMonthlyAggregation = () =>
-  API.post("/workers/monthly-aggregation/sync");
-export const triggerAnomalyDetection = () =>
-  API.post("/workers/anomaly-detection/sync");
-export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
-
+// ─────────────────────── Costs ───────────────────────
 export const getCostByOrg = () => API.get("/costs/by-org");
 export const getCostByProject = (orgId) =>
   API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
 export const getCostDaily = (days, orgId, projectId) =>
   API.get("/costs/daily", {
-    params: {
-      days,
-      org_id: orgId || undefined,
-      project_id: projectId || undefined,
-    },
+    params: { days, org_id: orgId || undefined, project_id: projectId || undefined },
   });
 export const getCostMonthly = (orgId, projectId) =>
   API.get("/costs/monthly", {
@@ -154,47 +160,18 @@ export const getCostBreakdown = (orgId, projectId) =>
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
 
+// ─────────────────────── Pricing ───────────────────────
 export const getModelPricing = () => API.get("/pricing/");
 export const createModelPricing = (data) => API.post("/pricing/", data);
 export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
 
-export const trackEvent = (data) => API.post("/telemetry/track", data);
-
-// --- Super Admin centralised log access (across every integrated tool) ---
-export const getSuperAdminLogs = (params) =>
-  API.get("/telemetry/admin/logs", { params });
-export const getSuperAdminAggregate = (params) =>
-  API.get("/telemetry/admin/aggregate", { params });
-export const getSuperAdminRegisteredTools = (params) =>
-  API.get("/telemetry/admin/registered-tools", { params });
-
-// --- Ingestion & Connector Layer ---
-export const triggerConnectorPull = (connectorName) =>
-  API.post(`/ingestion/pull/${connectorName}/sync`);
-export const getIngestionStatus = () => API.get("/ingestion/status");
-export const postConnectorWebhook = (connectorName, payload) =>
-  API.post(`/ingestion/webhook/${connectorName}`, payload);
-export const uploadFileToConnector = (connectorName, file) => {
-  const form = new FormData();
-  form.append("file", file);
-  return API.post(`/ingestion/upload/${connectorName}`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-};
-
-// --- Tracing-derived org/project context (single source of truth) ---
+// ─────────────────────── Lookups (dynamic dropdowns) ───────────────────────
 export const getTracingOrgs = () => API.get("/lookups/tracing-orgs");
 export const getTracingProjects = (orgId) =>
-  API.get("/lookups/tracing-projects", {
-    params: { org_id: orgId || undefined },
-  });
-
-// --- Dynamic dropdown lookups (no hardcoded enums in the UI) ---
+  API.get("/lookups/tracing-projects", { params: { org_id: orgId || undefined } });
 export const getLookupAuthTypes = () => API.get("/lookups/auth-types");
-export const getLookupIngestionModes = () =>
-  API.get("/lookups/ingestion-modes");
-export const getLookupConnectorStatuses = () =>
-  API.get("/lookups/connector-statuses");
+export const getLookupIngestionModes = () => API.get("/lookups/ingestion-modes");
+export const getLookupConnectorStatuses = () => API.get("/lookups/connector-statuses");
 export const getLookupToolTypes = () => API.get("/lookups/tool-types");
 export const getLookupProviders = () => API.get("/lookups/providers");
 export const getLookupRuleMetrics = () => API.get("/lookups/rule-metrics");
@@ -207,5 +184,14 @@ export const getLookupEventStatuses = () => API.get("/lookups/event-statuses");
 export const getLookupPlanTypes = () => API.get("/lookups/plan-types");
 export const getLookupEnvironments = () => API.get("/lookups/environments");
 export const getLookupBudgetPeriods = () => API.get("/lookups/budget-periods");
+
+// Workers (on-demand triggers — scheduler runs these automatically)
+export const triggerDailyAggregation = () =>
+  API.post("/workers/daily-aggregation/sync");
+export const triggerMonthlyAggregation = () =>
+  API.post("/workers/monthly-aggregation/sync");
+export const triggerAnomalyDetection = () =>
+  API.post("/workers/anomaly-detection/sync");
+export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
 
 export default API;

@@ -17,6 +17,14 @@ from sqlalchemy import (
 from app.database import Base
 
 
+class Provider(Base):
+    __tablename__ = "providers"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(String(100), primary_key=True)
+    provider_name = Column(String(150), nullable=True)
+
+
 class Organization(Base):
     __tablename__ = "organizations"
     __table_args__ = {"extend_existing": True}
@@ -59,6 +67,31 @@ class ApiKey(Base):
     project_id = Column(String(100), ForeignKey("projects.id"), nullable=True)
     key_name = Column(String(150), nullable=True)
     provider = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class UserProject(Base):
+    __tablename__ = "user_projects"
+    __table_args__ = {"extend_existing": True}
+
+    user_id = Column(String(100), ForeignKey("users.id"), primary_key=True)
+    project_id = Column(String(100), ForeignKey("projects.id"), primary_key=True)
+    role = Column(String(50), nullable=True)
+
+
+class UploadData(Base):
+    __tablename__ = "upload_data"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    org_id = Column(String(100), ForeignKey("organizations.id"), nullable=True)
+    project_id = Column(String(100), ForeignKey("projects.id"), nullable=True)
+    user_id = Column(String(100), ForeignKey("users.id"), nullable=True)
+    file_name = Column(Text, nullable=True)
+    file_type = Column(String(50), nullable=True)
+    file_size_mb = Column(Numeric(10, 2), nullable=True)
+    storage_path = Column(Text, nullable=True)
+    upload_source = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -122,6 +155,8 @@ class GovernanceRule(Base):
     scope_level = Column(String(30), nullable=False, default="organization")
     scope_reference = Column(String(150), nullable=True)
     is_active = Column(Boolean, default=True)
+    org_id = Column(String(100), nullable=True)
+    project_id = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -343,6 +378,42 @@ class RateLimitViolation(Base):
     violation_type = Column(String(50), nullable=True)
     observed_value = Column(Integer, nullable=True)
     limit_value = Column(Integer, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class TraceModelUsage(Base):
+    __tablename__ = "trace_model_usage"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    event_id = Column(String(120), ForeignKey("telemetry_events.event_id"), nullable=False)
+    trace_id = Column(String(120), nullable=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    model_name = Column(String(120), nullable=False)
+    provider = Column(String(100), nullable=True)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    llm_cost = Column(Numeric(14, 6), default=0)
+    latency_ms = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class TraceToolUsage(Base):
+    __tablename__ = "trace_tool_usage"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    event_id = Column(String(120), ForeignKey("telemetry_events.event_id"), nullable=False)
+    trace_id = Column(String(120), nullable=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    tool_name = Column(String(150), nullable=False)
+    tool_type = Column(String(50), nullable=True)
+    invocation_count = Column(Integer, default=1)
+    execution_time_ms = Column(Integer, default=0)
+    cost = Column(Numeric(14, 6), default=0)
     created_at = Column(DateTime, server_default=func.now())
 
 

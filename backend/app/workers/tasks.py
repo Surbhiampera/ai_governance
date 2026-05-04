@@ -1,18 +1,31 @@
+"""Pure task functions — no Celery, no decorators.
+
+Called by app.scheduler (APScheduler) and by the /workers endpoints for
+on-demand manual triggers.  All DB sessions are managed by the caller.
+"""
+from __future__ import annotations
+
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import case, func
+from sqlalchemy.orm import Session
 
-from app.celery_app import celery_app
-from app.database import SessionLocal
-from app.models import DailyOrgSummary, MonthlyOrgSummary, Organization, TelemetryEvent, ToolConnector, UsageAnomaly
-from app.services.alert_engine import AlertEngine
+from app.models import (
+    DailyOrgSummary,
+    MonthlyOrgSummary,
+    Organization,
+    TelemetryEvent,
+    UsageAnomaly,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _rebuild_daily_summary(db, summary_date: date) -> int:
+# ─────────────────────── daily aggregation ───────────────────────
+
+def _rebuild_daily_summary(db: Session, summary_date: date) -> int:
     rows = (
         db.query(
             TelemetryEvent.org_id,
@@ -50,14 +63,12 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
     for row in rows:
         org_id = (row.org_id or "").strip()
         if not org_id:
-            logger.warning("Skipping daily summary row with empty org_id (date=%s, tool=%s)", summary_date, row.model_name)
             continue
-        tool_name = (row.model_name or "").strip() or "unknown"
         db.add(
             DailyOrgSummary(
                 org_id=org_id,
                 project_id=row.project_id,
-                tool_name=tool_name,
+                tool_name=(row.model_name or "").strip() or "unknown",
                 date=summary_date,
                 total_events=row.total_events or 0,
                 total_cost=row.total_cost or Decimal("0"),
@@ -82,196 +93,135 @@ def _rebuild_daily_summary(db, summary_date: date) -> int:
     return inserted
 
 
-@celery_app.task(name="app.workers.tasks.run_daily_aggregation")
-def run_daily_aggregation():
-    db = SessionLocal()
-    try:
-        rows_processed = _rebuild_daily_summary(db, date.today())
-        db.commit()
-        return {"status": "ok", "rows_processed": rows_processed}
-    finally:
-        db.close()
+# ─────────────────────── monthly aggregation ───────────────────────
+
+def _rebuild_monthly_summary(db: Session) -> int:
+    today = date.today()
+    month_start = today.replace(day=1)
+    valid_org_ids = db.query(Organization.id).subquery()
+
+    rows = (
+        db.query(
+            DailyOrgSummary.org_id,
+            DailyOrgSummary.project_id,
+            DailyOrgSummary.tool_name,
+            func.sum(DailyOrgSummary.total_events).label("total_events"),
+            func.sum(DailyOrgSummary.total_cost).label("total_cost"),
+            func.sum(DailyOrgSummary.llm_cost).label("llm_cost"),
+            func.sum(DailyOrgSummary.infra_cost).label("infra_cost"),
+            func.sum(DailyOrgSummary.external_cost).label("external_cost"),
+            func.sum(DailyOrgSummary.total_tokens).label("total_tokens"),
+            func.sum(DailyOrgSummary.total_prompt_tokens).label("total_prompt_tokens"),
+            func.sum(DailyOrgSummary.total_completion_tokens).label("total_completion_tokens"),
+            func.avg(DailyOrgSummary.avg_latency_ms).label("avg_latency_ms"),
+            func.sum(DailyOrgSummary.success_count).label("success_count"),
+            func.sum(DailyOrgSummary.failure_count).label("failure_count"),
+            func.sum(DailyOrgSummary.anomaly_count).label("anomaly_count"),
+            func.sum(DailyOrgSummary.misuse_count).label("misuse_count"),
+        )
+        .filter(
+            DailyOrgSummary.date >= month_start,
+            DailyOrgSummary.date <= today,
+            DailyOrgSummary.org_id.isnot(None),
+            func.trim(DailyOrgSummary.org_id) != "",
+            DailyOrgSummary.org_id.in_(valid_org_ids),
+        )
+        .group_by(DailyOrgSummary.org_id, DailyOrgSummary.project_id, DailyOrgSummary.tool_name)
+        .all()
+    )
+
+    db.query(MonthlyOrgSummary).filter(MonthlyOrgSummary.month == month_start).delete(synchronize_session=False)
+
+    inserted = 0
+    for row in rows:
+        org_id = (row.org_id or "").strip()
+        if not org_id:
+            continue
+        db.add(
+            MonthlyOrgSummary(
+                org_id=org_id,
+                project_id=row.project_id,
+                tool_name=(row.tool_name or "").strip() or "unknown",
+                month=month_start,
+                total_events=row.total_events or 0,
+                total_cost=row.total_cost or Decimal("0"),
+                llm_cost=row.llm_cost or Decimal("0"),
+                infra_cost=row.infra_cost or Decimal("0"),
+                external_cost=row.external_cost or Decimal("0"),
+                total_tokens=row.total_tokens or 0,
+                total_prompt_tokens=row.total_prompt_tokens or 0,
+                total_completion_tokens=row.total_completion_tokens or 0,
+                avg_latency_ms=int(row.avg_latency_ms or 0),
+                success_count=row.success_count or 0,
+                failure_count=row.failure_count or 0,
+                anomaly_count=row.anomaly_count or 0,
+                misuse_count=row.misuse_count or 0,
+            )
+        )
+        inserted += 1
+    db.flush()
+    return inserted
 
 
-@celery_app.task(name="app.workers.tasks.run_monthly_aggregation")
-def run_monthly_aggregation():
-    db = SessionLocal()
-    try:
-        today = date.today()
-        month_start = today.replace(day=1)
-        valid_org_ids = db.query(Organization.id).subquery()
+# ─────────────────────── anomaly detection ───────────────────────
 
-        rows = (
+def _detect_anomalies(db: Session) -> int:
+    today = date.today()
+    tool_rows = (
+        db.query(
+            DailyOrgSummary.org_id,
+            DailyOrgSummary.tool_name,
+            func.sum(DailyOrgSummary.total_events).label("events_today"),
+            func.sum(DailyOrgSummary.total_cost).label("cost_today"),
+            func.avg(DailyOrgSummary.avg_latency_ms).label("latency_today"),
+        )
+        .filter(DailyOrgSummary.date == today)
+        .group_by(DailyOrgSummary.org_id, DailyOrgSummary.tool_name)
+        .all()
+    )
+
+    created = 0
+    for row in tool_rows:
+        baseline = (
             db.query(
-                DailyOrgSummary.org_id,
-                DailyOrgSummary.project_id,
-                DailyOrgSummary.tool_name,
-                func.sum(DailyOrgSummary.total_events).label("total_events"),
-                func.sum(DailyOrgSummary.total_cost).label("total_cost"),
-                func.sum(DailyOrgSummary.llm_cost).label("llm_cost"),
-                func.sum(DailyOrgSummary.infra_cost).label("infra_cost"),
-                func.sum(DailyOrgSummary.external_cost).label("external_cost"),
-                func.sum(DailyOrgSummary.total_tokens).label("total_tokens"),
-                func.sum(DailyOrgSummary.total_prompt_tokens).label("total_prompt_tokens"),
-                func.sum(DailyOrgSummary.total_completion_tokens).label("total_completion_tokens"),
-                func.avg(DailyOrgSummary.avg_latency_ms).label("avg_latency_ms"),
-                func.sum(DailyOrgSummary.success_count).label("success_count"),
-                func.sum(DailyOrgSummary.failure_count).label("failure_count"),
-                func.sum(DailyOrgSummary.anomaly_count).label("anomaly_count"),
-                func.sum(DailyOrgSummary.misuse_count).label("misuse_count"),
+                func.avg(DailyOrgSummary.total_events).label("avg_events"),
+                func.avg(DailyOrgSummary.total_cost).label("avg_cost"),
+                func.avg(DailyOrgSummary.avg_latency_ms).label("avg_latency"),
             )
             .filter(
-                DailyOrgSummary.date >= month_start,
-                DailyOrgSummary.date <= today,
-                DailyOrgSummary.org_id.isnot(None),
-                func.trim(DailyOrgSummary.org_id) != "",
-                DailyOrgSummary.org_id.in_(valid_org_ids),
+                DailyOrgSummary.org_id == row.org_id,
+                DailyOrgSummary.tool_name == row.tool_name,
+                DailyOrgSummary.date >= today - timedelta(days=7),
+                DailyOrgSummary.date < today,
             )
-            .group_by(DailyOrgSummary.org_id, DailyOrgSummary.project_id, DailyOrgSummary.tool_name)
-            .all()
+            .first()
         )
+        if not baseline or not baseline.avg_events:
+            continue
 
-        db.query(MonthlyOrgSummary).filter(MonthlyOrgSummary.month == month_start).delete(synchronize_session=False)
-
-        inserted = 0
-        for row in rows:
-            org_id = (row.org_id or "").strip()
-            if not org_id:
-                logger.warning("Skipping monthly summary row with empty org_id (month=%s, tool=%s)", month_start, row.tool_name)
+        checks = [
+            ("usage_spike", Decimal(str(baseline.avg_events or 0)), Decimal(str(row.events_today or 0))),
+            ("cost_spike", Decimal(str(baseline.avg_cost or 0)), Decimal(str(row.cost_today or 0))),
+            ("latency_spike", Decimal(str(baseline.avg_latency or 0)), Decimal(str(row.latency_today or 0))),
+        ]
+        for anomaly_type, base_val, observed in checks:
+            if base_val <= 0:
                 continue
-            tool_name = (row.tool_name or "").strip() or "unknown"
-            db.add(
-                MonthlyOrgSummary(
-                    org_id=org_id,
-                    project_id=row.project_id,
-                    tool_name=tool_name,
-                    month=month_start,
-                    total_events=row.total_events or 0,
-                    total_cost=row.total_cost or Decimal("0"),
-                    llm_cost=row.llm_cost or Decimal("0"),
-                    infra_cost=row.infra_cost or Decimal("0"),
-                    external_cost=row.external_cost or Decimal("0"),
-                    total_tokens=row.total_tokens or 0,
-                    total_prompt_tokens=row.total_prompt_tokens or 0,
-                    total_completion_tokens=row.total_completion_tokens or 0,
-                    avg_latency_ms=int(row.avg_latency_ms or 0),
-                    success_count=row.success_count or 0,
-                    failure_count=row.failure_count or 0,
-                    anomaly_count=row.anomaly_count or 0,
-                    misuse_count=row.misuse_count or 0,
-                )
-            )
-            inserted += 1
-        db.commit()
-        return {"status": "ok", "rows_processed": inserted}
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.workers.tasks.run_anomaly_detection")
-def run_anomaly_detection():
-    db = SessionLocal()
-    try:
-        today = date.today()
-        tool_rows = (
-            db.query(
-                DailyOrgSummary.org_id,
-                DailyOrgSummary.tool_name,
-                func.sum(DailyOrgSummary.total_events).label("events_today"),
-                func.sum(DailyOrgSummary.total_cost).label("cost_today"),
-                func.avg(DailyOrgSummary.avg_latency_ms).label("latency_today"),
-            )
-            .filter(DailyOrgSummary.date == today)
-            .group_by(DailyOrgSummary.org_id, DailyOrgSummary.tool_name)
-            .all()
-        )
-
-        created = 0
-        for row in tool_rows:
-            baseline_rows = (
-                db.query(
-                    func.avg(DailyOrgSummary.total_events).label("avg_events"),
-                    func.avg(DailyOrgSummary.total_cost).label("avg_cost"),
-                    func.avg(DailyOrgSummary.avg_latency_ms).label("avg_latency"),
-                )
-                .filter(
-                    DailyOrgSummary.org_id == row.org_id,
-                    DailyOrgSummary.tool_name == row.tool_name,
-                    DailyOrgSummary.date >= today - timedelta(days=7),
-                    DailyOrgSummary.date < today,
-                )
-                .first()
-            )
-            if not baseline_rows or not baseline_rows.avg_events:
-                continue
-
-            checks = [
-                ("usage_spike", Decimal(str(baseline_rows.avg_events or 0)), Decimal(str(row.events_today or 0))),
-                ("cost_spike", Decimal(str(baseline_rows.avg_cost or 0)), Decimal(str(row.cost_today or 0))),
-                ("latency_spike", Decimal(str(baseline_rows.avg_latency or 0)), Decimal(str(row.latency_today or 0))),
-            ]
-            for anomaly_type, baseline, observed in checks:
-                if baseline <= 0:
-                    continue
-                score = observed / baseline
-                if score >= Decimal("1.8"):
-                    db.add(
-                        UsageAnomaly(
-                            org_id=row.org_id,
-                            tool_name=row.tool_name,
-                            anomaly_type=anomaly_type,
-                            severity="high" if score >= Decimal("2.5") else "medium",
-                            anomaly_score=score.quantize(Decimal("0.01")),
-                            baseline_value=baseline.quantize(Decimal("0.01")),
-                            observed_value=observed.quantize(Decimal("0.01")),
-                            message=f"{anomaly_type.replace('_', ' ')} detected for {row.tool_name}: {observed:.2f} vs baseline {baseline:.2f}.",
-                        )
+            score = observed / base_val
+            if score >= Decimal("1.8"):
+                db.add(
+                    UsageAnomaly(
+                        org_id=row.org_id,
+                        tool_name=row.tool_name,
+                        anomaly_type=anomaly_type,
+                        severity="high" if score >= Decimal("2.5") else "medium",
+                        anomaly_score=score.quantize(Decimal("0.01")),
+                        baseline_value=base_val.quantize(Decimal("0.01")),
+                        observed_value=observed.quantize(Decimal("0.01")),
+                        message=f"{anomaly_type.replace('_', ' ')} for {row.tool_name}: {observed:.2f} vs baseline {base_val:.2f}.",
                     )
-                    created += 1
+                )
+                created += 1
 
-        db.commit()
-        return {"status": "ok", "anomalies_created": created}
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.workers.tasks.run_alert_scan")
-def run_alert_scan():
-    db = SessionLocal()
-    try:
-        engine = AlertEngine()
-        created = engine.create_daily_anomaly_alerts(db)
-        db.commit()
-        return {"status": "ok", "alerts_created": created}
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.workers.tasks.run_connector_poll")
-def run_connector_poll():
-    """Pull events from all active API-mode connectors."""
-    from app.services.ingestion import IngestionNormalizer
-
-    db = SessionLocal()
-    try:
-        connectors = (
-            db.query(ToolConnector)
-            .filter(ToolConnector.ingestion_mode == "api", ToolConnector.status == "active")
-            .all()
-        )
-        normalizer = IngestionNormalizer(db)
-        total_ingested = 0
-        for connector in connectors:
-            try:
-                ingested, _ = normalizer.pull_from_connector(connector)
-                total_ingested += ingested
-            except Exception as exc:
-                logger.warning("Poll failed for connector '%s': %s", connector.connector_name, exc)
-        db.commit()
-        return {
-            "status": "ok",
-            "connectors_polled": len(connectors),
-            "events_ingested": total_ingested,
-        }
-    finally:
-        db.close()
+    db.flush()
+    return created

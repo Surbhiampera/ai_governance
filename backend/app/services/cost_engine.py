@@ -8,14 +8,21 @@ from app.schemas import CostSummary, TelemetryEventCreate
 
 class CostEngine:
     def calculate(self, event_data: TelemetryEventCreate, db: Session) -> CostSummary:
-        llm_cost = Decimal("0")
         external_cost = Decimal("0")
         infra_cost = Decimal(str(event_data.infra_cost or 0))
 
         total_tokens = event_data.prompt_tokens + event_data.completion_tokens
 
-        # Try model-specific pricing first
-        if total_tokens > 0:
+        # Unified traces supply pre-computed LLM cost — skip DB price lookup
+        if event_data.precomputed_llm_cost is not None:
+            llm_cost = Decimal(str(event_data.precomputed_llm_cost))
+        elif total_tokens > 0:
+            llm_cost = Decimal("0")
+        else:
+            llm_cost = Decimal("0")
+
+        # Try model-specific pricing first (only when cost not pre-computed)
+        if event_data.precomputed_llm_cost is None and total_tokens > 0:
             pricing = None
             if event_data.provider and event_data.model_name:
                 pricing = (

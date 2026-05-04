@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
-import { getTracingOrgs, getTracingProjects } from "../api";
+import { getTracingOrgs, getTracingProjects, getControlQuota } from "../api";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
 const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
@@ -34,6 +34,7 @@ function Cost() {
   const [projects, setProjects] = useState([]);
   const [selectedOrg, setSelectedOrg] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
+  const [quota, setQuota] = useState(null);
 
   const load = async () => {
     try {
@@ -79,6 +80,13 @@ function Cost() {
       setByServiceType(serviceRes.data || []);
       setBreakdown(breakdownRes.data || null);
       setError("");
+      if (selectedOrg) {
+        getControlQuota(selectedOrg, selectedProject || undefined)
+          .then((r) => setQuota(r.data))
+          .catch(() => setQuota(null));
+      } else {
+        setQuota(null);
+      }
     } catch {
       setError("Unable to load cost data. Check backend connectivity.");
     } finally {
@@ -200,6 +208,104 @@ function Cost() {
           </button>
         ))}
       </section>
+
+      {/* ── Token Usage & Limits ── */}
+      {quota && (
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Token Usage &amp; Limits</h3>
+              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                Month-to-date token consumption, daily quota, and budget forecast for the selected organization.
+              </p>
+            </div>
+            {quota.will_exceed_budget && (
+              <span className="status-pill critical" style={{ fontSize: 12 }}>Budget Overrun Risk</span>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            {/* Cost budget */}
+            <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)", padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Cost Budget</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{money(quota.month_cost)}</div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>
+                of {quota.budget_limit ? money(quota.budget_limit) : "no limit set"} this month
+              </div>
+              {quota.budget_limit > 0 && (
+                <>
+                  <div style={{ background: "var(--gray-100)", borderRadius: 6, height: 8, overflow: "hidden" }}>
+                    <div style={{
+                      width: `${Math.min(Number(quota.usage_percent || 0), 100)}%`,
+                      height: "100%",
+                      background: Number(quota.usage_percent || 0) >= 100 ? "#c0392b" : Number(quota.usage_percent || 0) >= 90 ? "#e67e22" : "#9E2A97",
+                      borderRadius: 6,
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 4 }}>
+                    {Number(quota.usage_percent || 0).toFixed(1)}% used
+                    {quota.cost_remaining != null && ` · ${money(quota.cost_remaining)} remaining`}
+                  </div>
+                </>
+              )}
+              {quota.will_exceed_budget && (
+                <div style={{ fontSize: 12, color: "#c0392b", marginTop: 4 }}>
+                  Forecast ${Number(quota.forecast_month_cost || 0).toFixed(2)} — {quota.days_remaining_in_month}d left
+                </div>
+              )}
+            </div>
+
+            {/* Token usage */}
+            <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)", padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Token Usage</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{num(quota.month_tokens)}</div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>tokens this month</div>
+              <div className="metric-chip-row" style={{ flexWrap: "wrap", gap: 6 }}>
+                <span className="metric-chip">Today <b>{num(quota.today_tokens)}</b></span>
+                {quota.token_quota_daily && (
+                  <span className="metric-chip">Daily limit <b>{num(quota.token_quota_daily)}</b></span>
+                )}
+              </div>
+              {quota.token_quota_daily > 0 && (
+                <>
+                  <div style={{ background: "var(--gray-100)", borderRadius: 6, height: 8, overflow: "hidden", marginTop: 8 }}>
+                    <div style={{
+                      width: `${Math.min(Number(quota.token_quota_percent || 0), 100)}%`,
+                      height: "100%",
+                      background: Number(quota.token_quota_percent || 0) >= 100 ? "#c0392b" : Number(quota.token_quota_percent || 0) >= 80 ? "#e67e22" : "#3FB6D4",
+                      borderRadius: 6,
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 4 }}>
+                    {Number(quota.token_quota_percent || 0).toFixed(1)}% of daily quota used
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Velocity */}
+            <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)", padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Velocity &amp; Forecast</div>
+              <div className="metric-chip-row" style={{ flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+                <div className="tool-cost-chip" style={{ width: "100%" }}>
+                  <strong>Spend / day</strong>
+                  <div>${Number(quota.daily_velocity_cost || 0).toFixed(4)}</div>
+                </div>
+                <div className="tool-cost-chip" style={{ width: "100%" }}>
+                  <strong>Tokens / day</strong>
+                  <div>{num(Math.round(quota.daily_velocity_tokens || 0))}</div>
+                </div>
+                <div className="tool-cost-chip" style={{ width: "100%" }}>
+                  <strong>Month forecast</strong>
+                  <div style={{ color: quota.will_exceed_budget ? "#c0392b" : "inherit" }}>
+                    {money(quota.forecast_month_cost)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {activeMetricData ? (
         <div className="modal-backdrop metric-modal-backdrop" onClick={() => setActiveMetric(null)}>

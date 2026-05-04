@@ -20,6 +20,27 @@ class PipelineStageCreate(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ModelUsageItem(BaseModel):
+    """Single model's usage within a unified trace."""
+    model_name: str
+    provider: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost: Optional[float] = None
+    input_cost_per_1k: Optional[float] = None
+    output_cost_per_1k: Optional[float] = None
+    latency_ms: int = 0
+
+
+class ToolUsageItemEnhanced(BaseModel):
+    """Single tool's usage within a unified trace."""
+    tool_name: str
+    tool_type: Optional[str] = None
+    invocation_count: int = 1
+    execution_time_ms: int = 0
+    cost: Optional[float] = None
+
+
 class TelemetryEventCreate(BaseModel):
     event_id: str
     request_id: Optional[str] = None
@@ -41,6 +62,7 @@ class TelemetryEventCreate(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     infra_cost: Decimal = Decimal("0")
+    precomputed_llm_cost: Optional[Decimal] = None
     external_tools: list[ExternalToolCost] = Field(default_factory=list)
     stages: list[PipelineStageCreate] = Field(default_factory=list)
     contains_pii: bool = False
