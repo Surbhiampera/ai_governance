@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models import Alert, Budget, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, TelemetryEvent, ToolConnector, ToolRegistry, UsageAnomaly
+from app.models import Alert, Budget, CostBreakdown, DataSecurityLog, DailyOrgSummary, ExecutionPipeline, Organization, Project, RateLimit, TelemetryEvent, ToolConnector, ToolRegistry, UsageAnomaly
 from app.schemas import (
     BatchTelemetryIngest,
     CostBreakdownResponse,
@@ -124,12 +124,27 @@ def super_admin_logs(
         query = query.filter(TelemetryEvent.created_at <= datetime.combine(end_date, datetime.max.time()))
 
     rows = query.order_by(TelemetryEvent.created_at.desc()).limit(limit).all()
+    event_ids = [r.event_id for r in rows]
+
+    # Batch-fetch security logs and org/project names for full PII context
+    security_map = {
+        sl.event_id: sl
+        for sl in db.query(DataSecurityLog).filter(DataSecurityLog.event_id.in_(event_ids)).all()
+    } if event_ids else {}
+
+    org_ids = list({r.org_id for r in rows if r.org_id})
+    project_ids = list({r.project_id for r in rows if r.project_id})
+    org_name_map = {o.id: o.org_name for o in db.query(Organization).filter(Organization.id.in_(org_ids)).all()} if org_ids else {}
+    project_name_map = {p.id: p.project_name for p in db.query(Project).filter(Project.id.in_(project_ids)).all()} if project_ids else {}
+
     return [
         {
             "event_id": row.event_id,
             "created_at": row.created_at,
             "org_id": row.org_id,
+            "org_name": org_name_map.get(row.org_id, row.org_id),
             "project_id": row.project_id,
+            "project_name": project_name_map.get(row.project_id, row.project_id),
             "user_id": row.user_id,
             "provider": row.provider,
             "tool_name": row.model_name,
@@ -141,6 +156,8 @@ def super_admin_logs(
             "risk_score": float(row.risk_score or 0),
             "misuse_detected": bool(row.misuse_detected),
             "abnormal_usage_spike": bool(row.abnormal_usage_spike),
+            "pii_detected": bool(security_map[row.event_id].pii_detected) if row.event_id in security_map else False,
+            "pii_type": security_map[row.event_id].pii_type if row.event_id in security_map else None,
         }
         for row in rows
     ]
@@ -311,6 +328,425 @@ def super_admin_registered_tools(
 
     results.sort(key=lambda r: (-(r["total_cost"] or 0), r["tool_name"] or ""))
     return results
+
+
+@router.get("/admin/insights")
+def super_admin_insights(
+    org_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Real-time governance insights for the Super Admin dashboard.
+
+    Returns:
+      - tool_costs: total cost per tool aggregated across all projects and orgs
+      - model_usage: token consumption per model with token limits and remaining capacity
+      - notifications: in-app alerts for limit breaches, cost thresholds, and anomalies
+    """
+    today = date.today()
+    now = datetime.utcnow()
+    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+    # ── Tool cost totals ──────────────────────────────────────────────────────
+    tool_cost_q = (
+        db.query(
+            TelemetryEvent.model_name.label("tool_name"),
+            TelemetryEvent.provider,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.prompt_tokens).label("prompt_tokens"),
+            func.sum(TelemetryEvent.completion_tokens).label("completion_tokens"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+            func.sum(TelemetryEvent.llm_cost).label("llm_cost"),
+            func.sum(TelemetryEvent.infra_cost).label("infra_cost"),
+            func.sum(TelemetryEvent.external_cost).label("external_cost"),
+            func.sum(TelemetryEvent.total_cost).label("total_cost"),
+        )
+        .filter(TelemetryEvent.model_name.isnot(None), TelemetryEvent.model_name != "")
+        .group_by(TelemetryEvent.model_name, TelemetryEvent.provider)
+        .order_by(func.sum(TelemetryEvent.total_cost).desc())
+    )
+    if org_id:
+        tool_cost_q = tool_cost_q.filter(TelemetryEvent.org_id == org_id)
+
+    tool_costs = [
+        {
+            "tool_name": r.tool_name,
+            "provider": r.provider or "—",
+            "total_events": int(r.total_events or 0),
+            "prompt_tokens": int(r.prompt_tokens or 0),
+            "completion_tokens": int(r.completion_tokens or 0),
+            "total_tokens": int(r.total_tokens or 0),
+            "llm_cost": round(float(r.llm_cost or 0), 4),
+            "infra_cost": round(float(r.infra_cost or 0), 4),
+            "external_cost": round(float(r.external_cost or 0), 4),
+            "total_cost": round(float(r.total_cost or 0), 4),
+        }
+        for r in tool_cost_q.all()
+    ]
+
+    # ── Model usage vs token limits ───────────────────────────────────────────
+    rate_limits = {rl.org_id: rl for rl in db.query(RateLimit).all()}
+
+    model_usage_q = (
+        db.query(
+            TelemetryEvent.model_name,
+            TelemetryEvent.provider,
+            TelemetryEvent.org_id,
+            func.count(TelemetryEvent.id).label("total_events"),
+            func.sum(TelemetryEvent.prompt_tokens).label("prompt_tokens"),
+            func.sum(TelemetryEvent.completion_tokens).label("completion_tokens"),
+            func.sum(TelemetryEvent.total_tokens).label("total_tokens"),
+        )
+        .filter(TelemetryEvent.model_name.isnot(None), TelemetryEvent.model_name != "")
+        .group_by(TelemetryEvent.model_name, TelemetryEvent.provider, TelemetryEvent.org_id)
+        .order_by(func.sum(TelemetryEvent.total_tokens).desc())
+    )
+    if org_id:
+        model_usage_q = model_usage_q.filter(TelemetryEvent.org_id == org_id)
+
+    model_usage = []
+    for r in model_usage_q.all():
+        rl = rate_limits.get(r.org_id)
+        token_limit = int(rl.max_tokens_per_day or 0) if (rl and rl.max_tokens_per_day) else None
+        total_tokens = int(r.total_tokens or 0)
+        usage_pct = round(total_tokens / token_limit * 100, 1) if token_limit else None
+        remaining = token_limit - total_tokens if token_limit is not None else None
+
+        if token_limit:
+            if remaining <= 0:
+                token_status = "exhausted"
+            elif usage_pct >= 90:
+                token_status = "critical"
+            elif usage_pct >= 75:
+                token_status = "warning"
+            else:
+                token_status = "ok"
+        else:
+            token_status = "no_limit"
+
+        model_usage.append({
+            "model_name": r.model_name,
+            "provider": r.provider or "—",
+            "org_id": r.org_id,
+            "total_events": int(r.total_events or 0),
+            "prompt_tokens": int(r.prompt_tokens or 0),
+            "completion_tokens": int(r.completion_tokens or 0),
+            "total_tokens": total_tokens,
+            "token_limit": token_limit,
+            "remaining_tokens": remaining,
+            "usage_pct": usage_pct,
+            "token_status": token_status,
+        })
+
+    # ── In-app notifications ─────────────────────────────────────────────────
+    notifications = []
+
+    # Resolve org/project display names so every notification carries the same
+    # full traceability set (org, project, tool, model) as the Super Admin Log.
+    notif_org_ids = {m["org_id"] for m in model_usage if m.get("org_id")}
+    org_name_lookup = {
+        o.id: o.org_name
+        for o in db.query(Organization).filter(Organization.id.in_(notif_org_ids)).all()
+    } if notif_org_ids else {}
+
+    # Token limit notifications
+    for m in model_usage:
+        org_name = org_name_lookup.get(m["org_id"], m["org_id"])
+        if m["token_status"] == "exhausted":
+            notifications.append({
+                "type": "token_limit_exhausted",
+                "severity": "critical",
+                "message": (
+                    f"Token limit exhausted for model '{m['model_name']}' in org '{m['org_id']}' — "
+                    f"{m['total_tokens']:,} of {m['token_limit']:,} tokens used (100%+)"
+                ),
+                "org_id": m["org_id"],
+                "org_name": org_name,
+                "project_id": None,
+                "project_name": None,
+                "tool_name": m["model_name"],
+                "model_name": m["model_name"],
+                "created_at": now.isoformat(),
+            })
+        elif m["token_status"] == "critical":
+            notifications.append({
+                "type": "token_limit_approaching",
+                "severity": "high",
+                "message": (
+                    f"Token limit {m['usage_pct']}% consumed for model '{m['model_name']}' "
+                    f"in org '{m['org_id']}' — {m['remaining_tokens']:,} tokens remaining"
+                ),
+                "org_id": m["org_id"],
+                "org_name": org_name,
+                "project_id": None,
+                "project_name": None,
+                "tool_name": m["model_name"],
+                "model_name": m["model_name"],
+                "created_at": now.isoformat(),
+            })
+        elif m["token_status"] == "warning":
+            notifications.append({
+                "type": "token_limit_approaching",
+                "severity": "medium",
+                "message": (
+                    f"Token usage at {m['usage_pct']}% for model '{m['model_name']}' "
+                    f"in org '{m['org_id']}' — {m['remaining_tokens']:,} tokens remaining"
+                ),
+                "org_id": m["org_id"],
+                "org_name": org_name,
+                "project_id": None,
+                "project_name": None,
+                "tool_name": m["model_name"],
+                "model_name": m["model_name"],
+                "created_at": now.isoformat(),
+            })
+
+    # Cost threshold notifications from budgets
+    budget_q = db.query(Budget).filter(Budget.project_id.is_(None))
+    if org_id:
+        budget_q = budget_q.filter(Budget.org_id == org_id)
+
+    org_cost_q = db.query(
+        TelemetryEvent.org_id,
+        func.sum(TelemetryEvent.total_cost).label("total_cost"),
+    ).group_by(TelemetryEvent.org_id)
+    if org_id:
+        org_cost_q = org_cost_q.filter(TelemetryEvent.org_id == org_id)
+    org_cost_map = {r.org_id: float(r.total_cost or 0) for r in org_cost_q.all()}
+
+    budgets_list = budget_q.all()
+    budget_org_ids = {b.org_id for b in budgets_list if b.org_id}
+    budget_org_names = {
+        o.id: o.org_name
+        for o in db.query(Organization).filter(Organization.id.in_(budget_org_ids)).all()
+    } if budget_org_ids else {}
+    for b in budgets_list:
+        limit = float(b.limit_amount or 0)
+        if limit <= 0:
+            continue
+        spent = org_cost_map.get(b.org_id, 0.0)
+        pct = round(spent / limit * 100, 1)
+        threshold_pct = int(b.alert_threshold_percent or 80)
+        remaining_budget = limit - spent
+        b_org_name = budget_org_names.get(b.org_id, b.org_id)
+
+        if spent >= limit:
+            notifications.append({
+                "type": "cost_threshold_exceeded",
+                "severity": "critical",
+                "message": (
+                    f"Budget EXCEEDED for org '{b.org_id}' — "
+                    f"${spent:.2f} of ${limit:.2f} spent ({pct}%)"
+                ),
+                "org_id": b.org_id,
+                "org_name": b_org_name,
+                "project_id": b.project_id,
+                "project_name": b.project_id,
+                "tool_name": None,
+                "model_name": None,
+                "created_at": now.isoformat(),
+            })
+        elif pct >= threshold_pct:
+            notifications.append({
+                "type": "cost_threshold_approaching",
+                "severity": "high",
+                "message": (
+                    f"Budget {pct}% consumed for org '{b.org_id}' — "
+                    f"${remaining_budget:.2f} remaining of ${limit:.2f}"
+                ),
+                "org_id": b.org_id,
+                "org_name": b_org_name,
+                "project_id": b.project_id,
+                "project_name": b.project_id,
+                "tool_name": None,
+                "model_name": None,
+                "created_at": now.isoformat(),
+            })
+
+    # Abnormal usage anomaly notifications — fully traced to org/project/tool
+    anomaly_q = db.query(UsageAnomaly).filter(UsageAnomaly.status == "open")
+    if org_id:
+        anomaly_q = anomaly_q.filter(UsageAnomaly.org_id == org_id)
+    anomaly_rows = anomaly_q.order_by(UsageAnomaly.created_at.desc()).limit(20).all()
+    anomaly_orgs = {a.org_id for a in anomaly_rows if a.org_id}
+    anomaly_projects = {a.project_id for a in anomaly_rows if a.project_id}
+    anomaly_org_names = {
+        o.id: o.org_name
+        for o in db.query(Organization).filter(Organization.id.in_(anomaly_orgs)).all()
+    } if anomaly_orgs else {}
+    anomaly_project_names = {
+        p.id: p.project_name
+        for p in db.query(Project).filter(Project.id.in_(anomaly_projects)).all()
+    } if anomaly_projects else {}
+    for a in anomaly_rows:
+        notifications.append({
+            "type": "abnormal_usage",
+            "severity": a.severity or "medium",
+            "message": a.message or f"Abnormal usage pattern detected in org '{a.org_id}' — tool: {a.tool_name}",
+            "org_id": a.org_id,
+            "org_name": anomaly_org_names.get(a.org_id, a.org_id),
+            "project_id": a.project_id,
+            "project_name": anomaly_project_names.get(a.project_id, a.project_id),
+            "tool_name": a.tool_name,
+            "model_name": a.tool_name,
+            "created_at": a.created_at.isoformat() if a.created_at else now.isoformat(),
+        })
+
+    # Active high/critical alerts — joined to TelemetryEvent for model_name
+    alert_q = db.query(Alert).filter(
+        Alert.status == "active",
+        Alert.severity.in_(["critical", "high"]),
+    )
+    if org_id:
+        alert_q = alert_q.filter(Alert.org_id == org_id)
+    alert_rows = alert_q.order_by(Alert.created_at.desc()).limit(20).all()
+    alert_org_ids = {a.org_id for a in alert_rows if a.org_id}
+    alert_project_ids = {a.project_id for a in alert_rows if a.project_id}
+    alert_telemetry_ids = {a.telemetry_id for a in alert_rows if a.telemetry_id}
+    alert_org_names = {
+        o.id: o.org_name
+        for o in db.query(Organization).filter(Organization.id.in_(alert_org_ids)).all()
+    } if alert_org_ids else {}
+    alert_project_names = {
+        p.id: p.project_name
+        for p in db.query(Project).filter(Project.id.in_(alert_project_ids)).all()
+    } if alert_project_ids else {}
+    alert_event_map = {
+        e.id: e
+        for e in db.query(TelemetryEvent).filter(TelemetryEvent.id.in_(alert_telemetry_ids)).all()
+    } if alert_telemetry_ids else {}
+    for al in alert_rows:
+        evt = alert_event_map.get(al.telemetry_id) if al.telemetry_id else None
+        model_name = (evt.model_name if evt else None) or al.tool_name
+        notifications.append({
+            "type": al.alert_type or "governance_alert",
+            "severity": al.severity or "high",
+            "message": al.message or f"Governance alert triggered for org '{al.org_id}'",
+            "org_id": al.org_id,
+            "org_name": alert_org_names.get(al.org_id, al.org_id),
+            "project_id": al.project_id,
+            "project_name": alert_project_names.get(al.project_id, al.project_id),
+            "tool_name": al.tool_name or model_name,
+            "model_name": model_name,
+            "created_at": al.created_at.isoformat() if al.created_at else now.isoformat(),
+        })
+
+    notifications.sort(key=lambda n: sev_order.get(n["severity"], 99))
+
+    return {
+        "tool_costs": tool_costs,
+        "model_usage": model_usage,
+        "notifications": notifications,
+        "notification_count": len(notifications),
+        "critical_count": sum(1 for n in notifications if n["severity"] == "critical"),
+        "high_count": sum(1 for n in notifications if n["severity"] == "high"),
+        "medium_count": sum(1 for n in notifications if n["severity"] == "medium"),
+    }
+
+
+@router.get("/admin/pii-detail/{event_id}")
+def admin_pii_detail(event_id: str, db: Session = Depends(get_db)):
+    """Full contextual detail for a PII detection event — used by the admin modal."""
+    event = db.query(TelemetryEvent).filter(TelemetryEvent.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    security = db.query(DataSecurityLog).filter(DataSecurityLog.event_id == event_id).first()
+
+    org = db.query(Organization).filter(Organization.id == event.org_id).first() if event.org_id else None
+    project = db.query(Project).filter(Project.id == event.project_id).first() if event.project_id else None
+
+    rl = db.query(RateLimit).filter(RateLimit.org_id == event.org_id).first()
+    token_limit = int(rl.max_tokens_per_day or 0) if (rl and rl.max_tokens_per_day) else None
+    total_tokens = int(event.total_tokens or 0)
+    usage_pct = round(total_tokens / token_limit * 100, 1) if token_limit else None
+    remaining_tokens = token_limit - total_tokens if token_limit is not None else None
+
+    # Related anomalies: prefer direct event_id match, fall back to org-level
+    related_anomalies = []
+    anomaly_q = db.query(UsageAnomaly).filter(UsageAnomaly.org_id == event.org_id)
+    direct = anomaly_q.filter(UsageAnomaly.event_id == event_id).all()
+    fallback = anomaly_q.filter(UsageAnomaly.event_id.is_(None)).limit(3).all() if not direct else []
+    for a in (direct or fallback):
+        related_anomalies.append({
+            "anomaly_type": a.anomaly_type,
+            "severity": a.severity,
+            "message": a.message,
+            "anomaly_score": float(a.anomaly_score or 0),
+            "baseline_value": float(a.baseline_value or 0),
+            "observed_value": float(a.observed_value or 0),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+
+    risk = float((security.risk_score if security else None) or event.risk_score or 0)
+    if risk >= 80:
+        risk_label = "Critical — immediate review required"
+    elif risk >= 60:
+        risk_label = "High — elevated risk, monitor closely"
+    elif risk >= 30:
+        risk_label = "Medium — moderate risk"
+    else:
+        risk_label = "Low — within acceptable range"
+
+    root_causes = []
+    if security:
+        if security.pii_detected:
+            root_causes.append(f"Sensitive data pattern detected: {security.pii_type or 'unclassified type'}")
+        if security.misuse_pattern_detected:
+            root_causes.append("Misuse pattern identified in prompt or completion content")
+        if security.data_out_violation:
+            root_causes.append(f"Data output volume exceeded threshold — {float(security.data_out_mb or 0):.2f} MB out")
+        if security.abnormal_usage_spike:
+            root_causes.append("Abnormal usage spike detected vs. recent baseline")
+    if usage_pct is not None and usage_pct >= 75:
+        if usage_pct >= 100:
+            root_causes.append(f"Token limit exhausted: {usage_pct:.1f}% of daily limit consumed")
+        elif usage_pct >= 90:
+            root_causes.append(f"Token limit critical: {usage_pct:.1f}% of daily limit consumed")
+        else:
+            root_causes.append(f"Token usage elevated: {usage_pct:.1f}% of daily limit consumed")
+    if float(event.anomaly_score or 0) >= 1.5:
+        root_causes.append(
+            f"Anomaly score {float(event.anomaly_score):.2f}x — significantly above normal baseline"
+        )
+    if not root_causes:
+        root_causes.append("No specific high-risk indicators beyond PII pattern match")
+
+    return {
+        "event_id": event.event_id,
+        "created_at": event.created_at.isoformat() if event.created_at else None,
+        "org_id": event.org_id,
+        "org_name": org.org_name if org else event.org_id,
+        "project_id": event.project_id,
+        "project_name": project.project_name if project else event.project_id,
+        "project_environment": project.environment if project else None,
+        "model_name": event.model_name,
+        "tool_name": event.model_name,
+        "provider": event.provider,
+        "service_type": event.service_type,
+        "status": event.status,
+        "prompt_tokens": int(event.prompt_tokens or 0),
+        "completion_tokens": int(event.completion_tokens or 0),
+        "total_tokens": total_tokens,
+        "total_cost": float(event.total_cost or 0),
+        "latency_ms": int(event.latency_ms or 0),
+        "data_in_mb": float(event.input_data_size_mb or 0),
+        "data_out_mb": float(event.output_data_size_mb or 0),
+        "token_limit": token_limit,
+        "remaining_tokens": remaining_tokens,
+        "usage_pct": usage_pct,
+        "pii_detected": bool(security.pii_detected) if security else False,
+        "pii_type": security.pii_type if security else None,
+        "risk_score": risk,
+        "risk_label": risk_label,
+        "data_out_violation": bool(security.data_out_violation) if security else False,
+        "misuse_pattern_detected": bool(security.misuse_pattern_detected) if security else False,
+        "abnormal_usage_spike": bool((security.abnormal_usage_spike if security else False) or event.abnormal_usage_spike),
+        "masking_applied": bool(security.masking_applied) if security else False,
+        "anomaly_score": float(event.anomaly_score or 0),
+        "root_causes": root_causes,
+        "related_anomalies": related_anomalies,
+    }
 
 
 @router.get("/traces/{event_id}", response_model=TraceDetailResponse)
@@ -498,6 +934,8 @@ def _save_security_log(
     db.add(
         DataSecurityLog(
             event_id=event_data.event_id,
+            org_id=event_data.org_id,
+            project_id=event_data.project_id,
             pii_detected=security_result["pii_detected"],
             pii_type=security_result["pii_type"],
             data_out_violation=security_result["data_out_violation"],

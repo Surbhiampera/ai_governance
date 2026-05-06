@@ -11,10 +11,8 @@ import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
 import SuperAdminLogs from "./pages/SuperAdminLogs";
-import Flow from "./pages/Flow";
 
 const navItems = [
-  { to: "/flow", label: "Flow" },
   { to: "/", label: "Overview", end: true },
   { to: "/cost", label: "Cost" },
   { to: "/controls", label: "Controls" },
@@ -30,8 +28,7 @@ function App() {
         <aside className="sidebar">
           <div className="brand-block">
             <p className="brand-kicker">AI Governance</p>
-            {/* <h1>PulseBoard</h1> */}
-            <p className="brand-copy">Multi-tool monitoring </p>
+            <p className="brand-copy">Email Support Agent</p>
           </div>
 
           <nav className="nav-stack">
@@ -53,7 +50,6 @@ function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/flow" element={<Flow />} />
             <Route path="/cost" element={<Cost />} />
             <Route path="/controls" element={<Tools />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />

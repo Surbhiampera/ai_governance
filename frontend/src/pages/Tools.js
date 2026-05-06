@@ -1,51 +1,56 @@
 import React, { useEffect, useState } from "react";
-import { getToolsUsage } from "../api";
+import { getToolsUsage, getTelemetryLogs } from "../api";
 
-const SDK_FIELDS = [
-  ["model_name", "Which LLM model was invoked (e.g. gpt-4o, claude-3-5-sonnet)"],
-  ["tool_name", "The AI tool or framework (e.g. LangChain, Copilot, custom)"],
-  ["provider", "Vendor — openai, anthropic, google, azure, custom"],
-  ["input_tokens", "Prompt / context token count"],
-  ["output_tokens", "Completion / generation token count"],
-  ["latency_ms", "End-to-end request duration in milliseconds"],
-  ["org_id", "Organization scope — required for all governance rules"],
-  ["project_id", "Project scope — enables per-project cost and quota tracking"],
-  ["user_id", "User attribution — optional, for per-user analytics"],
-  ["trace_id", "Cross-request correlation ID for multi-step workflows"],
-  ["status", "success / error / partial"],
-  ["tool_usages", "Per-tool cost overrides for multi-tool calls"],
-  ["contains_pii", "Flag PII presence — triggers security engine"],
-  ["tags", "Arbitrary key labels for filtering and governance rules"],
-  ["stages", "Pipeline stage breakdown for multi-step execution tracking"],
+// Email Support Agent processing pipeline
+const PIPELINE_STEPS = [
+  { label: "MS Graph · Fetch",    detail: "GET unread emails via Microsoft Graph API",         service: "email-fetch",          vendor: "Microsoft" },
+  { label: "PII Sanitization",    detail: "Mask Order IDs, Tracking IDs, Phone Numbers",       service: "email-sanitization",   vendor: "Custom" },
+  { label: "Intent Classification", detail: "GPT-5 Nano → ORDER_ISSUE / PROSPECT_QUERY / …", service: "email-classification", vendor: "OpenAI" },
+  { label: "Response Drafting",   detail: "Azure OpenAI / Gemini via LangChain",               service: "email-draft",          vendor: "Azure / Google" },
+  { label: "Auto-Reply Dispatch", detail: "Send draft for qualified prospect emails",          service: "email-autoreply",      vendor: "Microsoft Graph" },
+  { label: "Persist & Finalize",  detail: "SQLAlchemy commit → mark email as read in Outlook", service: "email-pipeline",       vendor: "SQLAlchemy" },
 ];
 
 function Tools() {
-  const [usage, setUsage] = useState([]);
-  const [message, setMessage] = useState("");
+  const [usage,     setUsage]     = useState([]);
+  const [events,    setEvents]    = useState([]);
+  const [loadingEv, setLoadingEv] = useState(false);
+  const [message,   setMessage]   = useState("");
   const [activeTab, setActiveTab] = useState("usage");
 
   useEffect(() => {
     getToolsUsage()
-      .then((r) => setUsage(r.data || []))
+      .then(r => setUsage(r.data || []))
       .catch(() => setMessage("Unable to load tool usage. Check backend connectivity."));
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== "sdk") return;
+    setLoadingEv(true);
+    getTelemetryLogs({ limit: 20 })
+      .then(r => setEvents(r.data?.events || r.data || []))
+      .catch(() => setEvents([]))
+      .finally(() => setLoadingEv(false));
+  }, [activeTab]);
+
+  const projects  = [...new Set(events.map(e => e.project_id).filter(Boolean))];
+  const models    = [...new Set(events.map(e => e.model_name).filter(Boolean))];
+  const toolNames = [...new Set(events.map(e => e.tool_name).filter(Boolean))];
+
   return (
     <div className="page-shell">
+
       {/* Header */}
       <section className="panel" style={{ padding: "18px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
             <h2 style={{ margin: 0 }}>Control Plane</h2>
             <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
-              SDK core responsibilities, telemetry capture reference, and tool usage analytics.
-              Model and tool management lives in the <strong>Tracing</strong> module.
+              AI Email Support Agent — pipeline overview, telemetry ingest APIs, and live tool usage.
             </p>
           </div>
           <div className="pill-row" style={{ gap: 8 }}>
-            <span className="pill">
-              Tools active <span className="highlight">{usage.length}</span>
-            </span>
+            <span className="pill">Tools active <span className="highlight">{usage.length}</span></span>
           </div>
         </div>
         {message && <div className="feedback-msg" style={{ marginTop: 10 }}>{message}</div>}
@@ -54,10 +59,7 @@ function Tools() {
       {/* Tab bar */}
       <section className="panel" style={{ padding: "6px 24px 0" }}>
         <div className="action-row" style={{ gap: 4 }}>
-          {[
-            { id: "usage", label: "Tool Usage" },
-            { id: "sdk", label: "SDK Core" },
-          ].map((t) => (
+          {[{ id: "usage", label: "Tool Usage" }, { id: "sdk", label: "SDK Core" }].map(t => (
             <button
               key={t.id}
               type="button"
@@ -77,7 +79,7 @@ function Tools() {
             <div>
               <h3>Tool Usage Summary</h3>
               <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Aggregated cost, token, and latency metrics per AI tool. Data flows in via the SDK ingest endpoints.
+                Aggregated cost, token, and latency metrics per AI tool.
               </p>
             </div>
           </div>
@@ -85,26 +87,20 @@ function Tools() {
             <table>
               <thead>
                 <tr>
-                  <th>Tool / Model</th>
-                  <th>Vendor</th>
-                  <th>Events</th>
-                  <th>Total Cost</th>
-                  <th>Total Tokens</th>
-                  <th>Input Tokens</th>
-                  <th>Output Tokens</th>
-                  <th>Avg Latency</th>
-                  <th>Success Rate</th>
+                  <th>Tool / Model</th><th>Vendor</th><th>Events</th><th>Total Cost</th>
+                  <th>Total Tokens</th><th>Input Tokens</th><th>Output Tokens</th>
+                  <th>Avg Latency</th><th>Success Rate</th>
                 </tr>
               </thead>
               <tbody>
                 {usage.length === 0 && (
                   <tr>
                     <td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)" }}>
-                      No events ingested yet. Use the SDK endpoints or the Tracing module to send data.
+                      No events yet. Install the SDK or use the Tracing module to send data.
                     </td>
                   </tr>
                 )}
-                {usage.map((item) => (
+                {usage.map(item => (
                   <tr key={item.tool_name}>
                     <td><strong>{item.tool_name || "—"}</strong></td>
                     <td>{item.vendor || "—"}</td>
@@ -130,180 +126,122 @@ function Tools() {
       {/* ── SDK Core ── */}
       {activeTab === "sdk" && (
         <>
-          {/* Responsibilities */}
+          {/* Pipeline */}
           <section className="panel">
             <div className="section-head">
               <div>
-                <h3>SDK Core Responsibilities</h3>
+                <h3>Email Agent Pipeline</h3>
                 <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  The SDK has one job: capture telemetry from every AI request and transmit it here.
-                  The backend handles cost calculation, aggregation, and alert triggering — the SDK does not.
+                  Every inbound email flows through this 6-stage pipeline — fetch, sanitize, classify, draft, reply, finalize.
                 </p>
               </div>
             </div>
-
-            <div className="two-column" style={{ gap: 20 }}>
-              <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0, marginBottom: 12 }}>Capture Per Request</h4>
-                <div className="table-wrap" style={{ margin: 0 }}>
-                  <table>
-                    <thead>
-                      <tr><th>Field</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                      {SDK_FIELDS.map(([field, desc]) => (
-                        <tr key={field}>
-                          <td><code style={{ fontSize: 12 }}>{field}</code></td>
-                          <td style={{ fontSize: 13, color: "var(--gray-600)" }}>{desc}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                  <h4 style={{ marginTop: 0 }}>Multi-Model &amp; Multi-Tool per Project</h4>
-                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "var(--gray-600)", lineHeight: 1.8 }}>
-                    <li>A single project can use <strong>any number of models</strong> from different providers simultaneously.</li>
-                    <li>A single project can call <strong>multiple tools</strong> (web search, code executor, embeddings) in one workflow.</li>
-                    <li>Models and tools are registered <strong>directly</strong> — no connector or external dependency required.</li>
-                    <li>Total cost per tool, total cost per model, and overall project cost are calculated automatically.</li>
-                    <li>Per-model and per-tool breakdown is stored in <code>trace_model_usage</code> / <code>trace_tool_usage</code> for drill-down queries.</li>
-                    <li>Token allocation, tokens used, and remaining tokens are tracked in real time via the quota endpoint.</li>
-                  </ul>
-                </div>
-
-                <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                  <h4 style={{ marginTop: 0 }}>Standardization Before Transmission</h4>
-                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "var(--gray-600)", lineHeight: 1.8 }}>
-                    <li>Normalize vendor-specific token field names to <code>input_tokens</code> / <code>output_tokens</code>.</li>
-                    <li>Resolve cost: caller override → per-token rates → DB lookup → zero.</li>
-                    <li>Attach <code>org_id</code>, <code>project_id</code>, <code>trace_id</code> to every event.</li>
-                    <li>Tag PII flags and data-out sizes before sending — the security engine acts on them.</li>
-                  </ul>
-                </div>
-
-                <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                  <h4 style={{ marginTop: 0 }}>Direct Registration APIs</h4>
-                  <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 0 }}>
-                    Register models and tools directly — no connector or external integration required.
-                    Use the <strong>Tracing → Model-Tool Configuration</strong> tab for UI-based management.
-                  </p>
-                  <div style={{ fontSize: 12, fontFamily: "monospace", lineHeight: 2 }}>
-                    <div><code>POST /pricing/</code> — register a model with per-token pricing</div>
-                    <div><code>POST /tools/register</code> — register a tool with its cost model</div>
-                    <div><code>GET  /models/</code> — list all registered models</div>
-                    <div><code>GET  /tools/</code> — list all registered tools</div>
-                    <div><code>GET  /tools/usage</code> — aggregated cost and token metrics per tool</div>
+            <div style={{ display: "flex", overflowX: "auto", paddingBottom: 4, gap: 0 }}>
+              {PIPELINE_STEPS.map((step, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", flex: "0 0 auto" }}>
+                  <div style={{
+                    textAlign: "center", padding: "12px 16px",
+                    background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)",
+                    borderRadius: 10, minWidth: 130,
+                  }}>
+                    <div style={{
+                      fontSize: 11, fontWeight: 700, color: "var(--brand-primary)",
+                      textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4,
+                    }}>
+                      Stage {i + 1}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 12 }}>{step.label}</div>
+                    <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4, lineHeight: 1.4 }}>{step.detail}</div>
+                    <div style={{
+                      marginTop: 6, fontSize: 10, padding: "2px 8px",
+                      background: "rgba(124,112,174,0.08)", borderRadius: 20,
+                      color: "var(--gray-600)", display: "inline-block",
+                    }}>
+                      {step.vendor}
+                    </div>
                   </div>
+                  {i < PIPELINE_STEPS.length - 1 && (
+                    <div style={{ color: "var(--gray-400)", fontSize: 18, padding: "0 6px" }}>→</div>
+                  )}
                 </div>
-              </div>
+              ))}
             </div>
           </section>
 
-          {/* Ingest API reference */}
+          {/* Live telemetry */}
           <section className="panel">
             <div className="section-head">
               <div>
-                <h3>Telemetry Ingest API</h3>
+                <h3>Live Email Agent Telemetry</h3>
                 <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Vendor-agnostic endpoints — mix OpenAI, Anthropic, Google, and custom models in one governance layer.
+                  Real-time email processing events — classification, drafting, and pipeline runs.
                 </p>
+              </div>
+              <div className="pill-row" style={{ gap: 8 }}>
+                <span className="pill">Projects <span className="highlight">{projects.length}</span></span>
+                <span className="pill">Models <span className="highlight">{models.length}</span></span>
+                <span className="pill">Tools <span className="highlight">{toolNames.length}</span></span>
               </div>
             </div>
 
-            <div className="two-column" style={{ gap: 20 }}>
-              <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0 }}>Single Event — <code>POST /control/ingest</code></h4>
-                <pre style={{ fontSize: 12, overflow: "auto", margin: 0 }}>{`{
-  "org_id":        "org-acme",
-  "project_id":    "proj-chatbot",
-  "provider":      "openai",
-  "model_name":    "gpt-4o",
-  "input_tokens":  1200,
-  "output_tokens": 380,
-  "latency_ms":    740,
-  "status":        "success",
-  "tool_usages": [
-    { "name": "web-search", "cost": 0.002 }
-  ]
-}`}</pre>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", marginBottom: 0 }}>
-                  Cost resolved from <code>model_pricing</code> automatically.
-                  Pass <code>cost_per_call</code> or <code>input_cost_per_1k</code> to override.
-                </p>
-              </div>
-
-              <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0 }}>Model-Tool Configuration</h4>
-                <p style={{ fontSize: 13, color: "var(--gray-600)", marginTop: 0 }}>
-                  Add and manage multiple models and tools within a single project — directly,
-                  with no connector or external integration in between.
-                </p>
-                <div style={{ fontSize: 12, fontFamily: "monospace", lineHeight: 2 }}>
-                  <div><code>POST /pricing/</code> — attach a model (with per-token pricing) to a project</div>
-                  <div><code>POST /tools/register</code> — attach a tool (with its cost model) to a project</div>
-                  <div><code>GET  /models/?project_id=…</code> — list models configured for a project</div>
-                  <div><code>GET  /tools/?project_id=…</code> — list tools configured for a project</div>
-                  <div><code>DELETE /models/{"{id}"}</code> / <code>DELETE /tools/{"{id}"}</code> — remove from project</div>
-                </div>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 10, marginBottom: 0 }}>
-                  Use the <strong>Tracing → Model-Tool Configuration</strong> tab for the UI workflow.
-                </p>
-              </div>
-            </div>
-
-            <div className="two-column" style={{ gap: 20, marginTop: 0 }}>
-              <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0 }}>Batch — <code>POST /control/ingest/batch</code></h4>
-                <pre style={{ fontSize: 12, overflow: "auto", margin: 0 }}>{`{
-  "events": [
-    {
-      "org_id": "org-acme",
-      "provider": "anthropic",
-      "model_name": "claude-3-5-sonnet",
-      "input_tokens": 800,
-      "output_tokens": 220
-    },
-    {
-      "org_id": "org-acme",
-      "provider": "openai",
-      "model_name": "gpt-4o-mini",
-      "input_tokens": 400,
-      "output_tokens": 180,
-      "cost_per_call": 0.0012
-    }
-  ]
-}`}</pre>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", marginBottom: 0 }}>
-                  Mix vendors in one batch. Each event is independently priced and scored.
-                </p>
-              </div>
-
-              <div className="panel" style={{ background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)" }}>
-                <h4 style={{ marginTop: 0 }}>Token Quota — <code>GET /control/quota/{"{org_id}"}</code></h4>
-                <pre style={{ fontSize: 12, overflow: "auto", margin: 0 }}>{`GET /control/quota/org-acme?project_id=proj-chatbot
-
-Response:
-{
-  "month_cost":       142.80,
-  "month_tokens":     2400000,
-  "budget_limit":     500.00,
-  "usage_percent":    28.6,
-  "forecast_month_cost": 485.50,
-  "will_exceed_budget":  false,
-  "token_quota_daily":   1000000,
-  "token_quota_used_today": 612000,
-  "token_quota_percent": 61.2
-}`}</pre>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", marginBottom: 0 }}>
-                  Velocity-based forecast. All limits from <code>budgets</code> + <code>rate_limits</code> tables.
-                </p>
-              </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Project</th>
+                    <th>Tool</th>
+                    <th>Model</th>
+                    <th>Provider</th>
+                    <th>In Tokens</th>
+                    <th>Out Tokens</th>
+                    <th>Latency</th>
+                    <th>PII</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingEv && (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>Loading…</td>
+                    </tr>
+                  )}
+                  {!loadingEv && events.length === 0 && (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                        No events yet. Install the SDK and make an LLM call to see data here.
+                      </td>
+                    </tr>
+                  )}
+                  {events.map((e, i) => (
+                    <tr key={e.id || i}>
+                      <td style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                        {e.created_at ? new Date(e.created_at).toLocaleTimeString() : "—"}
+                      </td>
+                      <td>{e.project_id || "—"}</td>
+                      <td>{e.tool_name || "—"}</td>
+                      <td>{e.model_name || "—"}</td>
+                      <td>{e.provider || "—"}</td>
+                      <td>{Number(e.input_tokens || 0).toLocaleString()}</td>
+                      <td>{Number(e.output_tokens || 0).toLocaleString()}</td>
+                      <td>{e.latency_ms != null ? `${e.latency_ms} ms` : "—"}</td>
+                      <td>
+                        {e.contains_pii
+                          ? <span className="status-pill warning">Yes</span>
+                          : <span className="status-pill success">No</span>}
+                      </td>
+                      <td>
+                        <span className={`status-pill ${e.status === "success" ? "success" : "error"}`}>
+                          {e.status || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
+
         </>
       )}
     </div>

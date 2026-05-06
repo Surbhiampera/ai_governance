@@ -307,6 +307,11 @@ class AlertResponse(BaseModel):
 
     id: int
     org_id: Optional[str] = None
+    org_name: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    tool_name: Optional[str] = None
+    model_name: Optional[str] = None
     rule_id: Optional[int] = None
     alert_type: Optional[str] = None
     severity: Optional[str] = None
@@ -323,6 +328,8 @@ class DataSecurityLogResponse(BaseModel):
 
     id: int
     event_id: Optional[str] = None
+    org_id: Optional[str] = None
+    project_id: Optional[str] = None
     pii_detected: Optional[bool] = None
     pii_type: Optional[str] = None
     data_out_violation: Optional[bool] = None
@@ -368,6 +375,9 @@ class UsageAnomalyResponse(BaseModel):
 
     id: int
     org_id: str
+    org_name: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
     tool_name: str
     event_id: Optional[str] = None
     anomaly_type: str

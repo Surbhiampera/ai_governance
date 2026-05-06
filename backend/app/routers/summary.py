@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -141,6 +141,11 @@ def get_governance_overview(
     else:
         cutoff_date = None  # all-time
 
+    # Datetime version of the cutoff for filtering timestamp columns
+    cutoff_dt: Optional[datetime] = (
+        datetime.combine(cutoff_date, time.min) if cutoff_date is not None else None
+    )
+
     today_query = db.query(DailyOrgSummary)
     if cutoff_date is not None:
         today_query = today_query.filter(DailyOrgSummary.date >= cutoff_date)
@@ -172,6 +177,13 @@ def get_governance_overview(
     connectors_query = db.query(func.count(ToolConnector.id)).filter(ToolConnector.status == "active")
     rules_query = db.query(func.count(GovernanceRule.id)).filter(GovernanceRule.is_active.is_(True))
 
+    if cutoff_dt is not None:
+        recent_alerts_query = recent_alerts_query.filter(Alert.created_at >= cutoff_dt)
+        recent_anomalies_query = recent_anomalies_query.filter(UsageAnomaly.created_at >= cutoff_dt)
+        recent_events_query = recent_events_query.filter(TelemetryEvent.created_at >= cutoff_dt)
+        alerts_count_query = alerts_count_query.filter(Alert.created_at >= cutoff_dt)
+        anomalies_count_query = anomalies_count_query.filter(UsageAnomaly.created_at >= cutoff_dt)
+
     if org_id:
         recent_alerts_query = recent_alerts_query.filter(Alert.org_id == org_id)
         recent_anomalies_query = recent_anomalies_query.filter(UsageAnomaly.org_id == org_id)
@@ -179,19 +191,17 @@ def get_governance_overview(
         alerts_count_query = alerts_count_query.filter(Alert.org_id == org_id)
         anomalies_count_query = anomalies_count_query.filter(UsageAnomaly.org_id == org_id)
 
+    sev_filters = [Alert.status == "active"]
+    if cutoff_dt is not None:
+        sev_filters.append(Alert.created_at >= cutoff_dt)
+    if org_id:
+        sev_filters.append(Alert.org_id == org_id)
     severity_rows = (
         db.query(Alert.severity, func.count(Alert.id))
-        .filter(Alert.status == "active")
+        .filter(*sev_filters)
         .group_by(Alert.severity)
         .all()
     )
-    if org_id:
-        severity_rows = (
-            db.query(Alert.severity, func.count(Alert.id))
-            .filter(Alert.status == "active", Alert.org_id == org_id)
-            .group_by(Alert.severity)
-            .all()
-        )
 
     cost_by_type = {
         "llm": sum((Decimal(str(row.llm_cost or 0)) for row in today_rows), Decimal("0")),
@@ -199,16 +209,15 @@ def get_governance_overview(
         "external": sum((Decimal(str(row.external_cost or 0)) for row in today_rows), Decimal("0")),
     }
 
-    health = _build_health_metrics(db, org_id, days)
+    health = _build_health_metrics(db, org_id, cutoff_dt)
 
     recent_alerts = recent_alerts_query.limit(6).all()
     recent_anomalies = recent_anomalies_query.limit(6).all()
     recent_events = recent_events_query.limit(8).all()
 
-    highest_risk = (
-        db.query(func.coalesce(func.max(TelemetryEvent.risk_score), 0))
-        .filter(TelemetryEvent.created_at >= datetime.combine(today - timedelta(days=days - 1), datetime.min.time()))
-    )
+    highest_risk = db.query(func.coalesce(func.max(TelemetryEvent.risk_score), 0))
+    if cutoff_dt is not None:
+        highest_risk = highest_risk.filter(TelemetryEvent.created_at >= cutoff_dt)
     if org_id:
         highest_risk = highest_risk.filter(TelemetryEvent.org_id == org_id)
 
@@ -238,14 +247,15 @@ def get_governance_overview(
     )
 
 
-def _build_health_metrics(db: Session, org_id: Optional[str], days: int) -> dict[str, Decimal]:
-    cutoff = datetime.combine(date.today() - timedelta(days=days - 1), datetime.min.time())
+def _build_health_metrics(db: Session, org_id: Optional[str], cutoff_dt: Optional[datetime]) -> dict[str, Decimal]:
     query = db.query(
         func.count(TelemetryEvent.id).label("events"),
         func.sum(case((TelemetryEvent.status.in_(["success", "completed"]), 1), else_=0)).label("success"),
         func.avg(TelemetryEvent.latency_ms).label("latency"),
         func.avg(TelemetryEvent.anomaly_score).label("anomaly"),
-    ).filter(TelemetryEvent.created_at >= cutoff)
+    )
+    if cutoff_dt is not None:
+        query = query.filter(TelemetryEvent.created_at >= cutoff_dt)
     if org_id:
         query = query.filter(TelemetryEvent.org_id == org_id)
     row = query.first()

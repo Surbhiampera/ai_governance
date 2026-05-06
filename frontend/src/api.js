@@ -27,22 +27,24 @@ export const getAlerts = (status) =>
 export const resolveAlert = (id) => API.patch(`/alerts/${id}/resolve`);
 
 // ─────────────────────── Security ───────────────────────
-export const getSecuritySummary = () => API.get("/security/summary");
-export const getSecurityLogs = (piiDetected, misuseDetected) =>
-  API.get("/security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected } });
-export const getUsageAnomalies = (status = "open") =>
-  API.get("/security/anomalies", { params: { status } });
+export const getSecuritySummary = (startDate) =>
+  API.get("/security/summary", { params: { start_date: startDate || undefined } });
+export const getSecurityLogs = (piiDetected, misuseDetected, startDate) =>
+  API.get("/security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected, start_date: startDate || undefined } });
+export const getUsageAnomalies = (status = "open", startDate) =>
+  API.get("/security/anomalies", { params: { status, start_date: startDate || undefined } });
 
 // Combined alerts & security
-export const getAlertsSecurity = (status) =>
-  API.get("/alerts-security/alerts", { params: { status: status || undefined } });
+export const getAlertsSecurity = (status, orgId, projectId, startDate) =>
+  API.get("/alerts-security/alerts", { params: { status: status || undefined, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
 export const resolveAlertCombined = (id) =>
   API.patch(`/alerts-security/alerts/${id}/resolve`);
-export const getSecuritySummaryCombined = () => API.get("/alerts-security/summary");
-export const getSecurityLogsCombined = (piiDetected, misuseDetected) =>
-  API.get("/alerts-security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected } });
-export const getAnomaliesCombined = (status = "open") =>
-  API.get("/alerts-security/anomalies", { params: { status } });
+export const getSecuritySummaryCombined = (orgId, projectId, startDate) =>
+  API.get("/alerts-security/summary", { params: { org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
+export const getSecurityLogsCombined = (piiDetected, misuseDetected, orgId, projectId, startDate) =>
+  API.get("/alerts-security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
+export const getAnomaliesCombined = (status = "open", orgId, projectId, startDate) =>
+  API.get("/alerts-security/anomalies", { params: { status, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
 
 // ─────────────────────── Telemetry / Tracing ───────────────────────
 export const getTelemetryLogs = (params) => API.get("/telemetry/logs", { params });
@@ -63,6 +65,10 @@ export const getSuperAdminAggregate = (params) =>
   API.get("/telemetry/admin/aggregate", { params });
 export const getSuperAdminRegisteredTools = (params) =>
   API.get("/telemetry/admin/registered-tools", { params });
+export const getSuperAdminInsights = (params) =>
+  API.get("/telemetry/admin/insights", { params });
+export const getAdminPIIDetail = (eventId) =>
+  API.get(`/telemetry/admin/pii-detail/${eventId}`);
 
 // ─────────────────────── Control (vendor-agnostic ingestion) ───────────────────────
 export const controlIngest = (data) => API.post("/control/ingest", data);
@@ -161,6 +167,14 @@ export const getCostByServiceType = (orgId, projectId) =>
   });
 export const getCostBreakdown = (orgId, projectId) =>
   API.get("/costs/breakdown", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostPerToolDaily = (days, orgId, projectId) =>
+  API.get("/costs/per-tool-daily", {
+    params: { days: days || 14, org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const getCostSpendCapStatus = (orgId, projectId) =>
+  API.get("/costs/spend-cap-status", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
 

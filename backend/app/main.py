@@ -40,6 +40,12 @@ _SAFE_ALTERS = [
     "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS last_ingested_at TIMESTAMP",
     "ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)",
     "ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
+    # Org/project traceability columns
+    "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
+    "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS tool_name VARCHAR(150)",
+    "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)",
+    "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
+    "ALTER TABLE usage_anomalies ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
 ]
 
 _ALL_ROUTERS = [

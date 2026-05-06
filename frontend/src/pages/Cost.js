@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
-import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily } from "../api";
+import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget } from "../api";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
 const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
@@ -45,10 +45,27 @@ function Cost() {
   const [injectSubmitting, setInjectSubmitting] = useState(false);
   const [toolHistory, setToolHistory] = useState([]);
   const [toolHistoryLoading, setToolHistoryLoading] = useState(false);
+  const [perToolDaily, setPerToolDaily] = useState([]);
+  const [toolDailyFilter, setToolDailyFilter] = useState("");
+  const [spendCaps, setSpendCaps] = useState([]);
+  const [showAddCap, setShowAddCap] = useState(false);
+  const [addCapForm, setAddCapForm] = useState({ org_id: "", project_id: "", budget_type: "monthly", limit_amount: "", alert_threshold_percent: 80 });
+  const [addCapMsg, setAddCapMsg] = useState("");
+  const [addCapSubmitting, setAddCapSubmitting] = useState(false);
+  const [range, setRange] = useState("30d");
+
+  const RANGE_OPTIONS_C = [
+    { value: "all", label: "All Time", days: 365 },
+    { value: "today", label: "Today", days: 1 },
+    { value: "7d", label: "Last 7 Days", days: 7 },
+    { value: "30d", label: "Last 30 Days", days: 30 },
+    { value: "90d", label: "Last 90 Days", days: 90 },
+  ];
 
   const load = async () => {
     try {
       setLoading(true);
+      const opt = RANGE_OPTIONS_C.find((r) => r.value === range) || RANGE_OPTIONS_C[2];
       const scope = { org_id: selectedOrg || undefined, project_id: selectedProject || undefined };
       const [
         totalsRes,
@@ -63,12 +80,14 @@ function Cost() {
         execRes,
         serviceRes,
         breakdownRes,
+        perToolDailyRes,
+        spendCapsRes,
       ] = await Promise.all([
         API.get("/costs/totals"),
         API.get("/costs/by-model", { params: scope }),
         API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
         API.get("/costs/by-org"),
-        API.get("/costs/daily", { params: { days: 14, ...scope } }),
+        API.get("/costs/daily", { params: { days: opt.days, ...scope } }),
         API.get("/costs/monthly", { params: scope }),
         getTracingOrgs(),
         API.get("/costs/by-tool", { params: scope }),
@@ -76,6 +95,8 @@ function Cost() {
         API.get("/costs/by-execution-type", { params: scope }),
         API.get("/costs/by-service-type", { params: scope }),
         API.get("/costs/breakdown", { params: scope }),
+        getCostPerToolDaily(opt.days, selectedOrg || undefined, selectedProject || undefined),
+        getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined),
       ]);
       setTotals(totalsRes.data);
       setByModel(modelRes.data || []);
@@ -89,6 +110,8 @@ function Cost() {
       setByExecutionType(execRes.data || []);
       setByServiceType(serviceRes.data || []);
       setBreakdown(breakdownRes.data || null);
+      setPerToolDaily(perToolDailyRes.data || []);
+      setSpendCaps(spendCapsRes.data || []);
       setError("");
       if (selectedOrg) {
         getControlQuota(selectedOrg, selectedProject || undefined)
@@ -106,7 +129,7 @@ function Cost() {
 
   useEffect(() => {
     load();
-  }, [selectedOrg, selectedProject]);
+  }, [selectedOrg, selectedProject, range]);
 
   useEffect(() => {
     getTracingProjects(selectedOrg || "").then((res) => setProjects(res.data || []));
@@ -274,7 +297,7 @@ function Cost() {
   return (
     <div className="page-shell">
       <section className="panel" style={{ padding: "14px 24px" }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ minWidth: 180 }}>
             <label style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Organization</label>
             <select value={selectedOrg} onChange={(e) => { setSelectedOrg(e.target.value); setSelectedProject(""); }}>
@@ -292,6 +315,19 @@ function Cost() {
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingBottom: 2 }}>
+            {RANGE_OPTIONS_C.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`btn ${range === opt.value ? "btn-primary" : "btn-ghost"}`}
+                style={{ fontSize: 12, padding: "5px 12px" }}
+                onClick={() => setRange(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -407,6 +443,163 @@ function Cost() {
           </div>
         </section>
       )}
+
+      {/* ── Spend Cap & Alerts ── */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Spend Cap &amp; Alerts</h3>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              Configure spend limits per org or project. Alerts fire at your threshold%, 90%, and 100%, plus a predictive overrun warning.
+            </p>
+          </div>
+          <button type="button" className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => { setShowAddCap(!showAddCap); setAddCapMsg(""); }}>
+            {showAddCap ? "Cancel" : "+ Add Spend Cap"}
+          </button>
+        </div>
+
+        {showAddCap && (
+          <form
+            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, padding: "14px 0 4px", borderBottom: "1px solid var(--gray-100)", marginBottom: 18 }}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!addCapForm.org_id || !addCapForm.limit_amount) { setAddCapMsg("Org ID and limit are required."); return; }
+              setAddCapSubmitting(true); setAddCapMsg("");
+              try {
+                await createBudget({
+                  org_id: addCapForm.org_id,
+                  project_id: addCapForm.project_id || null,
+                  budget_type: addCapForm.budget_type,
+                  limit_amount: parseFloat(addCapForm.limit_amount),
+                  alert_threshold_percent: parseInt(addCapForm.alert_threshold_percent, 10) || 80,
+                });
+                setAddCapMsg("Spend cap created.");
+                setShowAddCap(false);
+                const r = await getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined);
+                setSpendCaps(r.data || []);
+              } catch { setAddCapMsg("Failed to create spend cap."); }
+              finally { setAddCapSubmitting(false); }
+            }}
+          >
+            <div className="field">
+              <label>Org ID *</label>
+              <input value={addCapForm.org_id} onChange={(e) => setAddCapForm({ ...addCapForm, org_id: e.target.value })} placeholder="e.g. org-acme" />
+            </div>
+            <div className="field">
+              <label>Project ID</label>
+              <input value={addCapForm.project_id} onChange={(e) => setAddCapForm({ ...addCapForm, project_id: e.target.value })} placeholder="optional" />
+            </div>
+            <div className="field">
+              <label>Type</label>
+              <select value={addCapForm.budget_type} onChange={(e) => setAddCapForm({ ...addCapForm, budget_type: e.target.value })}>
+                <option value="monthly">Monthly</option>
+                <option value="daily">Daily</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Limit ($) *</label>
+              <input type="number" min="0.01" step="0.01" value={addCapForm.limit_amount} onChange={(e) => setAddCapForm({ ...addCapForm, limit_amount: e.target.value })} placeholder="e.g. 500" />
+            </div>
+            <div className="field">
+              <label>Alert at (%)</label>
+              <input type="number" min="1" max="100" value={addCapForm.alert_threshold_percent} onChange={(e) => setAddCapForm({ ...addCapForm, alert_threshold_percent: e.target.value })} />
+            </div>
+            <div className="field" style={{ display: "flex", alignItems: "flex-end" }}>
+              <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={addCapSubmitting}>
+                {addCapSubmitting ? "Saving…" : "Save Cap"}
+              </button>
+            </div>
+            {addCapMsg && <div style={{ gridColumn: "1/-1", fontSize: 13, color: addCapMsg.includes("created") ? "var(--success)" : "#c0392b" }}>{addCapMsg}</div>}
+          </form>
+        )}
+
+        {spendCaps.length === 0 ? (
+          <div style={{ color: "var(--gray-500)", fontSize: 13, padding: "12px 0" }}>
+            No spend caps configured yet. Click "+ Add Spend Cap" to set a daily or monthly budget limit.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: 16 }}>
+            {spendCaps.map((cap) => {
+              const STATUS_COLOR = { ok: "#22c55e", warning: "#f59e0b", critical: "#f97316", exceeded: "#ef4444" };
+              const barColor = STATUS_COLOR[cap.status] || "#22c55e";
+              const fcPct = cap.forecast != null ? Math.min((cap.forecast / cap.limit_amount) * 100, 150) : null;
+              const budgetAlerts = cap.active_alerts.filter((a) => a.alert_type.startsWith("budget") || a.alert_type.includes("cost"));
+              return (
+                <div
+                  key={cap.budget_id}
+                  style={{ background: "var(--gray-50)", border: `1px solid ${cap.status === "ok" ? "rgba(124,112,174,0.18)" : barColor + "55"}`, borderRadius: 10, padding: 16 }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{cap.org_id}</div>
+                      {cap.project_id && <div style={{ fontSize: 12, color: "var(--gray-500)" }}>{cap.project_id}</div>}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 12, background: "rgba(124,112,174,0.12)", color: "var(--gray-500)", fontWeight: 600, textTransform: "uppercase" }}>
+                        {cap.budget_type}
+                      </span>
+                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 12, background: barColor + "22", color: barColor, fontWeight: 700, textTransform: "uppercase" }}>
+                        {cap.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{money(cap.spent)}</div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8 }}>of {money(cap.limit_amount)} limit · {money(cap.remaining)} remaining</div>
+
+                  {/* Spend bar */}
+                  <div style={{ background: "var(--gray-100)", borderRadius: 6, height: 8, overflow: "hidden", position: "relative", marginBottom: 4 }}>
+                    <div style={{ width: `${Math.min(cap.pct_used, 100)}%`, height: "100%", background: barColor, borderRadius: 6, transition: "width 0.4s" }} />
+                    {fcPct != null && fcPct > cap.pct_used && (
+                      <div style={{
+                        position: "absolute", top: 0, left: `${Math.min(cap.pct_used, 100)}%`,
+                        width: `${Math.min(fcPct - cap.pct_used, 100 - Math.min(cap.pct_used, 100))}%`,
+                        height: "100%", background: "rgba(239,68,68,0.25)", borderRight: "2px dashed #ef4444",
+                      }} />
+                    )}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--gray-500)", marginBottom: 8 }}>
+                    <span>Used {cap.pct_used.toFixed(1)}%</span>
+                    {cap.forecast != null && (
+                      <span style={{ color: cap.forecast > cap.limit_amount ? "#ef4444" : "var(--gray-500)" }}>
+                        Forecast {money(cap.forecast)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Alert threshold marker */}
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>
+                    Alert threshold: <strong>{cap.threshold_pct}%</strong>
+                    {cap.today_tokens > 0 && <span style={{ marginLeft: 8 }}>· {num(cap.today_tokens)} tokens today</span>}
+                  </div>
+
+                  {/* Active alerts */}
+                  {budgetAlerts.length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                      {budgetAlerts.slice(0, 3).map((a, i) => (
+                        <div key={i} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: a.severity === "critical" ? "#fef2f2" : a.severity === "high" ? "#fff7ed" : "#fefce8", color: a.severity === "critical" ? "#ef4444" : a.severity === "high" ? "#f97316" : "#ca8a04", fontWeight: 500 }}>
+                          {a.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    style={{ marginTop: 10, fontSize: 11, padding: "3px 10px", border: "1px solid var(--gray-200)", borderRadius: 6, background: "none", color: "var(--gray-500)", cursor: "pointer" }}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete spend cap for ${cap.org_id}?`)) return;
+                      try { await deleteBudget(cap.budget_id); const r = await getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined); setSpendCaps(r.data || []); } catch {}
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* ── Project Cost Summary (shown when a project is selected) ── */}
       {projectBreakdown && (
@@ -1110,6 +1303,109 @@ function Cost() {
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      {/* ── Per-Tool Daily Cost Monitoring ── */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Per-Tool Daily Cost Monitoring</h3>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              Input/output token usage, cost, and email volume for each AI tool — last 14 days.
+            </p>
+          </div>
+          <div className="field" style={{ minWidth: 160 }}>
+            <select value={toolDailyFilter} onChange={(e) => setToolDailyFilter(e.target.value)} style={{ fontSize: 13 }}>
+              <option value="">All Tools</option>
+              {[...new Set(perToolDaily.map((r) => r.tool_name))].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Tool</th>
+                <th>Input Tokens</th>
+                <th>Output Tokens</th>
+                <th>Total Tokens</th>
+                <th>Cost</th>
+                <th>Email Volume</th>
+                <th>Events</th>
+              </tr>
+            </thead>
+            <tbody>
+              {perToolDaily.filter((r) => !toolDailyFilter || r.tool_name === toolDailyFilter).length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                    No per-tool daily data yet.
+                  </td>
+                </tr>
+              ) : (
+                perToolDaily
+                  .filter((r) => !toolDailyFilter || r.tool_name === toolDailyFilter)
+                  .map((r, i) => {
+                    const inputPct = r.total_tokens > 0 ? Math.round((r.input_tokens / r.total_tokens) * 100) : 0;
+                    const outputPct = 100 - inputPct;
+                    return (
+                      <tr key={`${r.date}-${r.tool_name}-${i}`}>
+                        <td style={{ whiteSpace: "nowrap" }}>{r.date}</td>
+                        <td><strong>{r.tool_name}</strong></td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 40, height: 5, borderRadius: 3, background: "rgba(124,112,174,0.15)", overflow: "hidden" }}>
+                              <div style={{ width: `${inputPct}%`, height: "100%", background: "#9E2A97", borderRadius: 3 }} />
+                            </div>
+                            <span>{num(r.input_tokens)}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 40, height: 5, borderRadius: 3, background: "rgba(124,112,174,0.15)", overflow: "hidden" }}>
+                              <div style={{ width: `${outputPct}%`, height: "100%", background: "#3FB6D4", borderRadius: 3 }} />
+                            </div>
+                            <span>{num(r.output_tokens)}</span>
+                          </div>
+                        </td>
+                        <td>{num(r.total_tokens)}</td>
+                        <td><strong>{money(r.total_cost)}</strong></td>
+                        <td>
+                          {r.email_volume > 0 ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, padding: "2px 8px", borderRadius: 10, background: "rgba(63,182,212,0.12)", color: "#3FB6D4", fontWeight: 600 }}>
+                              {num(r.email_volume)} emails
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--gray-400)", fontSize: 12 }}>—</span>
+                          )}
+                        </td>
+                        <td>{num(r.total_events)}</td>
+                      </tr>
+                    );
+                  })
+              )}
+            </tbody>
+            {perToolDaily.filter((r) => !toolDailyFilter || r.tool_name === toolDailyFilter).length > 1 && (() => {
+              const rows = perToolDaily.filter((r) => !toolDailyFilter || r.tool_name === toolDailyFilter);
+              return (
+                <tfoot>
+                  <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                    <td colSpan={2}><strong>14-day Total</strong></td>
+                    <td>{num(rows.reduce((s, r) => s + r.input_tokens, 0))}</td>
+                    <td>{num(rows.reduce((s, r) => s + r.output_tokens, 0))}</td>
+                    <td>{num(rows.reduce((s, r) => s + r.total_tokens, 0))}</td>
+                    <td><strong>{money(rows.reduce((s, r) => s + r.total_cost, 0))}</strong></td>
+                    <td>{num(rows.reduce((s, r) => s + r.email_volume, 0))}</td>
+                    <td>{num(rows.reduce((s, r) => s + r.total_events, 0))}</td>
+                  </tr>
+                </tfoot>
+              );
+            })()}
+          </table>
         </div>
       </section>
 

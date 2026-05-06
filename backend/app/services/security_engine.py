@@ -18,13 +18,38 @@ RISK_CAP_TOKEN             20     max pts from token volume
 DATA_OUT_VIOLATION_MB      0      explicit MB threshold (0 = flag only)
 MISUSE_TAGS                exfiltration,credential_abuse,
                            prompt_injection,scraping
+
+Email Agent PII patterns (auto-detected from pii_type field):
+  order_id, tracking_id, phone, email_address, customer_id
 """
 from __future__ import annotations
 
 import os
+import re
 from decimal import Decimal
 
 from app.schemas import TelemetryEventCreate
+
+# PII type labels surfaced by the Email Support Agent's sanitization stage
+_EMAIL_AGENT_PII_TYPES = frozenset({
+    "order_id",
+    "tracking_id",
+    "phone",
+    "phone_number",
+    "email_address",
+    "customer_id",
+    "credit_card",
+    "ssn",
+})
+
+# Regex patterns that auto-detect email-agent PII in free-text pii_type values
+_EMAIL_PII_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("order_id",     re.compile(r"\border[_\s]?id\b",      re.I)),
+    ("tracking_id",  re.compile(r"\btrack(ing)?[_\s]?id\b", re.I)),
+    ("phone",        re.compile(r"\bphone\b",               re.I)),
+    ("email_address",re.compile(r"\bemail[_\s]?addr(ess)?\b", re.I)),
+    ("customer_id",  re.compile(r"\bcustomer[_\s]?id\b",   re.I)),
+]
 
 
 def _dec(env_key: str, default: str) -> Decimal:
@@ -37,6 +62,19 @@ def _misuse_tag_set() -> frozenset[str]:
         "exfiltration,credential_abuse,prompt_injection,scraping",
     )
     return frozenset(t.strip().lower() for t in raw.split(",") if t.strip())
+
+
+def _detect_email_pii(pii_type: str | None) -> tuple[bool, str | None]:
+    """Return (detected, canonical_type) for email-agent specific PII."""
+    if not pii_type:
+        return False, None
+    low = pii_type.strip().lower()
+    if low in _EMAIL_AGENT_PII_TYPES:
+        return True, low
+    for canonical, pattern in _EMAIL_PII_PATTERNS:
+        if pattern.search(pii_type):
+            return True, canonical
+    return False, None
 
 
 class SecurityEngine:
@@ -63,10 +101,13 @@ class SecurityEngine:
         risk += min(output_mb * w_out, cap_out)
         risk += min(Decimal(str(total_tokens)) / Decimal("500") * w_tok, cap_tok)
 
+        email_pii_hit, email_pii_canonical = _detect_email_pii(event_data.pii_type)
         pii_detected = bool(
             event_data.contains_pii
+            or email_pii_hit
             or (event_data.pii_type and event_data.pii_type.lower() not in {"", "none"})
         )
+        resolved_pii_type = email_pii_canonical or (event_data.pii_type if pii_detected else None)
         if pii_detected:
             risk += w_pii
 
@@ -89,7 +130,7 @@ class SecurityEngine:
 
         return {
             "pii_detected": pii_detected,
-            "pii_type": event_data.pii_type if pii_detected else None,
+            "pii_type": resolved_pii_type,
             "data_out_violation": data_out_violation,
             "misuse_pattern_detected": misuse_pattern_detected,
             "risk_score": risk.quantize(Decimal("0.01")),

@@ -24,6 +24,8 @@ from app.core.deps import get_db
 from app.models import (
     Budget,
     DailyOrgSummary,
+    Organization,
+    Project,
     RateLimit,
     TelemetryEvent,
     TraceModelUsage,
@@ -496,6 +498,66 @@ def get_project_trace(
         ],
     }
 
+
+@router.get("/resolve")
+def resolve_org_project(
+    org_name: Optional[str] = Query(None),
+    project_name: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Resolve human-readable org/project names to their stable database IDs.
+
+    Used by the GovernanceSDK at initialisation time so callers can use
+    ``org_name`` / ``project_name`` instead of raw UUIDs.
+
+    GET /control/resolve?org_name=Acme+Corp&project_name=chatbot-prod
+    → { "org_id": "...", "project_id": "...", "org_name": "...", "project_name": "..." }
+    """
+    org_id: Optional[str] = None
+    project_id: Optional[str] = None
+    resolved_org_name: Optional[str] = None
+    resolved_project_name: Optional[str] = None
+
+    if org_name:
+        org = (
+            db.query(Organization)
+            .filter(func.lower(Organization.org_name) == org_name.strip().lower())
+            .first()
+        )
+        if org:
+            org_id = org.id
+            resolved_org_name = org.org_name
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Organization '{org_name}' not found.",
+            )
+
+    if project_name and org_id:
+        proj = (
+            db.query(Project)
+            .filter(
+                Project.org_id == org_id,
+                func.lower(Project.project_name) == project_name.strip().lower(),
+            )
+            .first()
+        )
+        if proj:
+            project_id = proj.id
+            resolved_project_name = proj.project_name
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_name}' not found in org '{org_name}'.",
+            )
+
+    return {
+        "org_id": org_id,
+        "project_id": project_id,
+        "org_name": resolved_org_name,
+        "project_name": resolved_project_name,
+    }
 
 @router.get("/notifications/status")
 def get_notification_status():

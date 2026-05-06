@@ -4,7 +4,8 @@
       "Bash(xargs grep *)",
       "Bash(cd \"c:\\\\\\\\Users\\\\\\\\SurbhiVikramaditya\\\\\\\\Documents\\\\\\\\ai_governance\")",
       "Bash(python -c ' *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(PowerShell.exe -Command \"Get-ChildItem 'c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\services' | Select-Object Name\")"
     ]
   }
 }

@@ -7,7 +7,9 @@ import {
   resolveAlertCombined,
   getControlQuota,
   getOrganizations,
+  getProjects,
   getNotificationStatus,
+  getAdminPIIDetail,
 } from "../api";
 
 function QuotaBar({ pct, forecast }) {
@@ -39,6 +41,153 @@ function QuotaBar({ pct, forecast }) {
   );
 }
 
+const RISK_COLOR = (score) => {
+  if (score >= 80) return "#ef4444";
+  if (score >= 60) return "#f97316";
+  if (score >= 30) return "#eab308";
+  return "#22c55e";
+};
+
+function DetailRow({ label, value, valueStyle }) {
+  return (
+    <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border, #f0f0f0)" }}>
+      <span style={{ fontSize: 12, color: "var(--gray-500)", minWidth: 160, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, ...valueStyle }}>{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function PBarInline({ pct }) {
+  const color = pct >= 100 ? "#ef4444" : pct >= 90 ? "#f97316" : pct >= 75 ? "#eab308" : "#22c55e";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 140 }}>
+      <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--border,#e5e7eb)", overflow: "hidden" }}>
+        <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: color, borderRadius: 3 }} />
+      </div>
+      <span style={{ fontSize: 12, minWidth: 38 }}>{pct.toFixed(1)}%</span>
+    </div>
+  );
+}
+
+function PIIDetailModal({ eventId, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!eventId) return;
+    setLoading(true);
+    setError("");
+    getAdminPIIDetail(eventId)
+      .then((res) => setDetail(res.data))
+      .catch(() => setError("Failed to load PII detail."))
+      .finally(() => setLoading(false));
+  }, [eventId]);
+
+  if (!eventId) return null;
+
+  const tokenStatusClass =
+    detail?.usage_pct >= 100 ? "critical"
+    : detail?.usage_pct >= 90 ? "high"
+    : detail?.usage_pct >= 75 ? "medium"
+    : "";
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 740, width: "100%", maxHeight: "88vh", overflowY: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 14, right: 16, background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--gray-500)" }}>×</button>
+        <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Detection — Event Detail</h3>
+        <p style={{ margin: "0 0 18px", fontSize: 12, color: "var(--gray-500)" }}>{eventId}</p>
+
+        {loading && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--gray-400)" }}>Loading…</div>}
+        {error && <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>}
+
+        {detail && (
+          <>
+            <section style={{ marginBottom: 20 }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Context</h4>
+              <DetailRow label="Organization" value={`${detail.org_name}${detail.org_id !== detail.org_name ? ` (${detail.org_id})` : ""}`} />
+              <DetailRow label="Project" value={detail.project_name ? `${detail.project_name}${detail.project_id !== detail.project_name ? ` (${detail.project_id})` : ""}` : detail.project_id} />
+              {detail.project_environment && <DetailRow label="Environment" value={detail.project_environment} />}
+              <DetailRow label="Model / Tool" value={detail.model_name} />
+              <DetailRow label="Provider" value={detail.provider} />
+              <DetailRow label="Service Type" value={detail.service_type} />
+              <DetailRow label="Status" value={detail.status} />
+              <DetailRow label="Timestamp" value={detail.created_at ? new Date(detail.created_at).toLocaleString() : null} />
+            </section>
+
+            <section style={{ marginBottom: 20 }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>PII Detection</h4>
+              <DetailRow label="PII Detected" value={detail.pii_detected ? "Yes" : "No"} valueStyle={{ color: detail.pii_detected ? "#ef4444" : "#22c55e" }} />
+              {detail.pii_type && <DetailRow label="PII Type" value={detail.pii_type} valueStyle={{ fontFamily: "monospace", background: "#fef9c3", padding: "1px 6px", borderRadius: 4 }} />}
+              <DetailRow label="Risk Score" value={
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: RISK_COLOR(detail.risk_score), flexShrink: 0 }} />
+                  {detail.risk_score?.toFixed(1)} — {detail.risk_label}
+                </span>
+              } />
+              <DetailRow label="Misuse Pattern" value={detail.misuse_pattern_detected ? "Detected" : "None"} valueStyle={{ color: detail.misuse_pattern_detected ? "#ef4444" : undefined }} />
+              <DetailRow label="Data Out Violation" value={detail.data_out_violation ? "Yes" : "No"} valueStyle={{ color: detail.data_out_violation ? "#ef4444" : undefined }} />
+              <DetailRow label="Abnormal Spike" value={detail.abnormal_usage_spike ? "Yes" : "No"} valueStyle={{ color: detail.abnormal_usage_spike ? "#f97316" : undefined }} />
+              <DetailRow label="Masking Applied" value={detail.masking_applied ? "Yes" : "No"} valueStyle={{ color: detail.masking_applied ? "#22c55e" : "var(--gray-500)" }} />
+            </section>
+
+            <section style={{ marginBottom: 20 }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Usage Metrics</h4>
+              <DetailRow label="Prompt Tokens" value={Number(detail.prompt_tokens || 0).toLocaleString()} />
+              <DetailRow label="Completion Tokens" value={Number(detail.completion_tokens || 0).toLocaleString()} />
+              <DetailRow label="Total Tokens" value={Number(detail.total_tokens || 0).toLocaleString()} />
+              <DetailRow label="Total Cost" value={`$${Number(detail.total_cost || 0).toFixed(4)}`} />
+              <DetailRow label="Latency" value={`${Number(detail.latency_ms || 0).toLocaleString()} ms`} />
+              <DetailRow label="Data In" value={`${Number(detail.data_in_mb || 0).toFixed(3)} MB`} />
+              <DetailRow label="Data Out" value={`${Number(detail.data_out_mb || 0).toFixed(3)} MB`} />
+              <DetailRow label="Token Limit (daily)" value={detail.token_limit !== null ? Number(detail.token_limit).toLocaleString() : "No limit configured"} />
+              {detail.token_limit !== null && (
+                <DetailRow label="Remaining Tokens" value={
+                  <span className={`status-pill ${tokenStatusClass}`}>
+                    {detail.remaining_tokens < 0 ? `-${Number(Math.abs(detail.remaining_tokens)).toLocaleString()}` : Number(detail.remaining_tokens).toLocaleString()}
+                  </span>
+                } />
+              )}
+              {detail.usage_pct !== null && (
+                <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border,#f0f0f0)" }}>
+                  <span style={{ fontSize: 12, color: "var(--gray-500)", minWidth: 160, flexShrink: 0 }}>Token Usage</span>
+                  <div style={{ flex: 1 }}><PBarInline pct={detail.usage_pct} /></div>
+                </div>
+              )}
+            </section>
+
+            <section style={{ marginBottom: 20 }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Root Cause Analysis</h4>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {(detail.root_causes || []).map((rc, i) => (
+                  <li key={i} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--gray-700)" }}>{rc}</li>
+                ))}
+              </ul>
+            </section>
+
+            {detail.related_anomalies && detail.related_anomalies.length > 0 && (
+              <section>
+                <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Related Anomalies</h4>
+                {detail.related_anomalies.map((a, i) => (
+                  <div key={i} style={{ padding: "10px 14px", borderRadius: 8, background: "var(--surface-2,#f8f9fa)", border: "1px solid var(--border,#e5e7eb)", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span className={`status-pill ${a.severity || ""}`}>{a.severity}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>{a.anomaly_type}</span>
+                      <span style={{ fontSize: 11, color: "var(--gray-400)", marginLeft: "auto" }}>score: {a.anomaly_score?.toFixed(2)}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--gray-600)" }}>{a.message}</p>
+                  </div>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AlertsSecurity() {
   const [summary, setSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -48,19 +197,37 @@ function AlertsSecurity() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [activeModal, setActiveModal] = useState(null);
+  const [piiModalEventId, setPiiModalEventId] = useState(null);
   const [quotaList, setQuotaList] = useState([]);
   const [quotaLoading, setQuotaLoading] = useState(false);
   const [notifStatus, setNotifStatus] = useState(null);
   const [tokenPopupDismissed, setTokenPopupDismissed] = useState(false);
+  const [orgs, setOrgs] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [selectedOrg, setSelectedOrg] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
+  const [range, setRange] = useState("all");
+
+  const rangeToStartDate = (r) => {
+    if (r === "all") return undefined;
+    const d = new Date();
+    if (r === "today") return d.toISOString().split("T")[0];
+    const offsets = { "7d": 6, "30d": 29, "90d": 89 };
+    d.setDate(d.getDate() - (offsets[r] || 0));
+    return d.toISOString().split("T")[0];
+  };
 
   const load = async () => {
     setLoading(true);
+    const org = selectedOrg || undefined;
+    const proj = selectedProject || undefined;
+    const startDate = rangeToStartDate(range);
     try {
       const [summaryRes, alertsRes, logsRes, anomaliesRes] = await Promise.all([
-        getSecuritySummaryCombined(),
-        getAlertsSecurity(alertFilter === "all" ? undefined : alertFilter),
-        getSecurityLogsCombined(),
-        getAnomaliesCombined("open"),
+        getSecuritySummaryCombined(org, proj, startDate),
+        getAlertsSecurity(alertFilter === "all" ? undefined : alertFilter, org, proj, startDate),
+        getSecurityLogsCombined(undefined, undefined, org, proj, startDate),
+        getAnomaliesCombined("open", org, proj, startDate),
       ]);
       setSummary(summaryRes.data);
       setAlerts(alertsRes.data || []);
@@ -90,10 +257,23 @@ function AlertsSecurity() {
   };
 
   useEffect(() => {
+    getOrganizations().then((r) => setOrgs(r.data || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (selectedOrg) {
+      getProjects(selectedOrg).then((r) => setProjects(r.data || [])).catch(() => setProjects([]));
+    } else {
+      setProjects([]);
+      setSelectedProject("");
+    }
+  }, [selectedOrg]);
+
+  useEffect(() => {
     load();
     loadQuotas();
     getNotificationStatus().then((r) => setNotifStatus(r.data)).catch(() => {});
-  }, [alertFilter]);
+  }, [alertFilter, selectedOrg, selectedProject, range]);
 
   const handleResolve = async (id) => {
     await resolveAlertCombined(id);
@@ -158,12 +338,50 @@ function AlertsSecurity() {
 
       {/* ── Header + Snapshot ── */}
       <section className="panel" style={{ padding: "18px 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
             <h2 style={{ margin: 0 }}>Alerts &amp; Security</h2>
             <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
               Token quota monitoring, budget forecasting, governance alerts, and security signals.
             </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <select
+                value={selectedOrg}
+                onChange={(e) => { setSelectedOrg(e.target.value); setSelectedProject(""); }}
+                style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border,#ddd)", background: "#fff", minWidth: 160 }}
+              >
+                <option value="">All Organizations</option>
+                {orgs.map((o) => <option key={o.id} value={o.id}>{o.org_name || o.id}</option>)}
+              </select>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                disabled={!selectedOrg}
+                style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid var(--border,#ddd)", background: "#fff", minWidth: 160, opacity: selectedOrg ? 1 : 0.5 }}
+              >
+                <option value="">All Projects</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.project_name || p.id}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              {[
+                { value: "all", label: "All Time" },
+                { value: "today", label: "Today" },
+                { value: "7d", label: "Last 7 Days" },
+                { value: "30d", label: "Last 30 Days" },
+                { value: "90d", label: "Last 90 Days" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`btn ${range === opt.value ? "btn-primary" : "btn-ghost"}`}
+                  style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() => setRange(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="pill-row" style={{ gap: 10, flexWrap: "wrap" }}>
             {[
@@ -290,6 +508,8 @@ function AlertsSecurity() {
                 <th>ID</th>
                 <th>Type</th>
                 <th>Severity</th>
+                <th>Org</th>
+                <th>Project</th>
                 <th>Message</th>
                 <th>Threshold</th>
                 <th>Actual</th>
@@ -300,7 +520,7 @@ function AlertsSecurity() {
             <tbody>
               {alerts.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--gray-500)" }}>No alerts.</td>
+                  <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>No alerts.</td>
                 </tr>
               )}
               {alerts.map((a) => (
@@ -308,6 +528,8 @@ function AlertsSecurity() {
                   <td>{a.id}</td>
                   <td><code style={{ fontSize: 11 }}>{a.alert_type}</code></td>
                   <td><span className={`status-pill ${a.severity}`}>{a.severity}</span></td>
+                  <td style={{ fontSize: 12, color: "var(--gray-600)" }}>{a.org_id || "—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--gray-600)" }}>{a.project_id || "—"}</td>
                   <td style={{ maxWidth: 300 }}>{a.message}</td>
                   <td>{a.threshold_value ?? "—"}</td>
                   <td>{a.actual_value ?? "—"}</td>
@@ -348,7 +570,12 @@ function AlertsSecurity() {
             {anomalies.length ? (
               anomalies.map((item) => (
                 <div key={item.id} className="list-item">
-                  <strong>{item.anomaly_type}</strong>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <strong>{item.anomaly_type}</strong>
+                    <span style={{ fontSize: 11, color: "var(--gray-400)" }}>
+                      {item.org_id}{item.project_id ? ` / ${item.project_id}` : ""}
+                    </span>
+                  </div>
                   <div className="list-meta">
                     <span className={`status-pill ${item.severity}`}>{item.severity}</span>
                     {"  "}{item.message}
@@ -361,60 +588,6 @@ function AlertsSecurity() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>
-                Security Logs{" "}
-                {logs.length > 0 && (
-                  <span className="status-pill" style={{ fontSize: 11, padding: "3px 9px", verticalAlign: "middle" }}>
-                    {logs.length}
-                  </span>
-                )}
-              </h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                PII, data-out, misuse, and risk scoring per event.
-              </p>
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>PII</th>
-                  <th>Type</th>
-                  <th>Data Out</th>
-                  <th>Misuse</th>
-                  <th>Spike</th>
-                  <th>Risk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)" }}>No security logs.</td>
-                  </tr>
-                )}
-                {logs.map((item) => {
-                  const score = Number(item.risk_score || 0);
-                  const cls = score >= 7 ? "risk-high" : score >= 4 ? "risk-med" : "risk-low";
-                  return (
-                    <tr key={item.id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{item.event_id}</td>
-                      <td><span className={item.pii_detected ? "badge-yes" : "badge-no"}>{item.pii_detected ? "Yes" : "—"}</span></td>
-                      <td style={{ color: item.pii_type ? "var(--gray-700)" : "var(--gray-300)" }}>{item.pii_type || "—"}</td>
-                      <td><span className={item.data_out_violation ? "badge-yes" : "badge-no"}>{item.data_out_violation ? "Yes" : "—"}</span></td>
-                      <td><span className={item.misuse_pattern_detected ? "badge-yes" : "badge-no"}>{item.misuse_pattern_detected ? "Yes" : "—"}</span></td>
-                      <td><span className={item.abnormal_usage_spike ? "badge-yes" : "badge-no"}>{item.abnormal_usage_spike ? "Yes" : "—"}</span></td>
-                      <td><span className={cls}>{score.toFixed(1)}</span></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </section>
 
       {/* ══════════ NOTIFICATION CHANNELS ══════════ */}
@@ -605,16 +778,33 @@ function AlertsSecurity() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Event</th><th>PII</th><th>Type</th><th>Data Out</th><th>Misuse</th><th>Spike</th><th>Risk</th></tr>
+                  <tr><th>Org</th><th>Project</th><th>Model</th><th>Event</th><th>PII</th><th>Type</th><th>Data Out</th><th>Misuse</th><th>Spike</th><th>Risk</th></tr>
                 </thead>
                 <tbody>
                   {rows.map((item) => {
                     const score = Number(item.risk_score || 0);
                     const cls = score >= 7 ? "risk-high" : score >= 4 ? "risk-med" : "risk-low";
+                    const isPII = !!item.pii_detected;
                     return (
-                      <tr key={item.id}>
-                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{item.event_id}</td>
-                        <td><span className={item.pii_detected ? "badge-yes" : "badge-no"}>{item.pii_detected ? "Yes" : "—"}</span></td>
+                      <tr
+                        key={item.id}
+                        onClick={isPII ? () => setPiiModalEventId(item.event_id) : undefined}
+                        style={isPII ? { cursor: "pointer", background: "rgba(239,68,68,0.04)" } : undefined}
+                        title={isPII ? "Click to view PII detection detail" : undefined}
+                      >
+                        <td style={{ fontSize: 12 }}>{item.org_name || item.org_id || "—"}</td>
+                        <td title={item.project_id || ""}>{item.project_name || item.project_id || "—"}</td>
+                        <td><strong>{item.model_name || "—"}</strong></td>
+                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
+                        <td>
+                          {isPII ? (
+                            <span className="badge-yes" style={{ textDecoration: "underline dotted", cursor: "pointer" }} title="Click row to view org/project details">
+                              Yes{item.pii_type ? ` · ${item.pii_type}` : ""}
+                            </span>
+                          ) : (
+                            <span className="badge-no">—</span>
+                          )}
+                        </td>
                         <td>{item.pii_type || "—"}</td>
                         <td><span className={item.data_out_violation ? "badge-yes" : "badge-no"}>{item.data_out_violation ? "Yes" : "—"}</span></td>
                         <td><span className={item.misuse_pattern_detected ? "badge-yes" : "badge-no"}>{item.misuse_pattern_detected ? "Yes" : "—"}</span></td>
@@ -643,13 +833,22 @@ function AlertsSecurity() {
                 alerts.length ? (
                   <div className="table-wrap">
                     <table>
-                      <thead><tr><th>Type</th><th>Severity</th><th>Message</th><th>Threshold</th><th>Actual</th><th>Status</th></tr></thead>
+                      <thead><tr><th>Type</th><th>Severity</th><th>Org</th><th>Project</th><th>Tool / Model</th><th>Message</th><th>Threshold</th><th>Actual</th><th>Status</th></tr></thead>
                       <tbody>
                         {alerts.map((a) => (
                           <tr key={a.id}>
                             <td><code style={{ fontSize: 11 }}>{a.alert_type}</code></td>
                             <td><span className={`status-pill ${a.severity}`}>{a.severity}</span></td>
-                            <td>{a.message}</td>
+                            <td style={{ fontSize: 12, color: "var(--gray-600)" }} title={a.org_id || ""}>
+                              {a.org_name || a.org_id || "—"}
+                            </td>
+                            <td style={{ fontSize: 12, color: "var(--gray-600)" }} title={a.project_id || ""}>
+                              {a.project_name || a.project_id || "—"}
+                            </td>
+                            <td style={{ fontSize: 12 }}>
+                              <strong>{a.tool_name || a.model_name || "—"}</strong>
+                            </td>
+                            <td style={{ maxWidth: 280 }}>{a.message}</td>
                             <td>{a.threshold_value ?? "—"}</td>
                             <td>{a.actual_value ?? "—"}</td>
                             <td><span className={`status-pill ${a.status}`}>{a.status}</span></td>
@@ -668,6 +867,11 @@ function AlertsSecurity() {
                         <strong>{item.anomaly_type}</strong>
                         <div className="list-meta">
                           <span className={`status-pill ${item.severity}`}>{item.severity}</span>{"  "}{item.message}
+                        </div>
+                        <div className="list-meta" style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
+                          Org: <strong>{item.org_name || item.org_id || "—"}</strong>
+                          {" · "}Project: <strong>{item.project_name || item.project_id || "—"}</strong>
+                          {" · "}Tool: <strong>{item.tool_name || "—"}</strong>
                         </div>
                       </div>
                     ))}
@@ -703,6 +907,13 @@ function AlertsSecurity() {
           </div>
         );
       })()}
+
+      {piiModalEventId && (
+        <PIIDetailModal
+          eventId={piiModalEventId}
+          onClose={() => setPiiModalEventId(null)}
+        />
+      )}
     </div>
   );
 }

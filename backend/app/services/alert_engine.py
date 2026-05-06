@@ -46,16 +46,28 @@ class AlertEngine:
             "data_out_mb": Decimal(str(event_data.output_data_size_mb)),
             "anomaly_score": Decimal(str(anomaly_score)),
         }
+        # Single source of truth for the tool/model name attached to every
+        # alert so downstream views can trace the alert back to its exact
+        # tool — same linkage strategy as the Super Admin Log module.
+        tool_ref = event_data.model_name or event_data.tool_name
 
         if security_result["pii_detected"]:
+            _model = tool_ref or "unknown model"
+            _project = event_data.project_id or "unknown project"
+            _pii_type = security_result.get("pii_type") or "sensitive data"
             self._create_alert(
                 db=db,
                 org_id=event_data.org_id,
                 project_id=event_data.project_id,
+                tool_name=tool_ref,
                 telemetry_id=telemetry_id,
                 alert_type="pii_detected",
                 severity="critical",
-                message=f"PII detected for event {event_data.event_id} (risk {security_result['risk_score']}).",
+                message=(
+                    f"PII ({_pii_type}) detected in model '{_model}' "
+                    f"[project: {_project}] — event {event_data.event_id}, "
+                    f"risk score {security_result['risk_score']:.1f}."
+                ),
                 threshold=None,
                 actual=Decimal(str(security_result["risk_score"])),
             )
@@ -65,6 +77,7 @@ class AlertEngine:
                 db=db,
                 org_id=event_data.org_id,
                 project_id=event_data.project_id,
+                tool_name=tool_ref,
                 telemetry_id=telemetry_id,
                 alert_type="misuse_pattern",
                 severity="critical",
@@ -78,6 +91,7 @@ class AlertEngine:
                 db=db,
                 org_id=event_data.org_id,
                 project_id=event_data.project_id,
+                tool_name=tool_ref,
                 telemetry_id=telemetry_id,
                 alert_type="data_out_violation",
                 severity="high",
@@ -91,23 +105,29 @@ class AlertEngine:
                 db=db,
                 org_id=event_data.org_id,
                 project_id=event_data.project_id,
+                tool_name=tool_ref,
                 telemetry_id=telemetry_id,
                 alert_type="usage_spike",
                 severity="high",
-                message=f"Abnormal usage spike for {event_data.model_name or event_data.tool_name}.",
+                message=f"Abnormal usage spike for {tool_ref or 'unknown tool'}.",
                 threshold=Decimal("1"),
                 actual=Decimal(str(anomaly_score)),
             )
 
-        self._evaluate_budgets(db, event_data.org_id, event_data.project_id, telemetry_id)
-        self._evaluate_token_quotas(db, event_data, telemetry_id)
-        self._evaluate_custom_rules(db, event_data, event_metrics, telemetry_id)
+        self._evaluate_budgets(db, event_data.org_id, event_data.project_id, telemetry_id, tool_ref)
+        self._evaluate_token_quotas(db, event_data, telemetry_id, tool_ref)
+        self._evaluate_custom_rules(db, event_data, event_metrics, telemetry_id, tool_ref)
         db.flush()
 
     # ─────────────────── budget monitoring ───────────────────
 
     def _evaluate_budgets(
-        self, db: Session, org_id: str, project_id: str | None, telemetry_id: int | None
+        self,
+        db: Session,
+        org_id: str,
+        project_id: str | None,
+        telemetry_id: int | None,
+        tool_name: str | None = None,
     ) -> None:
         today = date.today()
         month_start = today.replace(day=1)
@@ -142,6 +162,7 @@ class AlertEngine:
                         db=db,
                         org_id=org_id,
                         project_id=budget.project_id,
+                        tool_name=tool_name,
                         telemetry_id=telemetry_id,
                         alert_type=f"budget_{alert_pct:.0f}pct",
                         severity=sev,
@@ -166,6 +187,7 @@ class AlertEngine:
                         db=db,
                         org_id=org_id,
                         project_id=budget.project_id,
+                        tool_name=tool_name,
                         telemetry_id=telemetry_id,
                         alert_type="budget_forecast_overrun",
                         severity="high",
@@ -180,7 +202,11 @@ class AlertEngine:
     # ─────────────────── token quota monitoring ───────────────────
 
     def _evaluate_token_quotas(
-        self, db: Session, event_data: TelemetryEventCreate, telemetry_id: int | None
+        self,
+        db: Session,
+        event_data: TelemetryEventCreate,
+        telemetry_id: int | None,
+        tool_name: str | None = None,
     ) -> None:
         today = date.today()
         rate_limits = db.query(RateLimit).filter(RateLimit.org_id == event_data.org_id).all()
@@ -204,6 +230,7 @@ class AlertEngine:
                     db=db,
                     org_id=event_data.org_id,
                     project_id=event_data.project_id,
+                    tool_name=tool_name or event_data.model_name or event_data.tool_name,
                     telemetry_id=telemetry_id,
                     alert_type="token_quota",
                     severity=sev,
@@ -223,6 +250,7 @@ class AlertEngine:
         event_data: TelemetryEventCreate,
         metrics: dict[str, Decimal],
         telemetry_id: int | None = None,
+        tool_name: str | None = None,
     ) -> None:
         rules = db.query(GovernanceRule).filter(GovernanceRule.is_active.is_(True)).all()
         for rule in rules:
@@ -242,6 +270,7 @@ class AlertEngine:
                     db=db,
                     org_id=event_data.org_id,
                     project_id=event_data.project_id,
+                    tool_name=tool_name or event_data.model_name or event_data.tool_name,
                     telemetry_id=telemetry_id,
                     alert_type=f"rule:{rule.metric_name}",
                     severity=rule.severity,
@@ -263,11 +292,25 @@ class AlertEngine:
         )
         created = 0
         for anomaly in recent:
+            # Resolve telemetry_id from anomaly.event_id when available so the
+            # generated alert remains linked to its source event (and through
+            # it, to the org/project/tool/model).
+            telemetry_id = None
+            if anomaly.event_id:
+                from app.models import TelemetryEvent
+                evt = (
+                    db.query(TelemetryEvent.id)
+                    .filter(TelemetryEvent.event_id == anomaly.event_id)
+                    .first()
+                )
+                if evt:
+                    telemetry_id = evt[0]
             self._create_alert(
                 db=db,
                 org_id=anomaly.org_id,
-                project_id=None,
-                telemetry_id=None,
+                project_id=anomaly.project_id,
+                tool_name=anomaly.tool_name,
+                telemetry_id=telemetry_id,
                 alert_type=anomaly.anomaly_type,
                 severity=anomaly.severity,
                 message=anomaly.message or "Anomaly detected during scheduled scan.",
@@ -299,12 +342,15 @@ class AlertEngine:
         threshold: Decimal | None,
         actual: Decimal | None,
         rule_id: int | None = None,
+        tool_name: str | None = None,
     ) -> None:
         recent_cutoff = date.today() - timedelta(days=1)
         existing = (
             db.query(Alert)
             .filter(
                 Alert.org_id == org_id,
+                Alert.project_id == project_id,
+                Alert.tool_name == tool_name,
                 Alert.alert_type == alert_type,
                 Alert.status == "active",
                 func.date(Alert.created_at) >= recent_cutoff,
@@ -317,6 +363,8 @@ class AlertEngine:
         db.add(
             Alert(
                 org_id=org_id,
+                project_id=project_id,
+                tool_name=tool_name,
                 rule_id=rule_id,
                 alert_type=alert_type,
                 severity=severity,

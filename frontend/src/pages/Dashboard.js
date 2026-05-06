@@ -15,13 +15,23 @@ import {
 } from "recharts";
 import {
   getGovernanceOverview,
-  getSecuritySummary,
+  getSecuritySummaryCombined,
   getTelemetryLogs,
-  getToolsUsage,
   getUsageTrends,
   getCostTotals,
   getCostByProject,
 } from "../api";
+
+// Returns ISO date string (YYYY-MM-DD) for the start of the selected range,
+// or undefined for "all time".
+const rangeToStartDate = (rangeValue) => {
+  if (rangeValue === "all") return undefined;
+  const d = new Date();
+  if (rangeValue === "today") return d.toISOString().split("T")[0];
+  const offsets = { "7d": 6, "30d": 29, "90d": 89 };
+  d.setDate(d.getDate() - (offsets[rangeValue] || 0));
+  return d.toISOString().split("T")[0];
+};
 
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4"];
 
@@ -66,14 +76,14 @@ function Dashboard() {
         const opt =
           RANGE_OPTIONS.find((r) => r.value === currentRange) ||
           RANGE_OPTIONS[0];
+        const startDate = rangeToStartDate(currentRange);
 
-        const [overviewRes, trendsRes, securityRes, usageRes, logsRes, costTotalsRes, costProjectRes] =
+        const [overviewRes, trendsRes, securityRes, logsRes, costTotalsRes, costProjectRes] =
           await Promise.all([
             getGovernanceOverview(null, opt.days, opt.value),
             getUsageTrends(null, opt.days),
-            getSecuritySummary(),
-            getToolsUsage(),
-            getTelemetryLogs({ limit: 20 }),
+            getSecuritySummaryCombined(null, null, startDate),
+            getTelemetryLogs({ limit: 20, start_date: startDate }),
             getCostTotals(),
             getCostByProject(),
           ]);
@@ -81,7 +91,7 @@ function Dashboard() {
         setOverview(overviewRes.data);
         setTrends(trendsRes.data || []);
         setSecurity(securityRes.data);
-        setToolUsage(usageRes.data || []);
+        setToolUsage([]);
         setRecentLogs(logsRes.data || []);
         setCostTotals(costTotalsRes.data || null);
         setCostByProject(costProjectRes.data || []);
@@ -125,11 +135,15 @@ function Dashboard() {
     ([name, value]) => ({ name, value: Number(value || 0) }),
   );
 
-  const topTools = (toolUsage || []).slice(0, 6).map((item) => ({
-    tool: item.tool_name,
-    cost: Number(item.total_cost || 0),
-    tokens: Number(item.total_tokens || 0),
-  }));
+  // Aggregate tool_rollup (already time-filtered by the overview endpoint) for the chart.
+  const topTools = Object.values(
+    (overview?.tool_rollup || []).reduce((acc, row) => {
+      if (!acc[row.tool_name]) acc[row.tool_name] = { tool: row.tool_name, cost: 0, tokens: 0 };
+      acc[row.tool_name].cost += Number(row.total_cost || 0);
+      acc[row.tool_name].tokens += Number(row.total_tokens || 0);
+      return acc;
+    }, {})
+  ).slice(0, 6);
 
   const recentAlerts = overview?.recent_alerts || [];
   const recentAnomalies = overview?.recent_anomalies || [];

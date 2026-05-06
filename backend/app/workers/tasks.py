@@ -170,13 +170,14 @@ def _detect_anomalies(db: Session) -> int:
     tool_rows = (
         db.query(
             DailyOrgSummary.org_id,
+            DailyOrgSummary.project_id,
             DailyOrgSummary.tool_name,
             func.sum(DailyOrgSummary.total_events).label("events_today"),
             func.sum(DailyOrgSummary.total_cost).label("cost_today"),
             func.avg(DailyOrgSummary.avg_latency_ms).label("latency_today"),
         )
         .filter(DailyOrgSummary.date == today)
-        .group_by(DailyOrgSummary.org_id, DailyOrgSummary.tool_name)
+        .group_by(DailyOrgSummary.org_id, DailyOrgSummary.project_id, DailyOrgSummary.tool_name)
         .all()
     )
 
@@ -212,6 +213,7 @@ def _detect_anomalies(db: Session) -> int:
                 db.add(
                     UsageAnomaly(
                         org_id=row.org_id,
+                        project_id=row.project_id,
                         tool_name=row.tool_name,
                         anomaly_type=anomaly_type,
                         severity="high" if score >= Decimal("2.5") else "medium",

@@ -236,6 +236,8 @@ class DataSecurityLog(Base):
 
     id = Column(BigInteger, primary_key=True)
     event_id = Column(String(120), ForeignKey("telemetry_events.event_id"), nullable=False)
+    org_id = Column(String(100), nullable=True)
+    project_id = Column(String(100), nullable=True)
     pii_detected = Column(Boolean, default=False)
     pii_type = Column(String(100), nullable=True)
     data_out_violation = Column(Boolean, default=False)
@@ -254,6 +256,7 @@ class UsageAnomaly(Base):
 
     id = Column(BigInteger, primary_key=True)
     org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
     tool_name = Column(String(150), nullable=False)
     event_id = Column(String(120), nullable=True)
     anomaly_type = Column(String(60), nullable=False)
@@ -272,6 +275,7 @@ class Alert(Base):
 
     id = Column(BigInteger, primary_key=True)
     org_id = Column(String(100), nullable=True)
+    project_id = Column(String(100), nullable=True)
     rule_id = Column(BigInteger, nullable=True)
     alert_type = Column(String(100), nullable=True)
     severity = Column(String(50), nullable=True)
@@ -280,6 +284,7 @@ class Alert(Base):
     actual_value = Column(Numeric(10, 2), nullable=True)
     status = Column(String(50), default="active")
     telemetry_id = Column(BigInteger, ForeignKey("telemetry_events.id"), nullable=True)
+    tool_name = Column(String(150), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -414,6 +419,27 @@ class TraceToolUsage(Base):
     invocation_count = Column(Integer, default=1)
     execution_time_ms = Column(Integer, default=0)
     cost = Column(Numeric(14, 6), default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class EmailAgentLog(Base):
+    __tablename__ = "email_agent_logs"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    event_id = Column(String(120), ForeignKey("telemetry_events.event_id"), nullable=False)
+    email_id = Column(String(255), nullable=True)
+    sender_domain = Column(String(150), nullable=True)
+    intent = Column(String(100), nullable=True)
+    intent_confidence = Column(Numeric(5, 3), nullable=True)
+    pii_masked = Column(Boolean, default=False)
+    masking_types = Column(JSON, nullable=True)
+    draft_generated = Column(Boolean, default=False)
+    auto_replied = Column(Boolean, default=False)
+    classification_model = Column(String(100), nullable=True)
+    draft_model = Column(String(100), nullable=True)
+    stage_latencies = Column(JSON, nullable=True)
+    pipeline_status = Column(String(30), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
