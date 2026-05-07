@@ -31,11 +31,12 @@ def patch(sdk: "GovernanceSDK") -> None:
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
 
-        # Each LLM call gets its own trace_id.
-        # If sdk.session() is active, that session's trace_id becomes parent_trace_id,
-        # linking all calls in the session without overwriting per-call identity.
-        own_trace_id = str(uuid.uuid4())
+        # Trace correlation:
+        # - If a parent trace exists (FastAPI middleware, sdk.session()), we reuse it.
+        # - Otherwise we generate a call-scoped trace id.
         parent_trace_id = get_active_trace_id()
+        call_trace_id = str(uuid.uuid4())
+        trace_id = parent_trace_id or call_trace_id
         session_name = get_active_session_name()
 
         # ── PRE-CALL: PII scan ─────────────────────────────────────────────
@@ -65,11 +66,112 @@ def patch(sdk: "GovernanceSDK") -> None:
                 "action": decision.action,
                 "model": model,
             })
+            # Always emit an audit event when policy denies/block decisions.
+            # If enforce_policy=True, we'll raise after emitting.
+            sdk._send({
+                "org_id": sdk.org_id,
+                "project_id": sdk.project_id,
+                "provider": "openai",
+                "model_name": model,
+                "tool_name": sdk.tool_name,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency_ms": 0,
+                "status": "blocked",
+                "trace_id": trace_id,
+                "contains_pii": contains_pii,
+                "pii_type": pii_type,
+                "metadata": {
+                    "policy_action": decision.action,
+                    "policy_reason": decision.reason,
+                    "risk_score": risk_score,
+                    "alerts_triggered": 0,
+                    "call_trace_id": call_trace_id,
+                    **({"parent_trace_id": parent_trace_id} if parent_trace_id else {}),
+                    **({"session_name": session_name} if session_name else {}),
+                },
+            })
             if sdk._enforce_policy:
                 raise RuntimeError(f"[GovernanceSDK] Blocked by policy: {decision.reason}")
 
         # ── CALL ───────────────────────────────────────────────────────────
         start = time.time()
+        is_stream = bool(kwargs.get("stream"))
+
+        if is_stream:
+            stream_resp = _original(*args, **kwargs)
+
+            def _iter():
+                last_chunk = None
+                try:
+                    for chunk in stream_resp:
+                        last_chunk = chunk
+                        yield chunk
+                    elapsed = int((time.time() - start) * 1000)
+
+                    usage = getattr(last_chunk, "usage", None) or getattr(stream_resp, "usage", None)
+                    input_tokens = usage.prompt_tokens if usage else 0
+                    output_tokens = usage.completion_tokens if usage else 0
+
+                    cost = sdk._cost_engine.compute(model, input_tokens, output_tokens)
+                    alerts = sdk._policy.evaluate_post_call(
+                        model=model,
+                        cost=cost,
+                        total_tokens=input_tokens + output_tokens,
+                        contains_pii=contains_pii,
+                        pii_type=pii_type,
+                        latency_ms=elapsed,
+                    )
+                    for alert in alerts:
+                        sdk._fire("on_alert", alert)
+
+                    metadata: dict = {
+                        "policy_action": decision.action,
+                        "risk_score": risk_score,
+                        "alerts_triggered": len(alerts),
+                        "call_trace_id": call_trace_id,
+                    }
+                    if parent_trace_id:
+                        metadata["parent_trace_id"] = parent_trace_id
+                    if session_name:
+                        metadata["session_name"] = session_name
+
+                    sdk._send({
+                        "org_id":        sdk.org_id,
+                        "project_id":    sdk.project_id,
+                        "provider":      "openai",
+                        "model_name":    model,
+                        "tool_name":     sdk.tool_name,
+                        "input_tokens":  input_tokens,
+                        "output_tokens": output_tokens,
+                        "latency_ms":    elapsed,
+                        "status":        "success",
+                        "trace_id":      trace_id,
+                        "contains_pii":  contains_pii,
+                        "pii_type":      pii_type,
+                        "cost":          cost,
+                        "metadata":      metadata,
+                    })
+                except Exception as exc:
+                    elapsed = int((time.time() - start) * 1000)
+                    meta: dict = {"error": str(exc), "call_trace_id": call_trace_id}
+                    if parent_trace_id:
+                        meta["parent_trace_id"] = parent_trace_id
+                    sdk._send({
+                        "org_id":     sdk.org_id,
+                        "project_id": sdk.project_id,
+                        "provider":   "openai",
+                        "model_name": model,
+                        "tool_name":  sdk.tool_name,
+                        "latency_ms": elapsed,
+                        "status":     "error",
+                        "trace_id":   trace_id,
+                        "metadata":   meta,
+                    })
+                    raise
+
+            return _iter()
+
         try:
             response = _original(*args, **kwargs)
             elapsed = int((time.time() - start) * 1000)
@@ -78,10 +180,7 @@ def patch(sdk: "GovernanceSDK") -> None:
             input_tokens = usage.prompt_tokens if usage else 0
             output_tokens = usage.completion_tokens if usage else 0
 
-            # ── POST-CALL: cost computation ────────────────────────────────
             cost = sdk._cost_engine.compute(model, input_tokens, output_tokens)
-
-            # ── POST-CALL: alert evaluation ────────────────────────────────
             alerts = sdk._policy.evaluate_post_call(
                 model=model,
                 cost=cost,
@@ -97,6 +196,7 @@ def patch(sdk: "GovernanceSDK") -> None:
                 "policy_action": decision.action,
                 "risk_score": risk_score,
                 "alerts_triggered": len(alerts),
+                "call_trace_id": call_trace_id,
             }
             if parent_trace_id:
                 metadata["parent_trace_id"] = parent_trace_id
@@ -113,7 +213,7 @@ def patch(sdk: "GovernanceSDK") -> None:
                 "output_tokens": output_tokens,
                 "latency_ms":    elapsed,
                 "status":        "success",
-                "trace_id":      own_trace_id,
+                "trace_id":      trace_id,
                 "contains_pii":  contains_pii,
                 "pii_type":      pii_type,
                 "cost":          cost,
@@ -123,7 +223,7 @@ def patch(sdk: "GovernanceSDK") -> None:
 
         except Exception as exc:
             elapsed = int((time.time() - start) * 1000)
-            meta: dict = {"error": str(exc)}
+            meta: dict = {"error": str(exc), "call_trace_id": call_trace_id}
             if parent_trace_id:
                 meta["parent_trace_id"] = parent_trace_id
             sdk._send({
@@ -134,7 +234,7 @@ def patch(sdk: "GovernanceSDK") -> None:
                 "tool_name":  sdk.tool_name,
                 "latency_ms": elapsed,
                 "status":     "error",
-                "trace_id":   own_trace_id,
+                "trace_id":   trace_id,
                 "metadata":   meta,
             })
             raise

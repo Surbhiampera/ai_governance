@@ -233,7 +233,8 @@ def get_unified_trace(
     q = db.query(TelemetryEvent).filter(TelemetryEvent.trace_id == trace_id)
     if org_id:
         q = q.filter(TelemetryEvent.org_id == org_id)
-    event = q.first()
+    events = q.order_by(TelemetryEvent.created_at.asc()).all()
+    event = events[0] if events else None
     if not event:
         raise HTTPException(status_code=404, detail="Trace not found")
 
@@ -294,6 +295,24 @@ def get_unified_trace(
         ],
         "tags": event.tags or [],
         "created_at": event.created_at.isoformat() if event.created_at else None,
+        # When SDKs share the same trace_id across multiple LLM/tool calls,
+        # return all matching events for better trace correlation.
+        "trace_events": [
+            {
+                "event_id": e.event_id,
+                "provider": e.provider,
+                "model_name": e.model_name,
+                "status": e.status,
+                "latency_ms": e.latency_ms or 0,
+                "input_tokens": e.prompt_tokens or 0,
+                "output_tokens": e.completion_tokens or 0,
+                "total_tokens": e.total_tokens or 0,
+                "risk_score": round(float(e.risk_score or 0), 2),
+                "metadata": e.metadata_json or {},
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in events
+        ],
     }
 
 

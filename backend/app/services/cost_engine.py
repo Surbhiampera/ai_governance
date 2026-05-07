@@ -1,3 +1,4 @@
+import os
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -9,6 +10,9 @@ from app.schemas import CostSummary, TelemetryEventCreate
 class CostEngine:
     def calculate(self, event_data: TelemetryEventCreate, db: Session) -> CostSummary:
         external_cost = Decimal("0")
+        # Infra cost is derived from observed latency.
+        # Kept configurable for enterprise deployments.
+        infra_rate_per_ms = Decimal(os.getenv("INFRA_COST_PER_MS_USD", "0.00008"))
         infra_cost = Decimal(str(event_data.infra_cost or 0))
 
         total_tokens = event_data.prompt_tokens + event_data.completion_tokens
@@ -54,13 +58,14 @@ class CostEngine:
                 latency_s = (Decimal(str(max(int(event_data.latency_ms or 0), 0))) / Decimal("1000")).quantize(Decimal("0.000001"))
 
                 if cost_model == "per_token":
-                    rate_per_1k = base_cost if base_cost > 0 else Decimal("0.0025")
+                    # No hardcoded fallbacks: if the tool/base pricing is missing, cost=0.
+                    rate_per_1k = base_cost if base_cost > 0 else Decimal("0")
                     if total_tokens > 0:
                         llm_cost = (Decimal(str(total_tokens)) / Decimal("1000")) * rate_per_1k
                 elif cost_model == "per_request":
                     llm_cost = base_cost
                 elif cost_model == "per_second":
-                    rate_per_s = base_cost if base_cost > 0 else Decimal("0.0001")
+                    rate_per_s = base_cost if base_cost > 0 else Decimal("0")
                     llm_cost = latency_s * rate_per_s
                 elif cost_model == "fixed":
                     llm_cost = base_cost
@@ -73,11 +78,11 @@ class CostEngine:
                     mb_out = Decimal(str(event_data.output_data_size_mb or 0))
                     llm_cost = (base_cost * multiplier) + (per_mb_in * mb_in) + (per_mb_out * mb_out)
                 else:
-                    if total_tokens > 0:
-                        llm_cost = (Decimal(str(total_tokens)) / Decimal("1000")) * Decimal("0.0025")
+                    # Unknown pricing model -> no cost rather than guessing.
+                    llm_cost = Decimal("0")
 
         if infra_cost == 0 and event_data.latency_ms > 0:
-            infra_cost = Decimal(str(event_data.latency_ms)) * Decimal("0.00008")
+            infra_cost = Decimal(str(event_data.latency_ms)) * infra_rate_per_ms
 
         for ext in event_data.external_tools:
             external_cost += Decimal(str(ext.cost))

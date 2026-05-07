@@ -1,10 +1,11 @@
 """CostEngine — computes real-time LLM call cost from token counts with backend pricing sync."""
+import os
 import threading
 import time
 
 import requests
 
-_FALLBACK: dict[str, tuple[float, float]] = {
+_FALLBACK_HARDCODED: dict[str, tuple[float, float]] = {
     # model_name: (input_per_1M_USD, output_per_1M_USD)
     "gpt-4o":                     (5.00,  15.00),
     "gpt-4o-mini":                (0.15,   0.60),
@@ -20,6 +21,11 @@ _FALLBACK: dict[str, tuple[float, float]] = {
     "gemini-1.5-flash":           (0.35,   1.05),
     "gemini-1.0-pro":             (0.50,   1.50),
 }
+
+# Enterprise default: do not guess pricing locally.
+# Enable only for developer/dev environments where DB pricing may not be ready yet.
+_ALLOW_FALLBACK = os.getenv("GOVERNANCE_SDK_ALLOW_FALLBACK_PRICING", "0").strip().lower() in {"1", "true", "yes"}
+_FALLBACK: dict[str, tuple[float, float]] = _FALLBACK_HARDCODED if _ALLOW_FALLBACK else {}
 
 
 class CostEngine:
@@ -45,7 +51,8 @@ class CostEngine:
     def _refresh(self) -> None:
         try:
             resp = requests.get(
-                f"{self._endpoint}/pricing/models",
+                # Backend exposes pricing at GET /pricing/
+                f"{self._endpoint}/pricing/",
                 headers=self._headers,
                 timeout=5,
             )
@@ -88,7 +95,7 @@ class CostEngine:
     def compute(self, model: str, input_tokens: int, output_tokens: int) -> float:
         """Return call cost in USD and accumulate session totals."""
         with self._lock:
-            inp_rate, out_rate = self._pricing.get(model, (2.00, 8.00))
+            inp_rate, out_rate = self._pricing.get(model, (0.0, 0.0))
         cost = round((input_tokens * inp_rate + output_tokens * out_rate) / 1_000_000, 8)
         with self._lock:
             self._session_cost += cost
