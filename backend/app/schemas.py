@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -45,7 +46,8 @@ class TelemetryEventCreate(BaseModel):
     event_id: str
     request_id: Optional[str] = None
     trace_id: Optional[str] = None
-    org_id: str = "default"
+    # No hardcoded org default; DEFAULT_ORG_ID must be provided by environment.
+    org_id: str = Field(default_factory=lambda: (os.getenv("DEFAULT_ORG_ID", "") or "").strip())
     project_id: Optional[str] = None
     user_id: Optional[str] = None
     api_key_id: Optional[str] = None
@@ -519,6 +521,54 @@ class ModelPricingResponse(BaseModel):
     output_cost_per_1k: Optional[Decimal] = None
     currency: Optional[str] = None
     effective_from: Optional[datetime] = None
+
+
+# ─────────────────────── Email Support Agent ───────────────────────
+
+
+class EmailClassifyRequest(BaseModel):
+    text: str
+
+
+class EmailClassifyResponse(BaseModel):
+    intent: str
+    confidence: Decimal
+    provider: str
+    model: str
+
+
+class EmailDraftRequest(BaseModel):
+    text: str
+    intent: Optional[str] = None
+
+
+class EmailDraftResponse(BaseModel):
+    draft: str
+    provider: str
+    model: str
+
+
+class EmailRecordResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    org_id: str
+    project_id: Optional[str] = None
+    trace_id: Optional[str] = None
+    graph_message_id: Optional[str] = None
+    mailbox: Optional[str] = None
+    subject: Optional[str] = None
+    sender_email: Optional[str] = None
+    sender_domain: Optional[str] = None
+    received_at: Optional[datetime] = None
+    pii_masked: bool = False
+    masking_types: Optional[list[str]] = None
+    intent: Optional[str] = None
+    intent_confidence: Optional[Decimal] = None
+    draft_text: Optional[str] = None
+    auto_replied: bool = False
+    pipeline_status: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 TraceDetailResponse.model_rebuild()

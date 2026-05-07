@@ -33,7 +33,7 @@ python test_event.py           # send a test event
 ```bash
 cd frontend
 npm install
-npm start          # dev server → http://localhost:3000
+npm start          # dev server → <your configured origin>
 npm run build
 npm test
 ```

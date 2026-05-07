@@ -52,7 +52,9 @@ def init(
             # dynamic environments (tests, notebooks, hot-reload).
             pass
 
-        resolved_endpoint = (endpoint or os.getenv("GOVERNANCE_ENDPOINT") or "http://localhost:8000").rstrip("/")
+        resolved_endpoint = (endpoint or os.getenv("GOVERNANCE_ENDPOINT") or "").strip().rstrip("/")
+        if not resolved_endpoint:
+            raise RuntimeError("Missing GOVENANCE_ENDPOINT / endpoint (no hardcoded defaults)")
         resolved_api_key = api_key or os.getenv("GOVERNANCE_API_KEY")
         resolved_tool_name = tool_name or project_id
 

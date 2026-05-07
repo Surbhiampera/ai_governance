@@ -16,6 +16,7 @@ from app.schemas import (
     TelemetryEventUpdate,
     TraceDetailResponse,
 )
+from app.config import get_default_org_id, get_infra_cost_per_ms_usd
 from app.services.alert_engine import AlertEngine
 from app.services.cost_engine import CostEngine
 from app.services.security_engine import SecurityEngine
@@ -805,11 +806,9 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
     if existing:
         raise HTTPException(status_code=409, detail="event_id already exists")
 
-    # --- org_id handling fix ---
-    # Never persist an empty org_id. Fall back to "default" so the telemetry
-    # event is still ingested for super-admin/cross-tool monitoring.
+    # Never persist an empty org_id. Use DEFAULT_ORG_ID from environment.
     if not (event_data.org_id and str(event_data.org_id).strip()):
-        event_data.org_id = "default"
+        event_data.org_id = get_default_org_id()
 
     started_at = event_data.started_at or datetime.utcnow()
     completed_at = event_data.completed_at or (started_at + timedelta(milliseconds=event_data.latency_ms))
@@ -886,12 +885,13 @@ def _save_cost_breakdown(db: Session, event_data: TelemetryEventCreate, cost_sum
             )
         )
     if cost_summary.infra_cost > 0:
+        infra_rate = Decimal(get_infra_cost_per_ms_usd())
         db.add(
             CostBreakdown(
                 event_id=event_data.event_id,
                 cost_type="infra",
                 component_name="compute",
-                unit_cost=Decimal("0.000080"),
+                unit_cost=infra_rate.quantize(Decimal("0.000001")),
                 quantity=Decimal(str(max(event_data.latency_ms, 1))),
                 total_cost=cost_summary.infra_cost,
             )

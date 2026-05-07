@@ -55,7 +55,7 @@ class GovernanceSDK:
             org_name="Acme Corp",
             project_name="chatbot-prod",
             tool_name="customer-support-bot",   # shows up in every dashboard
-            endpoint="http://localhost:8000",
+            endpoint="https://your-governance-api.example.com",
         )
         sdk.patch_openai()
         sdk.patch_anthropic()
@@ -66,7 +66,7 @@ class GovernanceSDK:
             org_id="org-uuid",
             project_id="proj-uuid",
             tool_name="code-assistant",
-            endpoint="http://localhost:8000",
+            endpoint="https://your-governance-api.example.com",
         )
 
     Session grouping (all calls share a parent trace_id)::
@@ -88,7 +88,7 @@ class GovernanceSDK:
         # ── what AI application this SDK instance represents ───────────────
         tool_name: str = "unknown",
         # ── network ────────────────────────────────────────────────────────
-        endpoint: str = "http://localhost:8000",
+        endpoint: str,
         api_key: Optional[str] = None,
         # ── batching ───────────────────────────────────────────────────────
         batch_size: int = 1,
@@ -98,6 +98,8 @@ class GovernanceSDK:
         redact_pii: bool = False,
         enforce_policy: bool = False,
     ) -> None:
+        if not endpoint or not str(endpoint).strip():
+            raise ValueError("GovernanceSDK requires a non-empty endpoint")
         self._endpoint = endpoint.rstrip("/")
         self._headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
@@ -112,7 +114,9 @@ class GovernanceSDK:
             org_id = org_id or resolved_org
             project_id = project_id or resolved_proj
 
-        self.org_id: str = org_id or "default"
+        if not (org_id and str(org_id).strip()):
+            raise ValueError("GovernanceSDK requires org_id (no hardcoded defaults)")
+        self.org_id: str = org_id
         self.project_id: Optional[str] = project_id
         # tool_name is the AI application name that appears in every dashboard chart.
         # It is separate from provider ("openai") and model_name ("gpt-4o").

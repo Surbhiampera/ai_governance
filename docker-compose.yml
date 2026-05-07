@@ -33,7 +33,12 @@ services:
       DATABASE_URL: postgresql://governance:governance_dev@postgres:5432/ai_governance
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
-      CORS_ORIGINS: "http://localhost:3000"
+      # Provide your actual frontend origin(s) via env or compose override.
+      CORS_ORIGINS: "${CORS_ORIGINS}"
+      FRONTEND_URL: "${FRONTEND_URL}"
+      DEFAULT_ORG_ID: "${DEFAULT_ORG_ID}"
+      INFRA_COST_PER_MS_USD: "${INFRA_COST_PER_MS_USD}"
+      POLICY_SECRET_KEYWORDS: "${POLICY_SECRET_KEYWORDS}"
     ports:
       - "8000:8000"
     depends_on:

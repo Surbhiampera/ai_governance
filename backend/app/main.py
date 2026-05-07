@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cors_origins, get_log_level
 from app.routers import (
+    advanced,
     alerts,
     alerts_security,
     apikeys,
@@ -25,6 +26,7 @@ from app.routers import (
     telemetry,
     tools,
     workers,
+    email_agent,
 )
 
 logging.basicConfig(
@@ -49,11 +51,13 @@ _SAFE_ALTERS = [
 ]
 
 _ALL_ROUTERS = [
+    advanced.router,
     auth.router, telemetry.router, summary.router, tools.router, models.router,
     alerts.router, costs.router, security.router, alerts_security.router,
     governance.router, organizations.router, projects.router, budgets.router,
     pricing.router, apikeys.router, workers.router, lookups.router,
     ingestion.router, control.router,
+    email_agent.router,
 ]
 
 

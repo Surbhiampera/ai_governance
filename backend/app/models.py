@@ -457,3 +457,101 @@ class ModelPricing(Base):
     output_cost_per_1k = Column(Numeric(12, 6), default=0)
     currency = Column(String(10), default="USD")
     effective_from = Column(DateTime, server_default=func.now())
+
+
+class TraceSpan(Base):
+    __tablename__ = "trace_spans"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    span_id = Column(String(120), unique=True, nullable=False)
+    trace_id = Column(String(120), nullable=False)
+    parent_span_id = Column(String(120), nullable=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    span_type = Column(String(60), nullable=False)  # agent/tool/llm/retrieval/gateway/policy
+    span_name = Column(String(200), nullable=False)
+    status = Column(String(30), nullable=False, default="success")
+    provider = Column(String(100), nullable=True)
+    model_name = Column(String(120), nullable=True)
+    tool_name = Column(String(150), nullable=True)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    latency_ms = Column(Integer, default=0)
+    retry_count = Column(Integer, default=0)
+    metadata_json = Column(JSON, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class StreamingTokenEvent(Base):
+    __tablename__ = "streaming_token_events"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    trace_id = Column(String(120), nullable=False)
+    span_id = Column(String(120), nullable=True)
+    event_id = Column(String(120), nullable=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    provider = Column(String(100), nullable=True)
+    model_name = Column(String(120), nullable=True)
+    token_type = Column(String(30), nullable=False, default="completion")  # prompt|completion
+    token_count = Column(Integer, default=1)
+    token_text = Column(Text, nullable=True)
+    sequence_no = Column(Integer, default=0)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PromptResponseVersion(Base):
+    __tablename__ = "prompt_response_versions"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    version_id = Column(String(120), unique=True, nullable=False)
+    trace_id = Column(String(120), nullable=False)
+    event_id = Column(String(120), nullable=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    prompt_hash = Column(String(120), nullable=False)
+    response_hash = Column(String(120), nullable=True)
+    parent_version_id = Column(String(120), nullable=True)
+    prompt_text = Column(Text, nullable=True)
+    response_text = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class EmailRecord(Base):
+    """Archived email + agent outputs for audit and replay."""
+
+    __tablename__ = "emails"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    org_id = Column(String(100), nullable=False)
+    project_id = Column(String(100), nullable=True)
+    trace_id = Column(String(120), nullable=True)
+    graph_message_id = Column(String(255), unique=True, nullable=True)  # Microsoft Graph message id
+    mailbox = Column(String(255), nullable=True)
+    subject = Column(Text, nullable=True)
+    sender_email = Column(String(255), nullable=True)
+    sender_domain = Column(String(150), nullable=True)
+    received_at = Column(DateTime, nullable=True)
+    raw_body = Column(Text, nullable=True)
+    masked_body = Column(Text, nullable=True)
+    pii_masked = Column(Boolean, default=False)
+    masking_types = Column(JSON, nullable=True)
+    intent = Column(String(100), nullable=True)
+    intent_confidence = Column(Numeric(5, 3), nullable=True)
+    classification_provider = Column(String(100), nullable=True)
+    classification_model = Column(String(120), nullable=True)
+    draft_provider = Column(String(100), nullable=True)
+    draft_model = Column(String(120), nullable=True)
+    draft_text = Column(Text, nullable=True)
+    auto_replied = Column(Boolean, default=False)
+    pipeline_status = Column(String(30), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

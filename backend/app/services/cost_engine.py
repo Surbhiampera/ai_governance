@@ -1,8 +1,8 @@
-import os
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.config import get_infra_cost_per_ms_usd
 from app.models import ModelPricing, ToolRegistry
 from app.schemas import CostSummary, TelemetryEventCreate
 
@@ -12,7 +12,7 @@ class CostEngine:
         external_cost = Decimal("0")
         # Infra cost is derived from observed latency.
         # Kept configurable for enterprise deployments.
-        infra_rate_per_ms = Decimal(os.getenv("INFRA_COST_PER_MS_USD", "0.00008"))
+        infra_rate_per_ms = Decimal(get_infra_cost_per_ms_usd())
         infra_cost = Decimal(str(event_data.infra_cost or 0))
 
         total_tokens = event_data.prompt_tokens + event_data.completion_tokens

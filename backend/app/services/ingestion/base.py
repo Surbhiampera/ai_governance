@@ -8,6 +8,8 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from app.config import get_default_org_id
+
 if TYPE_CHECKING:
     from app.models import ToolConnector
     from app.schemas import TelemetryEventCreate
@@ -36,8 +38,8 @@ class VendorAdapter(ABC):
 
     @staticmethod
     def _safe_org_id(connector: "ToolConnector") -> str:
-        """Return org_id with fallback to 'default', normalising empty strings."""
-        return (connector.org_id or "").strip() or "default"
+        """Return org_id with fallback to DEFAULT_ORG_ID (no hardcoded defaults)."""
+        return (connector.org_id or "").strip() or get_default_org_id()
 
     def _safe_event_id(self, raw: dict[str, Any]) -> str:
         """Return event_id from raw payload or generate a vendor-prefixed UUID."""

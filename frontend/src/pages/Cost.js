@@ -208,14 +208,14 @@ function Cost() {
     setInjectMsg("");
     try {
       await controlIngest({
-        org_id: toolModal.orgId || "default",
+        org_id: toolModal.orgId,
         project_id: toolModal.projectId || undefined,
-        provider: injectForm.provider || "custom",
+        provider: injectForm.provider,
         model_name: injectForm.model_name,
         input_tokens: Number(injectForm.input_tokens) || 0,
         output_tokens: Number(injectForm.output_tokens) || 0,
         latency_ms: Number(injectForm.latency_ms) || 0,
-        status: injectForm.status || "success",
+        status: injectForm.status,
         pii_type: injectForm.pii_type || undefined,
         tags: injectForm.tags ? injectForm.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
       });

@@ -1,7 +1,8 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://localhost:8000",
+  // No hardcoded localhost defaults. Prefer explicit env, otherwise same-origin.
+  baseURL: process.env.REACT_APP_API_URL || window.location.origin,
   timeout: 8000,
 });
 
@@ -89,6 +90,25 @@ export const getProjectCostBreakdown = (projectId, orgId) =>
     params: { project_id: projectId, org_id: orgId || undefined },
   });
 export const getNotificationStatus = () => API.get("/control/notifications/status");
+
+// ─────────────────────── Advanced Observability / Gateway ───────────────────────
+export const ingestSpan = (data) => API.post("/advanced/spans", data);
+export const ingestStreamToken = (data) => API.post("/advanced/stream/tokens", data);
+export const getLiveStream = (params) => API.get("/advanced/stream/live", { params });
+export const getTraceGraph = (traceId) => API.get(`/advanced/trace/${traceId}/graph`);
+export const getTraceReplay = (traceId) => API.get(`/advanced/trace/${traceId}/replay`);
+export const enforcePolicy = (data) => API.post("/advanced/policy/enforce", data);
+export const gatewayRoute = (data) => API.post("/advanced/gateway/route", data);
+export const getTraceOtel = (traceId) => API.get(`/advanced/otel/trace/${traceId}`);
+export const registerPromptVersion = (data) => API.post("/advanced/prompt-version", data);
+export const getPromptVersions = (traceId) => API.get(`/advanced/prompt-version/${traceId}`);
+export const getRagAudit = (params) => API.get("/advanced/rag/audit", { params });
+
+// ─────────────────────── Email Support Agent ───────────────────────
+export const refreshEmails = (top) => API.post("/email-agent/refresh", null, { params: { top } });
+export const listEmails = (params) => API.get("/email-agent/emails", { params });
+export const classifyEmailText = (text) => API.post("/email-agent/classify", { text });
+export const draftEmailText = (text, intent) => API.post("/email-agent/draft", { text, intent: intent || null });
 
 // ─────────────────────── Tools / Models ───────────────────────
 export const getTools = () => API.get("/tools/");

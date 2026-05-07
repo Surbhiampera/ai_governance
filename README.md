@@ -68,7 +68,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 cd frontend
 npm install
-npm start                    # Runs on http://localhost:3000
+npm start                    # Runs on your configured frontend origin
 ```
 
 ## Core API Flow
@@ -94,9 +94,9 @@ ANY TOOL → POST /telemetry/event → telemetry_events
 
 | Cost Type | Calculation                                                                           |
 | --------- | ------------------------------------------------------------------------------------- |
-| LLM       | `(input_tokens + output_tokens) / 1000 × rate` (from tool_registry or default $0.002) |
+| LLM       | `(input_tokens + output_tokens) / 1000 × rate` (from tool_registry / model_pricing) |
 | External  | Sum of `external_tools[].cost`                                                        |
-| Infra     | `latency_ms × $0.0001`                                                                |
+| Infra     | `latency_ms × INFRA_COST_PER_MS_USD`                                                  |
 
 ## Sample Telemetry Event
 
@@ -108,7 +108,7 @@ ANY TOOL → POST /telemetry/event → telemetry_events
   "service_type": "llm",
   "execution_type": "inference",
   "user_id": "user1",
-  "org_id": "default",
+  "org_id": "<DEFAULT_ORG_ID>",
   "input_data_size_mb": 0.2,
   "output_data_size_mb": 1.5,
   "tokens": { "input": 1200, "output": 300 },

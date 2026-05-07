@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.config import get_infra_cost_per_ms_usd
 from app.core.deps import get_db
 from app.models import Alert, Budget, DailyOrgSummary, MonthlyOrgSummary, TelemetryEvent, ToolRegistry
 
@@ -532,7 +533,7 @@ def cost_breakdown_summary(
                 "name": "infra_cost",
                 "amount": round(infra, 6),
                 "percent": pct(infra),
-                "formula": "latency_ms × $0.00008",
+                "formula": f"latency_ms × ${get_infra_cost_per_ms_usd()}",
             },
             {
                 "name": "external_cost",
