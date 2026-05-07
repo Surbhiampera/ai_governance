@@ -18,6 +18,7 @@ from app.schemas import (
 )
 from app.services.alert_engine import AlertEngine
 from app.services.cost_engine import CostEngine
+from app.services.langfuse_bridge import mirror_event as _langfuse_mirror_event
 from app.services.security_engine import SecurityEngine
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
@@ -869,6 +870,18 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
     _upsert_daily_summary(db, telemetry)
     alert_engine.evaluate(db, event_data, cost_summary, security_result, anomaly_score, abnormal_usage_spike, telemetry_id=telemetry.id)
     db.flush()
+
+    # Additive: mirror to Langfuse for waterfall UI / prompt browser / scores.
+    # No-op when LANGFUSE_ENABLED!=true or the SDK isn't installed.  Errors
+    # are swallowed inside the bridge so ingestion is never affected.
+    _langfuse_mirror_event(
+        event_data,
+        llm_cost=float(cost_summary.llm_cost),
+        total_cost=float(cost_summary.total_cost),
+        risk_score=float(security_result["risk_score"]),
+        pii_detected=bool(security_result["pii_detected"]),
+    )
+
     return telemetry
 
 

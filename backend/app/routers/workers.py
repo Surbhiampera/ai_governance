@@ -10,9 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.services.alert_engine import AlertEngine
+from app.services.langfuse_bridge import status as _langfuse_status
 from app.workers.tasks import _detect_anomalies, _rebuild_daily_summary, _rebuild_monthly_summary
 
 router = APIRouter(prefix="/workers", tags=["workers"])
+
+
+@router.get("/langfuse/status")
+def get_langfuse_status():
+    """Diagnostic — reports whether the additive Langfuse mirror is active."""
+    return _langfuse_status()
 
 
 @router.post("/daily-aggregation/sync")

@@ -8,3 +8,6 @@ celery[redis]>=5.3.0
 redis>=5.0.0
 python-jose[cryptography]>=3.3.0
 httpx>=0.24.0
+# Optional — only required when LANGFUSE_ENABLED=true.
+# The backend gracefully no-ops if this package is absent.
+langfuse>=2.0.0
