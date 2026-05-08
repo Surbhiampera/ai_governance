@@ -58,6 +58,20 @@ export const deleteTelemetryEvent = (eventId) =>
   API.delete(`/telemetry/event/${eventId}`);
 export const trackEvent = (data) => API.post("/telemetry/track", data);
 
+// ─────────────────────── Decorator Framework ───────────────────────
+export const getDecoratorStats = (orgId) =>
+  API.get("/decorator/stats", { params: { org_id: orgId || undefined } });
+export const getDecoratorRegistrations = (params) =>
+  API.get("/decorator/registrations", { params });
+export const getDecoratorInventory = (params) =>
+  API.get("/decorator/inventory", { params });
+export const getDecoratorInventoryByTool = (toolName, orgId) =>
+  API.get(`/decorator/inventory/${toolName}`, { params: { org_id: orgId || undefined } });
+export const getDecoratorUsage = (params) =>
+  API.get("/decorator/usage", { params });
+export const getDecoratorLogs = (params) =>
+  API.get("/decorator/logs", { params });
+
 // Super Admin
 export const getSuperAdminLogs = (params) =>
   API.get("/telemetry/admin/logs", { params });

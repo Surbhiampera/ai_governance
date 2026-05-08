@@ -26,6 +26,7 @@ from app.routers import (
     tools,
     workers,
 )
+from decorator.router import router as decorator_router
 
 logging.basicConfig(
     level=get_log_level(),
@@ -51,6 +52,18 @@ _SAFE_ALTERS = [
     "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)",
     "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
     "ALTER TABLE usage_anomalies ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
+    # Decorator-framework columns (migration 003)
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS tool_name VARCHAR(150)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS function_name VARCHAR(255)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS module_path VARCHAR(500)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS decorator_type VARCHAR(50)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS execution_env VARCHAR(50) DEFAULT 'production'",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS sdk_version VARCHAR(20)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS tool_version VARCHAR(50)",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS input_preview TEXT",
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS output_preview TEXT",
+    "ALTER TABLE trace_model_usage ADD COLUMN IF NOT EXISTS function_name VARCHAR(255)",
+    "ALTER TABLE trace_model_usage ADD COLUMN IF NOT EXISTS call_sequence INTEGER DEFAULT 0",
 ]
 
 _ALL_ROUTERS = [
@@ -58,7 +71,7 @@ _ALL_ROUTERS = [
     alerts.router, costs.router, security.router, alerts_security.router,
     governance.router, organizations.router, projects.router, budgets.router,
     pricing.router, apikeys.router, workers.router, lookups.router,
-    ingestion.router, control.router,
+    ingestion.router, control.router, decorator_router,
 ]
 
 

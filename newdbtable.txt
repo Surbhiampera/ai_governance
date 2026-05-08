@@ -1,0 +1,676 @@
+================================================================================
+  AI GOVERNANCE PLATFORM — COMPLETE DATABASE TABLE REFERENCE
+  Generated: 2026-05-08
+  Total tables: 30
+  Schema source: backend/decorator/migrations/004_consolidated_schema.sql
+                 + ORM in backend/app/models.py & backend/decorator/models.py
+================================================================================
+
+Tables are organized into 12 tiers matching the tiered DDL in 004_consolidated_schema.sql.
+New tables added by the Decorator Framework (Migration 003) are marked [NEW].
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 1 — IDENTITY & TENANCY
+Organization → Project → User → API Key hierarchy.
+All telemetry is scoped to org_id (required) and project_id (optional).
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ organizations ─────────────────────────────────────────────────────────────┐
+│ id              VARCHAR(100)   PK                                           │
+│ org_name        VARCHAR(150)   NOT NULL                                     │
+│ plan_type       VARCHAR(50)                                                 │
+│ budget_limit    DECIMAL(14,6)                                               │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ projects ──────────────────────────────────────────────────────────────────┐
+│ id              VARCHAR(100)   PK                                           │
+│ org_id          VARCHAR(100)   FK → organizations.id   NOT NULL             │
+│ project_name    VARCHAR(150)                                                │
+│ environment     VARCHAR(50)                                                 │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ users ─────────────────────────────────────────────────────────────────────┐
+│ id              VARCHAR(100)   PK                                           │
+│ org_id          VARCHAR(100)   FK → organizations.id                        │
+│ email           VARCHAR(150)                                                │
+│ role            VARCHAR(50)                                                 │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ api_keys ──────────────────────────────────────────────────────────────────┐
+│ id              VARCHAR(120)   PK                                           │
+│ org_id          VARCHAR(100)   FK → organizations.id                        │
+│ project_id      VARCHAR(100)   FK → projects.id                             │
+│ key_name        VARCHAR(100)                                                │
+│ provider        VARCHAR(100)                                                │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ user_projects ─────────────────────────────────────────────────────────────┐
+│ user_id         VARCHAR(100)   FK → users.id          PK (composite)        │
+│ project_id      VARCHAR(100)   FK → projects.id       PK (composite)        │
+│ role            VARCHAR(50)                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 2 — TOOL & MODEL CATALOG
+Static reference tables.  Cost model selection priority:
+  pre-computed → model_pricing → tool_registry.cost_model_type
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ providers ─────────────────────────────────────────────────────────────────┐
+│ id              VARCHAR(100)   PK                                           │
+│ provider_name   VARCHAR(150)                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ tool_registry ─────────────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ tool_name       VARCHAR(150)   UNIQUE NOT NULL                              │
+│ tool_type       VARCHAR(50)                                                 │
+│ vendor          VARCHAR(100)                                                │
+│ cost_model      VARCHAR(50)    (per_token|per_request|per_second|           │
+│                                 fixed|custom|pre-computed)                  │
+│ base_cost       DECIMAL(12,6)  DEFAULT 0                                    │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ model_registry ────────────────────────────────────────────────────────────┐
+│ id                  BIGSERIAL      PK                                       │
+│ model_name          VARCHAR(120)   UNIQUE NOT NULL                          │
+│ provider            VARCHAR(100)                                            │
+│ model_type          VARCHAR(50)                                             │
+│ cost_per_1k_tokens  DECIMAL(12,6)  DEFAULT 0                                │
+│ created_at          TIMESTAMP      DEFAULT now()                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ model_pricing ─────────────────────────────────────────────────────────────┐
+│ id                  BIGSERIAL      PK                                       │
+│ provider            VARCHAR(100)                                            │
+│ model_name          VARCHAR(120)                                            │
+│ input_cost_per_1k   DECIMAL(12,6)  DEFAULT 0                                │
+│ output_cost_per_1k  DECIMAL(12,6)  DEFAULT 0                                │
+│ currency            VARCHAR(10)    DEFAULT 'USD'                            │
+│ effective_from      TIMESTAMP      DEFAULT now()                            │
+│ UNIQUE (provider, model_name)                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 3 — CONNECTORS & INGESTION
+Manages external data source connections (Langfuse, webhooks, file uploads).
+Ingestion normalizer maps events → telemetry_events pipeline.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ tool_connectors ───────────────────────────────────────────────────────────┐
+│ id                   BIGSERIAL      PK                                      │
+│ connector_name       VARCHAR(150)   UNIQUE NOT NULL                         │
+│ tool_name            VARCHAR(150)   NOT NULL                                │
+│ provider             VARCHAR(100)                                           │
+│ endpoint_url         VARCHAR(255)                                           │
+│ auth_type            VARCHAR(50)                                            │
+│ ingestion_mode       VARCHAR(50)    DEFAULT 'api'                           │
+│ status               VARCHAR(30)    DEFAULT 'active'                        │
+│ org_id               VARCHAR(100)                                           │
+│ project_id           VARCHAR(100)                                           │
+│ api_key              VARCHAR(500)                                           │
+│ last_ingested_at     TIMESTAMP                                              │
+│ sync_enabled         BOOLEAN        DEFAULT TRUE                            │
+│ pull_interval_minutes INTEGER       DEFAULT 15                              │
+│ last_sync_status     VARCHAR(30)                                            │
+│ last_sync_error      TEXT                                                   │
+│ total_events_pulled  INTEGER        DEFAULT 0                               │
+│ created_at           TIMESTAMP      DEFAULT now()                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ connector_sync_logs ───────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ connector_id    BIGINT         FK → tool_connectors.id   NOT NULL           │
+│ connector_name  VARCHAR(150)                                                │
+│ sync_status     VARCHAR(30)    DEFAULT 'success'                            │
+│ events_pulled   INTEGER        DEFAULT 0                                    │
+│ error_message   TEXT                                                        │
+│ duration_ms     INTEGER        DEFAULT 0                                    │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 4 — CORE TELEMETRY  (source of truth — append only)
+Every POST /telemetry/event writes one row here.
+Pipeline: CostEngine → SecurityEngine → AlertEngine → daily_org_summary upsert.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ telemetry_events ──────────────────────────────────────────────────────────┐
+│ id                   BIGSERIAL      PK (internal auto-increment)            │
+│ event_id             VARCHAR(120)   UNIQUE NOT NULL (caller-supplied UUID)  │
+│ request_id           VARCHAR(120)                                           │
+│ trace_id             VARCHAR(120)   groups multi-step pipelines             │
+│                                                                             │
+│ ── Tenant context ──────────────────────────────────────────────────────── │
+│ org_id               VARCHAR(100)   NOT NULL                                │
+│ project_id           VARCHAR(100)                                           │
+│ user_id              VARCHAR(100)                                           │
+│ api_key_id           VARCHAR(120)                                           │
+│                                                                             │
+│ ── Tool & model identity ───────────────────────────────────────────────── │
+│ tool_name            VARCHAR(150)   [NEW] set by GovernanceDecorator        │
+│ provider             VARCHAR(100)                                           │
+│ model_name           VARCHAR(100)                                           │
+│ service_type         VARCHAR(50)                                            │
+│ component_name       VARCHAR(150)                                           │
+│ execution_type       VARCHAR(50)                                            │
+│                                                                             │
+│ ── Decorator-captured context [NEW] ────────────────────────────────────── │
+│ function_name        VARCHAR(255)   fully-qualified Python function name    │
+│ module_path          VARCHAR(500)   Python module (e.g. myapp.pipeline)     │
+│ decorator_type       VARCHAR(50)    trace|llm_call|pipeline|tool_call       │
+│ execution_env        VARCHAR(50)    DEFAULT 'production'                    │
+│ sdk_version          VARCHAR(20)                                            │
+│ tool_version         VARCHAR(50)                                            │
+│                                                                             │
+│ ── Execution status ────────────────────────────────────────────────────── │
+│ status               VARCHAR(30)    success|error|timeout                   │
+│                                                                             │
+│ ── Token usage ─────────────────────────────────────────────────────────── │
+│ prompt_tokens        INTEGER        DEFAULT 0                               │
+│ completion_tokens    INTEGER        DEFAULT 0                               │
+│ total_tokens         INTEGER        DEFAULT 0                               │
+│                                                                             │
+│ ── Data volume ─────────────────────────────────────────────────────────── │
+│ input_data_size_mb   DECIMAL(12,4)  DEFAULT 0                               │
+│ output_data_size_mb  DECIMAL(12,4)  DEFAULT 0                               │
+│                                                                             │
+│ ── PII-masked I/O previews [NEW] ───────────────────────────────────────── │
+│ input_preview        TEXT           first N chars of input, PII replaced    │
+│ output_preview       TEXT           first N chars of output, PII replaced   │
+│                                                                             │
+│ ── Cost (computed by CostEngine) ───────────────────────────────────────── │
+│ llm_cost             DECIMAL(14,6)  DEFAULT 0                               │
+│ infra_cost           DECIMAL(14,6)  DEFAULT 0  (latency_ms × $0.00008)      │
+│ external_cost        DECIMAL(14,6)  DEFAULT 0                               │
+│ total_cost           DECIMAL(14,6)  DEFAULT 0                               │
+│                                                                             │
+│ ── Risk & governance signals ───────────────────────────────────────────── │
+│ risk_score           DECIMAL(8,2)   DEFAULT 0                               │
+│ anomaly_score        DECIMAL(8,2)   DEFAULT 0                               │
+│ misuse_detected      BOOLEAN        DEFAULT FALSE                           │
+│ abnormal_usage_spike BOOLEAN        DEFAULT FALSE                           │
+│                                                                             │
+│ ── Timing ──────────────────────────────────────────────────────────────── │
+│ latency_ms           INTEGER        DEFAULT 0                               │
+│ started_at           TIMESTAMP                                              │
+│ completed_at         TIMESTAMP                                              │
+│                                                                             │
+│ ── Flexible metadata ───────────────────────────────────────────────────── │
+│ tags                 JSON                                                   │
+│ metadata_json        JSON                                                   │
+│ raw_usage_json       JSON                                                   │
+│ created_at           TIMESTAMP      DEFAULT now()                           │
+│                                                                             │
+│ Indexes: (org_id, project_id), trace_id, created_at DESC,                  │
+│          tool_name, model_name, function_name                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 5 — COST, PIPELINE & TRACE DETAIL
+Per-event detail tables linked to telemetry_events.event_id.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ cost_breakdown ────────────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ event_id        VARCHAR(120)   FK → telemetry_events.event_id  CASCADE DEL │
+│ cost_type       VARCHAR(50)    NOT NULL  (llm|infra|external)               │
+│ component_name  VARCHAR(150)                                                │
+│ unit_cost       DECIMAL(12,6)  DEFAULT 0                                    │
+│ quantity        DECIMAL(12,6)  DEFAULT 0                                    │
+│ total_cost      DECIMAL(12,6)  DEFAULT 0                                    │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ execution_pipeline ────────────────────────────────────────────────────────┐
+│ id               BIGSERIAL      PK                                          │
+│ event_id         VARCHAR(120)   FK → telemetry_events.event_id  CASCADE DEL│
+│ stage_order      INTEGER        DEFAULT 0                                   │
+│ stage_name       VARCHAR(150)   NOT NULL                                    │
+│ system_name      VARCHAR(150)                                               │
+│ status           VARCHAR(30)                                                │
+│ stage_latency_ms INTEGER        DEFAULT 0                                   │
+│ retry_count      INTEGER        DEFAULT 0                                   │
+│ details          JSON                                                       │
+│ created_at       TIMESTAMP      DEFAULT now()                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ trace_model_usage ─────────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ event_id        VARCHAR(120)   FK → telemetry_events.event_id  CASCADE DEL │
+│ trace_id        VARCHAR(120)                                                │
+│ org_id          VARCHAR(100)   NOT NULL                                     │
+│ project_id      VARCHAR(100)                                                │
+│ model_name      VARCHAR(120)   NOT NULL                                     │
+│ provider        VARCHAR(100)                                                │
+│ function_name   VARCHAR(255)   [NEW] decorator that triggered this call      │
+│ call_sequence   INTEGER        [NEW] order within multi-model pipeline       │
+│ input_tokens    INTEGER        DEFAULT 0                                    │
+│ output_tokens   INTEGER        DEFAULT 0                                    │
+│ total_tokens    INTEGER        DEFAULT 0                                    │
+│ llm_cost        DECIMAL(14,6)  DEFAULT 0                                    │
+│ latency_ms      INTEGER        DEFAULT 0                                    │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+│                                                                             │
+│ Indexes: event_id, (org_id, project_id), function_name                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ trace_tool_usage ──────────────────────────────────────────────────────────┐
+│ id                BIGSERIAL      PK                                         │
+│ event_id          VARCHAR(120)   FK → telemetry_events.event_id  CASCADE   │
+│ trace_id          VARCHAR(120)                                              │
+│ org_id            VARCHAR(100)   NOT NULL                                   │
+│ project_id        VARCHAR(100)                                              │
+│ tool_name         VARCHAR(150)   NOT NULL                                   │
+│ tool_type         VARCHAR(50)                                               │
+│ invocation_count  INTEGER        DEFAULT 1                                  │
+│ execution_time_ms INTEGER        DEFAULT 0                                  │
+│ cost              DECIMAL(14,6)  DEFAULT 0                                  │
+│ created_at        TIMESTAMP      DEFAULT now()                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 6 — DECORATOR FRAMEWORK  [NEW — Migration 003]
+Auto-populated by GovernanceDecorator SDK when tools integrate via decorators.
+ORM defined in: backend/decorator/models.py
+REST API at:    /decorator/* endpoints (backend/decorator/router.py)
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ decorator_registrations  [NEW] ────────────────────────────────────────────┐
+│ Purpose: Registry of every @gov.trace() / @gov.llm_call() / @gov.pipeline() │
+│          / @gov.tool_call() decorated function ever seen on this platform.  │
+│          Updated on first invocation. Powers the Decorator Registry UI.     │
+│                                                                             │
+│ id              BIGSERIAL      PK                                           │
+│ org_id          VARCHAR(100)   NOT NULL                                     │
+│ project_id      VARCHAR(100)                                                │
+│ tool_name       VARCHAR(150)   NOT NULL  (GOV_TOOL_NAME env var)            │
+│ function_name   VARCHAR(255)   NOT NULL  (Python __qualname__)              │
+│ module_path     VARCHAR(500)   Python __module__                            │
+│ decorator_type  VARCHAR(50)    trace|llm_call|pipeline|tool_call            │
+│ sdk_version     VARCHAR(20)                                                 │
+│ python_version  VARCHAR(20)                                                 │
+│ execution_env   VARCHAR(50)    DEFAULT 'production'                         │
+│ first_seen      TIMESTAMP      DEFAULT now()                                │
+│ last_seen       TIMESTAMP      DEFAULT now()                                │
+│ call_count      BIGINT         DEFAULT 0                                    │
+│                                                                             │
+│ Unique index: (org_id, tool_name, function_name, COALESCE(module_path,'')) │
+│ Index:         (org_id, tool_name)                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ project_model_usage  [NEW] ────────────────────────────────────────────────┐
+│ Purpose: Daily per-project × per-model aggregation.                        │
+│          Built by the daily-aggregation APScheduler worker.                 │
+│          Queried by the project governance dashboard for model tracking.    │
+│                                                                             │
+│ id                       BIGSERIAL      PK                                  │
+│ org_id                   VARCHAR(100)   NOT NULL                            │
+│ project_id               VARCHAR(100)                                       │
+│ model_name               VARCHAR(120)   NOT NULL                            │
+│ provider                 VARCHAR(100)                                       │
+│ date                     DATE           NOT NULL                            │
+│ call_count               INTEGER        DEFAULT 0                           │
+│ total_prompt_tokens      INTEGER        DEFAULT 0                           │
+│ total_completion_tokens  INTEGER        DEFAULT 0                           │
+│ total_tokens             INTEGER        DEFAULT 0                           │
+│ total_cost               DECIMAL(14,6)  DEFAULT 0                           │
+│ avg_latency_ms           INTEGER        DEFAULT 0                           │
+│ success_count            INTEGER        DEFAULT 0                           │
+│ error_count              INTEGER        DEFAULT 0                           │
+│ created_at               TIMESTAMP      DEFAULT now()                       │
+│                                                                             │
+│ Unique index: (org_id, COALESCE(project_id,'__none__'), model_name, date)  │
+│ Index:         (org_id, project_id, date DESC)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ tool_api_inventory  [NEW] ─────────────────────────────────────────────────┐
+│ Purpose: Auto-discovered function catalog per tool.                         │
+│          Upserted via POST /tools/inventory/upsert on every SDK call.       │
+│          Tracks lifetime call stats; used for tool-level audit & monitoring.│
+│                                                                             │
+│ id              BIGSERIAL      PK                                           │
+│ org_id          VARCHAR(100)   NOT NULL                                     │
+│ project_id      VARCHAR(100)                                                │
+│ tool_name       VARCHAR(150)   NOT NULL                                     │
+│ function_name   VARCHAR(255)   NOT NULL                                     │
+│ module_path     VARCHAR(500)                                                │
+│ decorator_type  VARCHAR(50)                                                 │
+│ description     TEXT                                                        │
+│ first_seen      TIMESTAMP      DEFAULT now()                                │
+│ last_seen       TIMESTAMP      DEFAULT now()                                │
+│ total_calls     BIGINT         DEFAULT 0                                    │
+│ success_calls   BIGINT         DEFAULT 0                                    │
+│ error_calls     BIGINT         DEFAULT 0                                    │
+│ avg_latency_ms  INTEGER        DEFAULT 0                                    │
+│                                                                             │
+│ Unique index: (org_id, tool_name, function_name)                            │
+│ Index:         (org_id, project_id, tool_name)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ request_response_logs  [NEW] ──────────────────────────────────────────────┐
+│ Purpose: Per-call input/output audit trail.                                 │
+│          Captured when capture_io=True on the decorator (default: on).      │
+│          Text is PII-masked before storage — [EMAIL],[SSN],[PHONE] etc.     │
+│                                                                             │
+│ id                BIGSERIAL      PK                                         │
+│ event_id          VARCHAR(120)   FK → telemetry_events.event_id  CASCADE   │
+│ function_name     VARCHAR(255)                                              │
+│ input_preview     TEXT           PII-masked first N chars of input          │
+│ output_preview    TEXT           PII-masked first N chars of output         │
+│ input_size_bytes  INTEGER        DEFAULT 0                                  │
+│ output_size_bytes INTEGER        DEFAULT 0                                  │
+│ input_keys        TEXT           top-level keys of input dict               │
+│ output_keys       TEXT           top-level keys of output dict              │
+│ pii_detected      BOOLEAN        DEFAULT FALSE                              │
+│ pii_fields        TEXT           comma-separated PII types found            │
+│ created_at        TIMESTAMP      DEFAULT now()                              │
+│                                                                             │
+│ Index: event_id                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 7 — SECURITY & RISK
+PII detection and usage anomaly results written by SecurityEngine.
+Risk weights are all RISK_WEIGHT_* / RISK_CAP_* env vars — never hardcoded.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ data_security_logs ────────────────────────────────────────────────────────┐
+│ id                      BIGSERIAL      PK                                   │
+│ event_id                VARCHAR(120)   FK → telemetry_events.event_id       │
+│ org_id                  VARCHAR(100)                                        │
+│ project_id              VARCHAR(100)                                        │
+│ pii_detected            BOOLEAN        DEFAULT FALSE                        │
+│ pii_type                VARCHAR(100)                                        │
+│ data_out_violation      BOOLEAN        DEFAULT FALSE                        │
+│ misuse_pattern_detected BOOLEAN        DEFAULT FALSE                        │
+│ abnormal_usage_spike    BOOLEAN        DEFAULT FALSE                        │
+│ masking_applied         BOOLEAN        DEFAULT FALSE                        │
+│ risk_score              DECIMAL(8,2)   DEFAULT 0                            │
+│ data_in_mb              DECIMAL(12,4)  DEFAULT 0                            │
+│ data_out_mb             DECIMAL(12,4)  DEFAULT 0                            │
+│ created_at              TIMESTAMP      DEFAULT now()                        │
+│                                                                             │
+│ Index: (org_id, project_id)                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ usage_anomalies ───────────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ org_id          VARCHAR(100)   NOT NULL                                     │
+│ project_id      VARCHAR(100)                                                │
+│ tool_name       VARCHAR(150)   NOT NULL                                     │
+│ event_id        VARCHAR(120)                                                │
+│ anomaly_type    VARCHAR(60)    NOT NULL                                     │
+│ severity        VARCHAR(20)    DEFAULT 'medium'                             │
+│ anomaly_score   DECIMAL(8,2)   DEFAULT 0                                    │
+│ baseline_value  DECIMAL(14,6)  DEFAULT 0                                    │
+│ observed_value  DECIMAL(14,6)  DEFAULT 0                                    │
+│ message         TEXT                                                        │
+│ status          VARCHAR(20)    DEFAULT 'open'                               │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+│                                                                             │
+│ Indexes: (org_id, project_id), status                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 8 — GOVERNANCE RULES & ALERTS
+Dynamic threshold rules evaluated by AlertEngine on every event and every 30 min.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ governance_rules ──────────────────────────────────────────────────────────┐
+│ id               BIGSERIAL       PK                                         │
+│ rule_name        VARCHAR(150)    UNIQUE NOT NULL                            │
+│ description      TEXT                                                       │
+│ metric_name      VARCHAR(100)    NOT NULL  (lookup via LOOKUP_RULE_METRICS) │
+│ operator         VARCHAR(20)     DEFAULT '>'                                │
+│ threshold_value  DECIMAL(14,6)   NOT NULL DEFAULT 0                         │
+│ severity         VARCHAR(20)     DEFAULT 'medium'                           │
+│ scope_level      VARCHAR(30)     DEFAULT 'organization'                     │
+│ scope_reference  VARCHAR(150)                                               │
+│ is_active        BOOLEAN         DEFAULT TRUE                               │
+│ org_id           VARCHAR(100)                                               │
+│ project_id       VARCHAR(100)                                               │
+│ created_at       TIMESTAMP       DEFAULT now()                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ alerts ────────────────────────────────────────────────────────────────────┐
+│ id               BIGSERIAL      PK                                          │
+│ org_id           VARCHAR(100)                                               │
+│ project_id       VARCHAR(100)                                               │
+│ rule_id          BIGINT         FK → governance_rules.id                    │
+│ alert_type       VARCHAR(100)   cost|pii|misuse|anomaly|rate_limit          │
+│ severity         VARCHAR(50)                                                │
+│ message          TEXT                                                       │
+│ threshold_value  DECIMAL(10,2)                                              │
+│ actual_value     DECIMAL(10,2)                                              │
+│ status           VARCHAR(50)    DEFAULT 'active'  (active|resolved)         │
+│ telemetry_id     BIGINT         FK → telemetry_events.id                    │
+│ tool_name        VARCHAR(150)                                               │
+│ created_at       TIMESTAMP      DEFAULT now()                               │
+│                                                                             │
+│ Indexes: (org_id, project_id), status                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 9 — BUDGET & RATE LIMITS
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ budgets ───────────────────────────────────────────────────────────────────┐
+│ id                       BIGSERIAL      PK                                  │
+│ org_id                   VARCHAR(100)   FK → organizations.id               │
+│ project_id               VARCHAR(100)   FK → projects.id                    │
+│ budget_type              VARCHAR(50)                                        │
+│ limit_amount             DECIMAL(14,6)                                      │
+│ alert_threshold_percent  INTEGER        DEFAULT 80                          │
+│ created_at               TIMESTAMP      DEFAULT now()                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ rate_limits ───────────────────────────────────────────────────────────────┐
+│ id                   BIGSERIAL      PK                                      │
+│ org_id               VARCHAR(100)                                           │
+│ tool_name            VARCHAR(150)                                           │
+│ max_requests_per_min INTEGER                                                │
+│ max_tokens_per_day   INTEGER                                                │
+│ created_at           TIMESTAMP      DEFAULT now()                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ rate_limit_violations ─────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ org_id          VARCHAR(100)                                                │
+│ project_id      VARCHAR(100)                                                │
+│ tool_name       VARCHAR(150)                                                │
+│ violation_type  VARCHAR(50)                                                 │
+│ observed_value  INTEGER                                                     │
+│ limit_value     INTEGER                                                     │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 10 — UPLOAD & FILE TRACKING
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ upload_data ───────────────────────────────────────────────────────────────┐
+│ id              BIGSERIAL      PK                                           │
+│ org_id          VARCHAR(100)   FK → organizations.id                        │
+│ project_id      VARCHAR(100)   FK → projects.id                             │
+│ user_id         VARCHAR(100)   FK → users.id                                │
+│ file_name       TEXT                                                        │
+│ file_type       VARCHAR(50)                                                 │
+│ file_size_mb    DECIMAL(10,2)                                               │
+│ storage_path    TEXT                                                        │
+│ upload_source   VARCHAR(100)                                                │
+│ created_at      TIMESTAMP      DEFAULT now()                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 11 — PRE-AGGREGATED SUMMARIES  (built by APScheduler workers)
+daily-aggregation runs hourly; monthly-aggregation runs daily.
+Queried by /summary/* endpoints for fast dashboard responses.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ daily_org_summary ─────────────────────────────────────────────────────────┐
+│ id                       BIGSERIAL      PK                                  │
+│ org_id                   VARCHAR(100)   NOT NULL                            │
+│ project_id               VARCHAR(100)                                       │
+│ tool_name                VARCHAR(150)   NOT NULL                            │
+│ date                     DATE           NOT NULL                            │
+│ total_events             INTEGER        DEFAULT 0                           │
+│ total_cost               DECIMAL(14,6)  DEFAULT 0                           │
+│ llm_cost                 DECIMAL(14,6)  DEFAULT 0                           │
+│ infra_cost               DECIMAL(14,6)  DEFAULT 0                           │
+│ external_cost            DECIMAL(14,6)  DEFAULT 0                           │
+│ total_prompt_tokens      INTEGER        DEFAULT 0                           │
+│ total_completion_tokens  INTEGER        DEFAULT 0                           │
+│ total_tokens             INTEGER        DEFAULT 0                           │
+│ avg_latency_ms           INTEGER        DEFAULT 0                           │
+│ success_count            INTEGER        DEFAULT 0                           │
+│ failure_count            INTEGER        DEFAULT 0                           │
+│ anomaly_count            INTEGER        DEFAULT 0                           │
+│ misuse_count             INTEGER        DEFAULT 0                           │
+│ total_input_mb           DECIMAL(12,4)  DEFAULT 0                           │
+│ total_output_mb          DECIMAL(12,4)  DEFAULT 0                           │
+│ avg_risk_score           DECIMAL(8,2)   DEFAULT 0                           │
+│ created_at               TIMESTAMP      DEFAULT now()                       │
+│ UNIQUE (org_id, project_id, tool_name, date)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ monthly_org_summary ───────────────────────────────────────────────────────┐
+│ id                       BIGSERIAL      PK                                  │
+│ org_id                   VARCHAR(100)   NOT NULL                            │
+│ project_id               VARCHAR(100)                                       │
+│ tool_name                VARCHAR(150)   NOT NULL                            │
+│ month                    DATE           NOT NULL  (first day of month)      │
+│ total_events             INTEGER        DEFAULT 0                           │
+│ total_cost               DECIMAL(14,6)  DEFAULT 0                           │
+│ llm_cost                 DECIMAL(14,6)  DEFAULT 0                           │
+│ infra_cost               DECIMAL(14,6)  DEFAULT 0                           │
+│ external_cost            DECIMAL(14,6)  DEFAULT 0                           │
+│ total_tokens             INTEGER        DEFAULT 0                           │
+│ total_prompt_tokens      INTEGER        DEFAULT 0                           │
+│ total_completion_tokens  INTEGER        DEFAULT 0                           │
+│ avg_latency_ms           INTEGER        DEFAULT 0                           │
+│ success_count            INTEGER        DEFAULT 0                           │
+│ failure_count            INTEGER        DEFAULT 0                           │
+│ anomaly_count            INTEGER        DEFAULT 0                           │
+│ misuse_count             INTEGER        DEFAULT 0                           │
+│ created_at               TIMESTAMP      DEFAULT now()                       │
+│ UNIQUE (org_id, project_id, tool_name, month)                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+TIER 12 — TOOL-SPECIFIC EXTENSION TABLES
+Each AI tool can define its own detail table linked by event_id.
+Follow this pattern to add new tool extensions.
+════════════════════════════════════════════════════════════════════════════════
+
+┌─ email_agent_logs ──────────────────────────────────────────────────────────┐
+│ id                   BIGSERIAL      PK                                      │
+│ event_id             VARCHAR(120)   FK → telemetry_events.event_id  CASCADE│
+│ email_id             VARCHAR(255)                                           │
+│ sender_domain        VARCHAR(150)                                           │
+│ intent               VARCHAR(100)                                           │
+│ intent_confidence    DECIMAL(5,3)                                           │
+│ pii_masked           BOOLEAN        DEFAULT FALSE                           │
+│ masking_types        JSON                                                   │
+│ draft_generated      BOOLEAN        DEFAULT FALSE                           │
+│ auto_replied         BOOLEAN        DEFAULT FALSE                           │
+│ classification_model VARCHAR(100)                                           │
+│ draft_model          VARCHAR(100)                                           │
+│ stage_latencies      JSON                                                   │
+│ pipeline_status      VARCHAR(30)                                            │
+│ created_at           TIMESTAMP      DEFAULT now()                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+TABLE COUNT SUMMARY
+================================================================================
+
+TIER 1  — Identity & Tenancy      : organizations, projects, users, api_keys,
+                                    user_projects                         (5)
+TIER 2  — Tool & Model Catalog    : providers, tool_registry, model_registry,
+                                    model_pricing                         (4)
+TIER 3  — Connectors & Ingestion  : tool_connectors, connector_sync_logs  (2)
+TIER 4  — Core Telemetry          : telemetry_events                      (1)
+TIER 5  — Cost, Pipeline & Trace  : cost_breakdown, execution_pipeline,
+                                    trace_model_usage, trace_tool_usage   (4)
+TIER 6  — Decorator Framework[NEW]: decorator_registrations,
+                                    project_model_usage, tool_api_inventory,
+                                    request_response_logs                 (4)
+TIER 7  — Security & Risk         : data_security_logs, usage_anomalies   (2)
+TIER 8  — Governance & Alerts     : governance_rules, alerts              (2)
+TIER 9  — Budget & Rate Limits    : budgets, rate_limits,
+                                    rate_limit_violations                 (3)
+TIER 10 — Upload & File Tracking  : upload_data                          (1)
+TIER 11 — Pre-Aggregated Summaries: daily_org_summary, monthly_org_summary(2)
+TIER 12 — Tool Extension Tables   : email_agent_logs                     (1)
+                                                                   ───────────
+                                                          TOTAL           31
+
+================================================================================
+DECORATOR FLOW — HOW DATA MOVES
+================================================================================
+
+External tool (Python)                 AI Governance Platform
+─────────────────────                  ──────────────────────────────────────
+
+  @gov.llm_call(model="gpt-4o")
+  def classify(text):                  POST /telemetry/event
+      return openai.chat...  ─────────►  telemetry_events (row inserted)
+                                          │
+  @gov.pipeline(name="pipeline")          ├─► CostEngine
+  def run(email):                         │     cost_breakdown (upserted)
+      classify(email["body"])  ──────────►│
+      ...                                 ├─► SecurityEngine
+                                          │     data_security_logs (inserted)
+  After each call:                        │
+  POST /tools/inventory/upsert ──────────►├─► AlertEngine
+    tool_api_inventory (upserted)         │     alerts (inserted if threshold hit)
+    decorator_registrations (upserted)    │
+                                          └─► daily_org_summary (upserted)
+
+  APScheduler (every 30 min):           usage_anomalies (scanned)
+  APScheduler (hourly):                 daily_org_summary (rebuilt)
+  APScheduler (daily):                  monthly_org_summary (rebuilt)
+                                        project_model_usage (rebuilt)
+
+================================================================================
+SDK ENVIRONMENT VARIABLES (GovernanceDecorator)
+================================================================================
+
+Required (at least one):
+  GOV_ORG_ID        Organization ID
+  GOV_ORG_NAME      Organization name (fallback if GOV_ORG_ID not set)
+
+Optional:
+  GOV_PROJECT_ID      Project ID
+  GOV_PROJECT_NAME    Project name
+  GOV_TOOL_NAME       Tool label shown in dashboards         default: "unknown"
+  GOV_ENDPOINT        Platform base URL                      default: "http://localhost:8000"
+  GOV_API_KEY         Bearer token for authentication
+  GOV_TOOL_VERSION    Semver for this tool                   default: "1.0.0"
+  GOV_ENV             Execution environment label            default: "production"
+  GOV_DETECT_PII      Enable PII detection                   default: "true"
+  GOV_REDACT_PII      Replace PII with [REDACTED] in previews default: "true"
+  GOV_CAPTURE_IO      Store input/output previews            default: "true"
+  GOV_MAX_PREVIEW     Max chars per preview string           default: "500"
+  GOV_BATCH_SIZE      Events to buffer before sending        default: "1"
+
+================================================================================

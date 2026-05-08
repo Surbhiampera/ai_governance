@@ -5,7 +5,11 @@
       "Bash(cd \"c:\\\\\\\\Users\\\\\\\\SurbhiVikramaditya\\\\\\\\Documents\\\\\\\\ai_governance\")",
       "Bash(python -c ' *)",
       "Bash(node -e ' *)",
-      "Bash(PowerShell.exe -Command \"Get-ChildItem 'c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\services' | Select-Object Name\")"
+      "Bash(PowerShell.exe -Command \"Get-ChildItem 'c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\services' | Select-Object Name\")",
+      "Bash(mkdir \"c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\decorators\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\SurbhiVikramaditya\\Documents\\ai_governance\\backend\\app"
     ]
   }
 }

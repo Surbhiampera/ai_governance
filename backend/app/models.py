@@ -197,6 +197,16 @@ class TelemetryEvent(Base):
     service_type = Column(String(50), nullable=True)
     component_name = Column(String(150), nullable=True)
     execution_type = Column(String(50), nullable=True)
+    # Decorator-captured context (populated by GovernanceDecorator)
+    tool_name = Column(String(150), nullable=True)
+    function_name = Column(String(255), nullable=True)
+    module_path = Column(String(500), nullable=True)
+    decorator_type = Column(String(50), nullable=True)
+    execution_env = Column(String(50), nullable=True)
+    sdk_version = Column(String(20), nullable=True)
+    tool_version = Column(String(50), nullable=True)
+    input_preview = Column(Text, nullable=True)
+    output_preview = Column(Text, nullable=True)
     status = Column(String(30), nullable=True)
     input_data_size_mb = Column(Numeric(12, 4), default=0)
     output_data_size_mb = Column(Numeric(12, 4), default=0)
@@ -417,6 +427,8 @@ class TraceModelUsage(Base):
     project_id = Column(String(100), nullable=True)
     model_name = Column(String(120), nullable=False)
     provider = Column(String(100), nullable=True)
+    function_name = Column(String(255), nullable=True)
+    call_sequence = Column(Integer, default=0)
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
     total_tokens = Column(Integer, default=0)
@@ -477,3 +489,15 @@ class ModelPricing(Base):
     output_cost_per_1k = Column(Numeric(12, 6), default=0)
     currency = Column(String(10), default="USD")
     effective_from = Column(DateTime, server_default=func.now())
+
+
+# ── Decorator Framework ───────────────────────────────────────────────────────
+# ORM classes live in backend/decorator/models.py and are imported here so
+# Base.metadata.create_all() registers all four tables at startup.
+
+from decorator.models import (  # noqa: F401 — side-effect ORM registration
+    DecoratorRegistration,
+    ProjectModelUsage,
+    RequestResponseLog,
+    ToolApiInventory,
+)
