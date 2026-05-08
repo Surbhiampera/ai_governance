@@ -162,6 +162,50 @@ const fmtTs = (ts) => {
 const truncate = (str, len = 24) =>
   str && str.length > len ? str.slice(0, len) + "…" : str || "—";
 
+// Groups a flat events array into per-project buckets, aggregating model usage.
+const groupByProject = (events) => {
+  const map = {};
+  events.forEach((evt) => {
+    const pid = evt.project_id || "(no project)";
+    if (!map[pid]) {
+      map[pid] = {
+        project_id: pid,
+        org_id: evt.org_id,
+        events: [],
+        models: {},
+        totalCost: 0,
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        latestAt: null,
+      };
+    }
+    const grp = map[pid];
+    grp.events.push(evt);
+    grp.totalCost += Number(evt.total_cost || 0);
+    grp.totalPromptTokens += Number(evt.prompt_tokens || 0);
+    grp.totalCompletionTokens += Number(evt.completion_tokens || 0);
+    if (!grp.latestAt || (evt.created_at || "") > grp.latestAt) grp.latestAt = evt.created_at;
+
+    // Prefer per-model breakdown from metadata; fall back to the event's primary model.
+    const metaModels = evt.metadata_json?.models;
+    const sources = (metaModels && metaModels.length > 0)
+      ? metaModels.map((m) => ({ model_name: m.model_name, provider: m.provider || null, pt: Number(m.prompt_tokens || 0), ct: Number(m.completion_tokens || 0) }))
+      : evt.model_name
+        ? [{ model_name: evt.model_name, provider: evt.provider || null, pt: Number(evt.prompt_tokens || 0), ct: Number(evt.completion_tokens || 0) }]
+        : [];
+
+    sources.forEach(({ model_name, provider, pt, ct }) => {
+      if (!model_name) return;
+      const key = `${model_name}||${provider || ""}`;
+      if (!grp.models[key]) grp.models[key] = { model_name, provider, calls: 0, prompt_tokens: 0, completion_tokens: 0 };
+      grp.models[key].calls += 1;
+      grp.models[key].prompt_tokens += pt;
+      grp.models[key].completion_tokens += ct;
+    });
+  });
+  return Object.values(map).sort((a, b) => (b.latestAt || "").localeCompare(a.latestAt || ""));
+};
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 function TestEvent() {
@@ -197,6 +241,7 @@ function TestEvent() {
   /* shared */
   const [events,        setEvents]        = useState([]);
   const [selectedTrace, setSelectedTrace] = useState(null);
+  const [selectedProject, setSelectedProject] = useState(null);
   const [message,       setMessage]       = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [eventStatuses, setEventStatuses] = useState([]);
@@ -726,96 +771,58 @@ function TestEvent() {
                   : "No events yet. Use Auto-Inject to simulate AI pipeline telemetry."}
               </div>
             )}
-            {events.map((item) => (
-              <div key={item.event_id} className="timeline-card">
-                {/* Top row: tool + status */}
+            {groupByProject(events).map((proj) => {
+              const modelList = Object.values(proj.models);
+              return (
+              <div key={proj.project_id} className="timeline-card">
+                {/* Header: project name + last active */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong style={{ fontSize: 15 }}>{item.tool_name || item.model_name || "—"}</strong>
-                    {item.provider && (
-                      <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-500)", fontWeight: 400 }}>
-                        via {item.provider}
-                      </span>
-                    )}
+                    <strong style={{ fontSize: 15 }}>{proj.project_id}</strong>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-500)", fontWeight: 400 }}>
+                      {proj.events.length} event{proj.events.length !== 1 ? "s" : ""}
+                    </span>
                   </div>
-                  <span className={`status-pill ${(item.status || "").toLowerCase()}`} style={{ flexShrink: 0, marginLeft: 12 }}>
-                    {item.status || "—"}
-                  </span>
-                </div>
-
-                {/* Event ID + timestamp */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                  <span style={{ fontSize: 11, color: "var(--gray-500)", fontFamily: "monospace" }}>
-                    {truncate(item.event_id, 32)}
-                  </span>
                   <span style={{ fontSize: 11, color: "var(--gray-500)", flexShrink: 0 }}>
-                    {fmtTs(item.created_at)}
+                    {fmtTs(proj.latestAt)}
                   </span>
                 </div>
 
-                {/* Org / Project badges */}
-                {(item.org_id || item.project_id) && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {item.org_id && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        background: "rgba(124,112,174,0.1)", color: "var(--brand-secondary)",
-                        fontWeight: 600,
-                      }}>
-                        {item.org_id}
-                      </span>
-                    )}
-                    {item.project_id && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        background: "rgba(124,112,174,0.06)", color: "var(--gray-700)",
-                      }}>
-                        {item.project_id}
-                      </span>
-                    )}
-                    {item.service_type && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        background: "var(--gray-100)", color: "var(--gray-500)",
-                      }}>
-                        {item.service_type}
-                      </span>
-                    )}
+                {/* Org badge */}
+                {proj.org_id && (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{
+                      fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                      background: "rgba(124,112,174,0.1)", color: "var(--brand-secondary)", fontWeight: 600,
+                    }}>
+                      {proj.org_id}
+                    </span>
                   </div>
                 )}
 
-                {/* Metric chips */}
+                {/* Aggregate metric chips */}
                 <div className="metric-chip-row" style={{ marginTop: 10 }}>
-                  <span className="metric-chip">In <b>{item.prompt_tokens ?? 0}</b></span>
-                  <span className="metric-chip">Out <b>{item.completion_tokens ?? 0}</b></span>
-                  <span className="metric-chip">$<b>{Number(item.total_cost || 0).toFixed(4)}</b></span>
-                  <span className="metric-chip"><b>{item.latency_ms ?? 0}</b> ms</span>
-                  {Number(item.risk_score || 0) > 0 && (
-                    <span className="metric-chip" style={{ color: "var(--brand-primary)" }}>
-                      Risk <b>{Number(item.risk_score).toFixed(1)}</b>
-                    </span>
-                  )}
+                  <span className="metric-chip"><b>{modelList.length}</b> model{modelList.length !== 1 ? "s" : ""}</span>
+                  <span className="metric-chip">$<b>{proj.totalCost.toFixed(4)}</b></span>
+                  <span className="metric-chip">In <b>{proj.totalPromptTokens.toLocaleString()}</b></span>
+                  <span className="metric-chip">Out <b>{proj.totalCompletionTokens.toLocaleString()}</b></span>
                 </div>
 
-                {/* Anomaly / misuse flags */}
-                {(item.misuse_detected || item.abnormal_usage_spike) && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    {item.misuse_detected && (
-                      <span style={{
+                {/* Model name chips preview (up to 4) */}
+                {modelList.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                    {modelList.slice(0, 4).map((m) => (
+                      <span key={`${m.model_name}-${m.provider}`} style={{
                         fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        background: "rgba(158,42,151,0.1)", color: "var(--brand-primary)",
-                        fontWeight: 600, border: "1px solid rgba(158,42,151,0.2)",
+                        background: "rgba(124,112,174,0.08)", color: "var(--brand-secondary)",
+                        border: "1px solid rgba(124,112,174,0.15)",
                       }}>
-                        Misuse Detected
+                        {m.model_name}
                       </span>
-                    )}
-                    {item.abnormal_usage_spike && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        background: "rgba(230,126,34,0.1)", color: "#e67e22",
-                        fontWeight: 600, border: "1px solid rgba(230,126,34,0.2)",
-                      }}>
-                        Usage Spike
+                    ))}
+                    {modelList.length > 4 && (
+                      <span style={{ fontSize: 11, color: "var(--gray-500)", padding: "2px 4px" }}>
+                        +{modelList.length - 4} more
                       </span>
                     )}
                   </div>
@@ -823,21 +830,25 @@ function TestEvent() {
 
                 {/* Actions */}
                 <div className="action-row" style={{ marginTop: 12 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => openTrace(item.event_id)}>Trace</button>
-                  <button type="button" className="btn btn-secondary" onClick={() => openEditModal(item)}>✎ Edit</button>
-                  <button type="button" className="btn btn-ghost" style={{ color: "var(--brand-primary)" }} onClick={() => setDeleteConfirm(item.event_id)}>✕ Delete</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setSelectedProject(proj)}>
+                    Trace
+                  </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {!loadingEv && events.length > 0 && (
-          <div style={{ marginTop: 16, textAlign: "center", fontSize: 12, color: "var(--gray-500)" }}>
-            Showing {events.length} event{events.length !== 1 ? "s" : ""}
-            {activeFilterCount > 0 ? " (filtered)" : ""}
-          </div>
-        )}
+        {!loadingEv && events.length > 0 && (() => {
+          const pg = groupByProject(events);
+          return (
+            <div style={{ marginTop: 16, textAlign: "center", fontSize: 12, color: "var(--gray-500)" }}>
+              {pg.length} project{pg.length !== 1 ? "s" : ""} · {events.length} event{events.length !== 1 ? "s" : ""}
+              {activeFilterCount > 0 ? " (filtered)" : ""}
+            </div>
+          );
+        })()}
       </section>
 
       {/* ── Delete confirm ── */}
@@ -1065,6 +1076,144 @@ function TestEvent() {
 
               <div className="action-row">
                 <button type="button" className="btn btn-ghost" onClick={() => setSelectedTrace(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Project Trace modal ── */}
+      {selectedProject && (
+        <div className="modal-backdrop" onClick={() => setSelectedProject(null)}>
+          <div className="modal-dialog" style={{ maxWidth: 800 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: 0 }}>Project: {selectedProject.project_id}</h3>
+                <div style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 2 }}>
+                  {Object.keys(selectedProject.models).length} model{Object.keys(selectedProject.models).length !== 1 ? "s" : ""} used
+                  {" · "}{selectedProject.events.length} event{selectedProject.events.length !== 1 ? "s" : ""}
+                  {selectedProject.org_id && <> · <span style={{ fontWeight: 600 }}>{selectedProject.org_id}</span></>}
+                </div>
+              </div>
+              <button type="button" className="btn-close" onClick={() => setSelectedProject(null)}>✕</button>
+            </div>
+
+            <div className="stack">
+              {/* Summary bar */}
+              <div className="trace-summary-bar">
+                <div className="trace-summary-item">
+                  <span>Total Models</span>
+                  <strong style={{ fontSize: 20 }}>{Object.keys(selectedProject.models).length}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Total Events</span>
+                  <strong>{selectedProject.events.length}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Total Cost</span>
+                  <strong>${selectedProject.totalCost.toFixed(4)}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Prompt Tokens</span>
+                  <strong>{selectedProject.totalPromptTokens.toLocaleString()}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Completion Tokens</span>
+                  <strong>{selectedProject.totalCompletionTokens.toLocaleString()}</strong>
+                </div>
+              </div>
+
+              {/* Models used table */}
+              <div>
+                <p style={{ fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600, margin: "0 0 10px" }}>
+                  Models Used ({Object.keys(selectedProject.models).length})
+                </p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th>Provider</th>
+                        <th>Calls</th>
+                        <th>Prompt Tokens</th>
+                        <th>Completion Tokens</th>
+                        <th>Total Tokens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(selectedProject.models)
+                        .sort((a, b) => (b.prompt_tokens + b.completion_tokens) - (a.prompt_tokens + a.completion_tokens))
+                        .map((m, i) => (
+                          <tr key={i}>
+                            <td><strong>{m.model_name}</strong></td>
+                            <td style={{ color: "var(--gray-500)" }}>{m.provider || "—"}</td>
+                            <td>{m.calls}</td>
+                            <td>{m.prompt_tokens.toLocaleString()}</td>
+                            <td>{m.completion_tokens.toLocaleString()}</td>
+                            <td><strong>{(m.prompt_tokens + m.completion_tokens).toLocaleString()}</strong></td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Events in this project */}
+              <details>
+                <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600, userSelect: "none" }}>
+                  Events ({selectedProject.events.length})
+                </summary>
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {selectedProject.events.map((evt) => (
+                    <div key={evt.event_id} style={{
+                      padding: "10px 14px", borderRadius: 10,
+                      background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.14)",
+                      display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-400)" }}>
+                          {truncate(evt.event_id, 28)}
+                        </span>
+                        <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600 }}>{evt.tool_name || evt.model_name || "—"}</span>
+                        {evt.provider && (
+                          <span style={{ marginLeft: 6, fontSize: 11, color: "var(--gray-400)" }}>via {evt.provider}</span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, color: "var(--gray-500)" }}>{fmtTs(evt.created_at)}</span>
+                        <span className={`status-pill ${(evt.status || "").toLowerCase()}`} style={{ fontSize: 10 }}>{evt.status}</span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 11, padding: "2px 10px" }}
+                          onClick={() => openTrace(evt.event_id)}
+                        >
+                          Details
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 11, padding: "2px 10px" }}
+                          onClick={() => { setSelectedProject(null); openEditModal(evt); }}
+                        >
+                          ✎ Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 11, padding: "2px 10px", color: "var(--brand-primary)" }}
+                          onClick={() => setDeleteConfirm(evt.event_id)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+
+              <div className="action-row">
+                <button type="button" className="btn btn-ghost" onClick={() => setSelectedProject(null)}>Close</button>
               </div>
             </div>
           </div>

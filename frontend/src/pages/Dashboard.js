@@ -77,38 +77,24 @@ function Dashboard() {
   const [activeCostTile, setActiveCostTile] = useState(null);
   // Default = overall system activity (all-time) per spec.
   const [range, setRange] = useState("all");
-  const [selectedOrg, setSelectedOrg] = useState("");
-  const [selectedProject, setSelectedProject] = useState("");
 
   const load = useCallback(
-    async (
-      isRefresh = false,
-      currentRange = range,
-      currentOrg = selectedOrg,
-      currentProject = selectedProject,
-    ) => {
+    async (isRefresh = false, currentRange = range) => {
       try {
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
 
         const days = rangeToDays(currentRange);
         const startDate = rangeToStartDate(currentRange);
-        const orgParam = currentOrg || null;
-        const projectParam = currentProject || null;
 
         const [overviewRes, trendsRes, securityRes, logsRes, costTotalsRes, costProjectRes] =
           await Promise.all([
-            getGovernanceOverview(orgParam, days, currentRange),
-            getUsageTrends(orgParam, days),
-            getSecuritySummaryCombined(orgParam, projectParam, startDate),
-            getTelemetryLogs({
-              limit: 20,
-              start_date: startDate,
-              org_id: orgParam || undefined,
-              project_id: projectParam || undefined,
-            }),
+            getGovernanceOverview(null, days, currentRange),
+            getUsageTrends(null, days),
+            getSecuritySummaryCombined(null, null, startDate),
+            getTelemetryLogs({ limit: 20, start_date: startDate }),
             getCostTotals(),
-            getCostByProject(orgParam || undefined),
+            getCostByProject(),
           ]);
 
         setOverview(overviewRes.data);
@@ -129,18 +115,12 @@ function Dashboard() {
         setRefreshing(false);
       }
     },
-    [range, selectedOrg, selectedProject],
+    [range],
   );
 
   useEffect(() => {
-    load(false, range, selectedOrg, selectedProject);
-  }, [range, selectedOrg, selectedProject, load]);
-
-  // If the org changes, clear any previously selected project (it may not
-  // belong to the new org).
-  useEffect(() => {
-    setSelectedProject("");
-  }, [selectedOrg]);
+    load(false, range);
+  }, [range, load]);
 
   const fetchInsights = useCallback(async () => {
     setLoadingInsights(true);
@@ -325,10 +305,8 @@ function Dashboard() {
             <FilterBar
               range={range}
               onRangeChange={setRange}
-              orgId={selectedOrg}
-              onOrgChange={setSelectedOrg}
-              projectId={selectedProject}
-              onProjectChange={setSelectedProject}
+              showOrg={false}
+              showProject={false}
               showRange={false}
               compact
             />
