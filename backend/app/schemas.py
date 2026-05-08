@@ -271,6 +271,22 @@ class ToolConnectorCreate(BaseModel):
     org_id: Optional[str] = None
     project_id: Optional[str] = None
     api_key: Optional[str] = None
+    sync_enabled: bool = True
+    pull_interval_minutes: int = 15
+
+
+class ToolConnectorUpdate(BaseModel):
+    tool_name: Optional[str] = None
+    provider: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    ingestion_mode: Optional[str] = None
+    status: Optional[str] = None
+    org_id: Optional[str] = None
+    project_id: Optional[str] = None
+    api_key: Optional[str] = None
+    sync_enabled: Optional[bool] = None
+    pull_interval_minutes: Optional[int] = None
 
 
 class ToolConnectorResponse(BaseModel):
@@ -286,7 +302,25 @@ class ToolConnectorResponse(BaseModel):
     status: str
     org_id: Optional[str] = None
     project_id: Optional[str] = None
+    sync_enabled: bool = True
+    pull_interval_minutes: int = 15
+    last_sync_status: Optional[str] = None
+    last_sync_error: Optional[str] = None
+    total_events_pulled: int = 0
     last_ingested_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+class ConnectorSyncLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    connector_id: int
+    connector_name: Optional[str] = None
+    sync_status: str
+    events_pulled: int = 0
+    error_message: Optional[str] = None
+    duration_ms: int = 0
     created_at: Optional[datetime] = None
 
 

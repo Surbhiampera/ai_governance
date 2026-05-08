@@ -453,6 +453,21 @@ td {
   color: var(--gray-700);
 }
 
+.status-pill.success {
+  background: rgba(34, 139, 98, 0.1);
+  color: #228b62;
+}
+
+.status-pill.warning {
+  background: rgba(180, 120, 20, 0.1);
+  color: #a06b10;
+}
+
+.status-pill.error {
+  background: rgba(158, 42, 151, 0.14);
+  color: var(--brand-primary);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;

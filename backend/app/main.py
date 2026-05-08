@@ -38,6 +38,11 @@ _SAFE_ALTERS = [
     "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
     "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS api_key VARCHAR(500)",
     "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS last_ingested_at TIMESTAMP",
+    "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS sync_enabled BOOLEAN DEFAULT TRUE",
+    "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS pull_interval_minutes INTEGER DEFAULT 15",
+    "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS last_sync_status VARCHAR(30)",
+    "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS last_sync_error TEXT",
+    "ALTER TABLE tool_connectors ADD COLUMN IF NOT EXISTS total_events_pulled INTEGER DEFAULT 0",
     "ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)",
     "ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
     # Org/project traceability columns

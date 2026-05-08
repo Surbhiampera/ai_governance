@@ -96,6 +96,11 @@ export const registerTool = (data) => API.post("/tools/register", data);
 export const getToolsUsage = () => API.get("/tools/usage");
 export const getConnectors = () => API.get("/tools/connectors");
 export const createConnector = (data) => API.post("/tools/connectors", data);
+export const updateConnector = (id, data) => API.patch(`/tools/connectors/${id}`, data);
+export const deleteConnector = (id) => API.delete(`/tools/connectors/${id}`);
+export const getConnectorSyncLogs = (connectorId, limit = 50) =>
+  API.get("/tools/connectors/sync-logs", { params: { connector_id: connectorId || undefined, limit } });
+export const triggerConnectorSync = (id) => API.post(`/tools/connectors/${id}/trigger-sync`);
 
 export const getModels = () => API.get("/models/");
 export const registerModel = (data) => API.post("/models/register", data);
@@ -211,5 +216,6 @@ export const triggerMonthlyAggregation = () =>
 export const triggerAnomalyDetection = () =>
   API.post("/workers/anomaly-detection/sync");
 export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
+export const triggerConnectorPoll = () => API.post("/workers/connector-poll/sync");
 
 export default API;

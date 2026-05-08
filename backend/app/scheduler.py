@@ -81,6 +81,22 @@ def _job_alert_scan() -> None:
         db.close()
 
 
+def _job_connector_poll() -> None:
+    from app.database import SessionLocal
+    from app.workers.tasks import _run_connector_poll
+
+    db = SessionLocal()
+    try:
+        result = _run_connector_poll(db)
+        db.commit()
+        logger.info("Connector poll complete: %s", result)
+    except Exception as exc:
+        logger.error("Connector poll error: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ─────────────────────── lifecycle ───────────────────────
 
 def start_scheduler() -> BackgroundScheduler:
@@ -93,8 +109,9 @@ def start_scheduler() -> BackgroundScheduler:
     _scheduler.add_job(_job_monthly_aggregation, "interval", hours=24, id="monthly_agg", replace_existing=True)
     _scheduler.add_job(_job_anomaly_detection, "interval", minutes=30, id="anomaly_detection", replace_existing=True)
     _scheduler.add_job(_job_alert_scan, "interval", minutes=30, id="alert_scan", replace_existing=True)
+    _scheduler.add_job(_job_connector_poll, "interval", minutes=15, id="connector_poll", replace_existing=True)
     _scheduler.start()
-    logger.info("APScheduler started (daily_agg / monthly_agg / anomaly_detection / alert_scan)")
+    logger.info("APScheduler started (daily_agg / monthly_agg / anomaly_detection / alert_scan / connector_poll)")
     return _scheduler
 
 

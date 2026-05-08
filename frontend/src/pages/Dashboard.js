@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Area,
   AreaChart,
@@ -16,11 +17,28 @@ import {
 import {
   getGovernanceOverview,
   getSecuritySummaryCombined,
+  getSuperAdminInsights,
   getTelemetryLogs,
   getUsageTrends,
   getCostTotals,
   getCostByProject,
 } from "../api";
+
+const SEV_CLASS = {
+  critical: "critical",
+  high: "high",
+  medium: "medium",
+  low: "low",
+};
+
+const SEV_LABEL = {
+  token_limit_exhausted: "Token Exhausted",
+  token_limit_approaching: "Token Limit",
+  cost_threshold_exceeded: "Budget Exceeded",
+  cost_threshold_approaching: "Budget Alert",
+  abnormal_usage: "Anomaly",
+  governance_alert: "Alert",
+};
 
 // Returns ISO date string (YYYY-MM-DD) for the start of the selected range,
 // or undefined for "all time".
@@ -51,6 +69,7 @@ const RANGE_OPTIONS = [
 ];
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [trends, setTrends] = useState([]);
   const [security, setSecurity] = useState(null);
@@ -59,6 +78,10 @@ function Dashboard() {
   const [costTotals, setCostTotals] = useState(null);
   const [costByProject, setCostByProject] = useState([]);
   const [activeMetric, setActiveMetric] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [dismissedNotifications, setDismissedNotifications] = useState(false);
+  const [loadingInsights, setLoadingInsights] = useState(true);
+  const insightsPollRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -113,6 +136,31 @@ function Dashboard() {
     load(false, range);
   }, [range, load]);
 
+  const fetchInsights = useCallback(async () => {
+    setLoadingInsights(true);
+    try {
+      const res = await getSuperAdminInsights({});
+      setInsights(res.data || null);
+      setDismissedNotifications(false);
+    } catch {
+      setInsights(null);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInsights();
+  }, [fetchInsights]);
+
+  // Poll insights every 30 s for real-time notifications
+  useEffect(() => {
+    insightsPollRef.current = setInterval(() => {
+      fetchInsights();
+    }, 30000);
+    return () => clearInterval(insightsPollRef.current);
+  }, [fetchInsights]);
+
   const rangeLabel = (
     RANGE_OPTIONS.find((r) => r.value === range) || RANGE_OPTIONS[0]
   ).label;
@@ -147,6 +195,13 @@ function Dashboard() {
 
   const recentAlerts = overview?.recent_alerts || [];
   const recentAnomalies = overview?.recent_anomalies || [];
+  const notifications = insights?.notifications || [];
+  const criticalNotifs = notifications.filter((n) => n.severity === "critical");
+  const highNotifs = notifications.filter((n) => n.severity === "high");
+  const restNotifs = notifications.filter(
+    (n) => n.severity !== "critical" && n.severity !== "high",
+  );
+  const orderedNotifs = [...criticalNotifs, ...highNotifs, ...restNotifs];
   const securitySignals =
     (security?.open_anomalies || 0) +
     (security?.total_with_pii || 0) +
@@ -753,7 +808,7 @@ function Dashboard() {
                   </td>
                 </tr>
               ) : null}
-              {recentLogs.map((row) => (
+              {recentLogs.slice(0, 10).map((row) => (
                 <tr key={row.event_id}>
                   <td>{row.org_id || "-"}</td>
                   <td>{row.project_id || "-"}</td>
@@ -933,29 +988,145 @@ function Dashboard() {
       </section>
 
       <section className="two-column">
-        <div className="panel">
+        <div
+          className="panel"
+          style={
+            !loadingInsights && !dismissedNotifications && notifications.length > 0
+              ? { borderLeft: "4px solid var(--red-500, #ef4444)" }
+              : undefined
+          }
+        >
           <div className="section-head">
             <div>
-              <h3>Recent Alerts</h3>
+              <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>Recent Alerts</span>
+                {!dismissedNotifications && criticalNotifs.length > 0 && (
+                  <span className="status-pill critical">
+                    {criticalNotifs.length} critical
+                  </span>
+                )}
+                {!dismissedNotifications && highNotifs.length > 0 && (
+                  <span className="status-pill high">
+                    {highNotifs.length} high
+                  </span>
+                )}
+              </h3>
+              <p
+                style={{
+                  margin: "2px 0 0",
+                  color: "var(--gray-500)",
+                  fontSize: 13,
+                }}
+              >
+                {!loadingInsights &&
+                notifications.length === 0
+                  ? "No active alerts — all token limits and cost budgets are within acceptable thresholds."
+                  : "Live alerts for token limits, cost thresholds, and abnormal usage — auto-refreshed every 30 s."}
+              </p>
             </div>
-          </div>
-          <div className="list-grid">
-            {recentAlerts.length ? (
-              recentAlerts.map((alert) => (
-                <div key={alert.id} className="list-item">
-                  <strong>{alert.alert_type}</strong>
-                  <div className="list-meta">
-                    <span className={`status-pill ${alert.severity}`}>
-                      {alert.severity}
-                    </span>{" "}
-                    {alert.message}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">No recent alerts.</div>
+            {!dismissedNotifications && notifications.length > 0 && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => setDismissedNotifications(true)}
+                style={{ alignSelf: "flex-start" }}
+              >
+                Dismiss all
+              </button>
             )}
           </div>
+
+          {!loadingInsights && !dismissedNotifications && notifications.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              {orderedNotifs.map((n, i) => {
+                const ctxBits = [];
+                if (n.project_name || n.project_id) {
+                  ctxBits.push(
+                    `Project: ${n.project_name || n.project_id}`,
+                  );
+                }
+                if (n.tool_name || n.model_name) {
+                  ctxBits.push(`Tool: ${n.tool_name || n.model_name}`);
+                }
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      background: "var(--surface-2, #f8f9fa)",
+                      border: "1px solid var(--border, #e5e7eb)",
+                    }}
+                  >
+                    <span
+                      className={`status-pill ${SEV_CLASS[n.severity] || ""}`}
+                      style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                    >
+                      {SEV_LABEL[n.type] || n.type}
+                    </span>
+                    <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>
+                      {n.message}
+                      {ctxBits.length > 0 && (
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: 11,
+                            color: "var(--gray-500)",
+                            marginTop: 2,
+                          }}
+                        >
+                          {ctxBits.join(" · ")}
+                        </span>
+                      )}
+                    </span>
+                    {n.org_id ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/admin-logs?org=${encodeURIComponent(n.org_id)}`)
+                        }
+                        title="View organization in Super Admin Logs"
+                        style={{
+                          fontSize: 11,
+                          color: "var(--brand-primary, #6366f1)",
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
+                          fontWeight: 600,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        {n.org_name || n.org_id}
+                      </button>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "var(--gray-400)",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {n.org_name || n.org_id}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className="panel">

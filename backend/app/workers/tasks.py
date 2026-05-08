@@ -6,17 +6,21 @@ on-demand manual triggers.  All DB sessions are managed by the caller.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+import time
+import uuid
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models import (
+    ConnectorSyncLog,
     DailyOrgSummary,
     MonthlyOrgSummary,
     Organization,
     TelemetryEvent,
+    ToolConnector,
     UsageAnomaly,
 )
 
@@ -227,3 +231,120 @@ def _detect_anomalies(db: Session) -> int:
 
     db.flush()
     return created
+
+
+# ─────────────────────── connector pull ───────────────────────
+
+def _pull_connector(connector: ToolConnector) -> tuple[list[dict], str | None]:
+    """HTTP pull for a single connector. Returns (events_list, error_or_None)."""
+    import httpx
+
+    if not connector.endpoint_url:
+        return [], "no endpoint_url configured"
+
+    headers: dict[str, str] = {"Accept": "application/json"}
+    auth_type = (connector.auth_type or "").lower()
+    if connector.api_key:
+        if auth_type == "x-api-key":
+            headers["X-API-Key"] = connector.api_key
+        else:
+            headers["Authorization"] = f"Bearer {connector.api_key}"
+
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(connector.endpoint_url, headers=headers)
+        resp.raise_for_status()
+        body = resp.json()
+        if isinstance(body, list):
+            return body, None
+        if isinstance(body, dict):
+            for key in ("events", "data", "items", "results", "logs"):
+                if isinstance(body.get(key), list):
+                    return body[key], None
+        return [], None
+    except Exception as exc:
+        return [], str(exc)
+
+
+def _run_connector_poll(db: Session) -> dict:
+    """Poll all active pull-mode connectors and ingest any returned events."""
+    from app.models import TelemetryEvent as TE
+    from app.services.cost_engine import CostEngine
+    from app.services.security_engine import SecurityEngine
+    from app.services.alert_engine import AlertEngine
+
+    connectors = (
+        db.query(ToolConnector)
+        .filter(
+            ToolConnector.status == "active",
+            ToolConnector.sync_enabled.is_(True),
+            ToolConnector.ingestion_mode == "api",
+        )
+        .all()
+    )
+
+    total_pulled = 0
+    total_errors = 0
+
+    for connector in connectors:
+        t0 = time.time()
+        raw_events, error = _pull_connector(connector)
+        duration_ms = int((time.time() - t0) * 1000)
+
+        events_ingested = 0
+        if raw_events:
+            for raw in raw_events:
+                try:
+                    event_id = raw.get("event_id") or str(uuid.uuid4())
+                    existing = db.query(TE).filter(TE.event_id == event_id).first()
+                    if existing:
+                        continue
+
+                    row = TE(
+                        event_id=event_id,
+                        org_id=connector.org_id or raw.get("org_id", "default"),
+                        project_id=connector.project_id or raw.get("project_id"),
+                        tool_name=raw.get("tool_name", connector.tool_name),
+                        provider=raw.get("provider", connector.provider),
+                        model_name=raw.get("model_name"),
+                        status=raw.get("status", "success"),
+                        prompt_tokens=int(raw.get("prompt_tokens", 0)),
+                        completion_tokens=int(raw.get("completion_tokens", 0)),
+                        total_tokens=int(raw.get("total_tokens", 0)),
+                        latency_ms=int(raw.get("latency_ms", 0)),
+                        input_data_size_mb=Decimal(str(raw.get("input_data_size_mb", 0))),
+                        output_data_size_mb=Decimal(str(raw.get("output_data_size_mb", 0))),
+                        metadata_json=raw.get("metadata_json", {}),
+                    )
+                    db.add(row)
+                    db.flush()
+
+                    CostEngine().calculate(db, row)
+                    SecurityEngine().analyze(db, row, raw.get("contains_pii", False), raw.get("pii_type"))
+                    AlertEngine().evaluate(db, row)
+                    events_ingested += 1
+                except Exception as exc:
+                    logger.warning("Connector %s: failed to ingest event: %s", connector.connector_name, exc)
+
+        sync_status = "error" if error and not events_ingested else ("no_data" if not events_ingested else "success")
+        db.add(ConnectorSyncLog(
+            connector_id=connector.id,
+            connector_name=connector.connector_name,
+            sync_status=sync_status,
+            events_pulled=events_ingested,
+            error_message=error,
+            duration_ms=duration_ms,
+        ))
+
+        connector.last_ingested_at = datetime.utcnow()
+        connector.last_sync_status = sync_status
+        connector.last_sync_error = error
+        connector.total_events_pulled = (connector.total_events_pulled or 0) + events_ingested
+
+        total_pulled += events_ingested
+        if error:
+            total_errors += 1
+        logger.info("Connector %s: %d events, status=%s", connector.connector_name, events_ingested, sync_status)
+
+    db.flush()
+    return {"connectors_polled": len(connectors), "events_pulled": total_pulled, "errors": total_errors}

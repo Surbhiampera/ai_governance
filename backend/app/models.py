@@ -138,6 +138,26 @@ class ToolConnector(Base):
     # Vendor credential (stored as-is; production deployments should encrypt)
     api_key = Column(String(500), nullable=True)
     last_ingested_at = Column(DateTime, nullable=True)
+    # Pull-based scheduling
+    sync_enabled = Column(Boolean, default=True)
+    pull_interval_minutes = Column(Integer, default=15)
+    last_sync_status = Column(String(30), nullable=True)
+    last_sync_error = Column(Text, nullable=True)
+    total_events_pulled = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ConnectorSyncLog(Base):
+    __tablename__ = "connector_sync_logs"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(BigInteger, primary_key=True)
+    connector_id = Column(BigInteger, ForeignKey("tool_connectors.id"), nullable=False)
+    connector_name = Column(String(150), nullable=True)
+    sync_status = Column(String(30), nullable=False, default="success")
+    events_pulled = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    duration_ms = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
 
 

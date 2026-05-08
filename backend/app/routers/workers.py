@@ -48,3 +48,11 @@ def trigger_alert_scan_sync(db: Session = Depends(get_db)):
     created = AlertEngine().create_daily_anomaly_alerts(db)
     db.commit()
     return {"status": "completed", "result": {"alerts_created": created}}
+
+
+@router.post("/connector-poll/sync")
+def trigger_connector_poll_sync(db: Session = Depends(get_db)):
+    from app.workers.tasks import _run_connector_poll
+    result = _run_connector_poll(db)
+    db.commit()
+    return {"status": "completed", "result": result}
