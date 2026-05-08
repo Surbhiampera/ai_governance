@@ -1,0 +1,38 @@
+Tool 2: Governance Tool — What we need to build
+
+What is it?
+A standalone platform/dashboard that sits on top of all AI tools the team builds (Email Agent, AI Visibility Tool, etc.) and monitors them end-to-end. We can described it as a "super admin" layer for AI governance.
+
+Core Features for this build
+1. Cost Monitoring (Per Tool, Per Day)
+The platform should track token usage and infrastructure cost for every AI tool running under a client. For example:
+
+How many emails were processed today?
+How many tokens were consumed (input + output)?
+What is the daily/monthly cost per tool?
+It should display this on a live dashboard, not just a monthly report
+
+2. Spend Cap & Alerts
+If token usage or email volume crosses a threshold, the system should trigger an alert automatically. For example: if the normal volume is ~100 emails/day and suddenly it spikes to 150+, something is wrong — either a spam attack or a misconfiguration. The governance tool should catch that on the same day, not at month-end billing.
+
+3. Data Security / Sensitivity Monitoring
+The tool should track:
+
+What data is going out of the client's environment (data-out in MB)
+Is any sensitive/PII data being transferred externally? (answer should always be "none" if masking is working)
+Basically a health check: data in, data out, sensitive data = 0
+
+4. Access to All AI Tool Logs (Super Admin)
+The governance tool needs to connect to every AI tool's logs — not necessarily the codebase, but wherever logs are stored for each application. It needs superuser/admin access across all systems to pull this data automatically.
+
+5. Multi-Vendor / Multi-Tool Support (Long-term Vision)
+The bigger vision: even if Royal Sundaram works with 10 different AI vendors (not just our team), the governance tool should be able to plug into all of them. The client just provides a few data feeds, and the platform starts monitoring, generating insights, and producing cost reports for all AI activity across their organisation.
+
+Summary:
+
+1.Build a live cost monitoring dashboard tracking token usage and infrastructure cost per AI tool, per day (Email Agent, AI Visibility Tool, SEO Tool, etc.)
+2. Implement spend cap alerts — if daily email/token volume crosses a set threshold, trigger an alert on the same day, not at month-end billing
+3. Add a data security monitoring layer — track data-out volume in MB and verify zero sensitive/PII data is ever transmitted externally
+4. Architecture requires super admin / log access across all AI tools deployed at the client — reads logs from every application to generate insights
+5. Long-term: support multi-vendor AI monitoring — even tools built by other vendors should be pluggable into this governance platform
+6. Pilot the governance tool within the Royal Sundaram ecosystem over 6 months, then scale to other clients as a standalone product
