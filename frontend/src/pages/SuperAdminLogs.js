@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   getAdminPIIDetail,
   getLookupEventStatuses,
@@ -9,6 +10,7 @@ import {
   getToolsUsage,
   getTracingOrgs,
 } from "../api";
+import { RANGE_OPTIONS, rangeToStartDate } from "../utils/filters";
 
 const money = (v) => `$${Number(v || 0).toFixed(4)}`;
 const num = (v) => Number(v || 0).toLocaleString();
@@ -604,6 +606,14 @@ function OrgDetailModal({ orgId, notifications, aggregate, logs, onClose, onAppl
 }
 
 function SuperAdminLogs() {
+  const location = useLocation();
+  const initialOrgId = (() => {
+    try {
+      return new URLSearchParams(location.search).get("org") || "";
+    } catch {
+      return "";
+    }
+  })();
   const [logs, setLogs] = useState([]);
   const [aggregate, setAggregate] = useState([]);
   const [insights, setInsights] = useState(null);
@@ -613,9 +623,9 @@ function SuperAdminLogs() {
   const [eventStatuses, setEventStatuses] = useState([]);
   const [dismissedNotifications, setDismissedNotifications] = useState(false);
   const [piiModalEventId, setPiiModalEventId] = useState(null);
-  const [orgModalId, setOrgModalId] = useState(null);
+  const [orgModalId, setOrgModalId] = useState(initialOrgId || null);
   const [filters, setFilters] = useState({
-    org_id: "",
+    org_id: initialOrgId,
     tool_name: "",
     provider: "",
     status: "",
@@ -841,6 +851,36 @@ function SuperAdminLogs() {
                 >
                   {eventStatuses.map((s) => (
                     <option key={s || "all"} value={s}>{s || "All statuses"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Range preset</label>
+                <select
+                  value={(() => {
+                    // Match the current start_date back to a preset value
+                    if (!filters.start_date && !filters.end_date) return "all";
+                    for (const opt of RANGE_OPTIONS) {
+                      if (opt.value === "all") continue;
+                      if (rangeToStartDate(opt.value) === filters.start_date && !filters.end_date) {
+                        return opt.value;
+                      }
+                    }
+                    return "";
+                  })()}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    setFilters({
+                      ...filters,
+                      start_date: rangeToStartDate(v) || "",
+                      end_date: "",
+                    });
+                  }}
+                >
+                  <option value="">Custom</option>
+                  {RANGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>

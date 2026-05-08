@@ -73,7 +73,7 @@ def get_monthly_summary(
 @router.get("/trends")
 def get_usage_trends(
     org_id: Optional[str] = Query(None),
-    days: int = Query(30, ge=1, le=180),
+    days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
     cutoff = date.today() - timedelta(days=days - 1)

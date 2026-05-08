@@ -23,6 +23,13 @@ import {
   getCostTotals,
   getCostByProject,
 } from "../api";
+import FilterBar from "../components/FilterBar";
+import {
+  RANGE_OPTIONS,
+  rangeToDays,
+  rangeToStartDate,
+  rangeLabelOf,
+} from "../utils/filters";
 
 const SEV_CLASS = {
   critical: "critical",
@@ -40,17 +47,6 @@ const SEV_LABEL = {
   governance_alert: "Alert",
 };
 
-// Returns ISO date string (YYYY-MM-DD) for the start of the selected range,
-// or undefined for "all time".
-const rangeToStartDate = (rangeValue) => {
-  if (rangeValue === "all") return undefined;
-  const d = new Date();
-  if (rangeValue === "today") return d.toISOString().split("T")[0];
-  const offsets = { "7d": 6, "30d": 29, "90d": 89 };
-  d.setDate(d.getDate() - (offsets[rangeValue] || 0));
-  return d.toISOString().split("T")[0];
-};
-
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4"];
 
 const money = (value) => `$${Number(value || 0).toFixed(2)}`;
@@ -59,14 +55,6 @@ const num = (value, decimals = 0) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
-
-const RANGE_OPTIONS = [
-  { value: "all", label: "All Time", days: 90 },
-  { value: "today", label: "Today", days: 1 },
-  { value: "7d", label: "Last 7 Days", days: 7 },
-  { value: "30d", label: "Last 30 Days", days: 30 },
-  { value: "90d", label: "Last 90 Days", days: 90 },
-];
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -89,26 +77,38 @@ function Dashboard() {
   const [activeCostTile, setActiveCostTile] = useState(null);
   // Default = overall system activity (all-time) per spec.
   const [range, setRange] = useState("all");
+  const [selectedOrg, setSelectedOrg] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
 
   const load = useCallback(
-    async (isRefresh = false, currentRange = range) => {
+    async (
+      isRefresh = false,
+      currentRange = range,
+      currentOrg = selectedOrg,
+      currentProject = selectedProject,
+    ) => {
       try {
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
 
-        const opt =
-          RANGE_OPTIONS.find((r) => r.value === currentRange) ||
-          RANGE_OPTIONS[0];
+        const days = rangeToDays(currentRange);
         const startDate = rangeToStartDate(currentRange);
+        const orgParam = currentOrg || null;
+        const projectParam = currentProject || null;
 
         const [overviewRes, trendsRes, securityRes, logsRes, costTotalsRes, costProjectRes] =
           await Promise.all([
-            getGovernanceOverview(null, opt.days, opt.value),
-            getUsageTrends(null, opt.days),
-            getSecuritySummaryCombined(null, null, startDate),
-            getTelemetryLogs({ limit: 20, start_date: startDate }),
+            getGovernanceOverview(orgParam, days, currentRange),
+            getUsageTrends(orgParam, days),
+            getSecuritySummaryCombined(orgParam, projectParam, startDate),
+            getTelemetryLogs({
+              limit: 20,
+              start_date: startDate,
+              org_id: orgParam || undefined,
+              project_id: projectParam || undefined,
+            }),
             getCostTotals(),
-            getCostByProject(),
+            getCostByProject(orgParam || undefined),
           ]);
 
         setOverview(overviewRes.data);
@@ -129,12 +129,18 @@ function Dashboard() {
         setRefreshing(false);
       }
     },
-    [range],
+    [range, selectedOrg, selectedProject],
   );
 
   useEffect(() => {
-    load(false, range);
-  }, [range, load]);
+    load(false, range, selectedOrg, selectedProject);
+  }, [range, selectedOrg, selectedProject, load]);
+
+  // If the org changes, clear any previously selected project (it may not
+  // belong to the new org).
+  useEffect(() => {
+    setSelectedProject("");
+  }, [selectedOrg]);
 
   const fetchInsights = useCallback(async () => {
     setLoadingInsights(true);
@@ -161,9 +167,7 @@ function Dashboard() {
     return () => clearInterval(insightsPollRef.current);
   }, [fetchInsights]);
 
-  const rangeLabel = (
-    RANGE_OPTIONS.find((r) => r.value === range) || RANGE_OPTIONS[0]
-  ).label;
+  const rangeLabel = rangeLabelOf(range);
 
   if (loading) {
     return (
@@ -315,6 +319,19 @@ function Dashboard() {
                 {opt.label}
               </button>
             ))}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <FilterBar
+              range={range}
+              onRangeChange={setRange}
+              orgId={selectedOrg}
+              onOrgChange={setSelectedOrg}
+              projectId={selectedProject}
+              onProjectChange={setSelectedProject}
+              showRange={false}
+              compact
+            />
           </div>
 
           <div className="hero-metrics">

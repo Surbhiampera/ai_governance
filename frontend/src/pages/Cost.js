@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import API from "../api";
 import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget } from "../api";
+import { RANGE_OPTIONS, rangeToDays } from "../utils/filters";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
 const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
@@ -54,18 +55,10 @@ function Cost() {
   const [addCapSubmitting, setAddCapSubmitting] = useState(false);
   const [range, setRange] = useState("30d");
 
-  const RANGE_OPTIONS_C = [
-    { value: "all", label: "All Time", days: 365 },
-    { value: "today", label: "Today", days: 1 },
-    { value: "7d", label: "Last 7 Days", days: 7 },
-    { value: "30d", label: "Last 30 Days", days: 30 },
-    { value: "90d", label: "Last 90 Days", days: 90 },
-  ];
-
   const load = async () => {
     try {
       setLoading(true);
-      const opt = RANGE_OPTIONS_C.find((r) => r.value === range) || RANGE_OPTIONS_C[2];
+      const days = rangeToDays(range);
       const scope = { org_id: selectedOrg || undefined, project_id: selectedProject || undefined };
       const [
         totalsRes,
@@ -87,7 +80,7 @@ function Cost() {
         API.get("/costs/by-model", { params: scope }),
         API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
         API.get("/costs/by-org"),
-        API.get("/costs/daily", { params: { days: opt.days, ...scope } }),
+        API.get("/costs/daily", { params: { days, ...scope } }),
         API.get("/costs/monthly", { params: scope }),
         getTracingOrgs(),
         API.get("/costs/by-tool", { params: scope }),
@@ -95,7 +88,7 @@ function Cost() {
         API.get("/costs/by-execution-type", { params: scope }),
         API.get("/costs/by-service-type", { params: scope }),
         API.get("/costs/breakdown", { params: scope }),
-        getCostPerToolDaily(opt.days, selectedOrg || undefined, selectedProject || undefined),
+        getCostPerToolDaily(days, selectedOrg || undefined, selectedProject || undefined),
         getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined),
       ]);
       setTotals(totalsRes.data);
@@ -317,7 +310,7 @@ function Cost() {
             </select>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingBottom: 2 }}>
-            {RANGE_OPTIONS_C.map((opt) => (
+            {RANGE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"

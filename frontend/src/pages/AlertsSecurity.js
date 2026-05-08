@@ -11,6 +11,7 @@ import {
   getNotificationStatus,
   getAdminPIIDetail,
 } from "../api";
+import { rangeToStartDate } from "../utils/filters";
 
 function QuotaBar({ pct, forecast }) {
   const safe = Math.min(Number(pct || 0), 100);
@@ -207,15 +208,6 @@ function AlertsSecurity() {
   const [selectedOrg, setSelectedOrg] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
   const [range, setRange] = useState("all");
-
-  const rangeToStartDate = (r) => {
-    if (r === "all") return undefined;
-    const d = new Date();
-    if (r === "today") return d.toISOString().split("T")[0];
-    const offsets = { "7d": 6, "30d": 29, "90d": 89 };
-    d.setDate(d.getDate() - (offsets[r] || 0));
-    return d.toISOString().split("T")[0];
-  };
 
   const load = async () => {
     setLoading(true);

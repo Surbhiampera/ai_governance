@@ -9,8 +9,6 @@ import {
 } from "../api";
 
 // ─── Preset scenarios ─────────────────────────────────────────────────────────
-
-// ── Email Support Agent scenarios ─────────────────────────────────────────────
 const PRESETS = [
   {
     id: "email-classify-order",
@@ -153,10 +151,31 @@ const BLANK = {
   models: [blankModelRow()], tools: [blankToolRow()],
 };
 
+const BLANK_FILTER = { org_id: "", tool_name: "", status: "", limit: 25, start_date: "", end_date: "" };
+
+const fmtTs = (ts) => {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const truncate = (str, len = 24) =>
+  str && str.length > len ? str.slice(0, len) + "…" : str || "—";
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 function TestEvent() {
   const formRef = useRef(null);
+
+  /* filter state — committed pattern: raw inputs → applied on Search click */
+  const [filterOrg,       setFilterOrg]       = useState("");
+  const [filterTool,      setFilterTool]      = useState("");
+  const [filterStatus,    setFilterStatus]    = useState("");
+  const [filterLimit,     setFilterLimit]     = useState(25);
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate,   setFilterEndDate]   = useState("");
+  const [appliedFilter,   setAppliedFilter]   = useState(BLANK_FILTER);
+  const filterRef = useRef(BLANK_FILTER);
 
   /* auto-inject */
   const [orgId,        setOrgId]        = useState("");
@@ -182,16 +201,52 @@ function TestEvent() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [eventStatuses, setEventStatuses] = useState([]);
   const [oneLoading,    setOneLoading]    = useState(false);
+  const [loadingEv,     setLoadingEv]     = useState(false);
+
+  /* keep filterRef in sync so loadEvents inside timers gets current filter */
+  useEffect(() => { filterRef.current = appliedFilter; }, [appliedFilter]);
 
   const loadEvents = async () => {
-    const res = await getTelemetryLogs({ limit: 15 });
-    setEvents(res.data || []);
+    const f = filterRef.current;
+    const params = { limit: f.limit || 25 };
+    if (f.org_id)     params.org_id     = f.org_id;
+    if (f.tool_name)  params.tool_name  = f.tool_name;
+    if (f.status)     params.status     = f.status;
+    if (f.start_date) params.start_date = f.start_date;
+    if (f.end_date)   params.end_date   = f.end_date;
+    setLoadingEv(true);
+    try {
+      const res = await getTelemetryLogs(params);
+      setEvents(res.data || []);
+    } catch {
+      setEvents([]);
+    } finally {
+      setLoadingEv(false);
+    }
   };
 
   useEffect(() => {
     loadEvents().catch(() => {});
     getLookupEventStatuses().then((r) => setEventStatuses(r.data || [])).catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line
+
+  /* re-fetch whenever committed filter changes */
+  useEffect(() => {
+    loadEvents().catch(() => {});
+  }, [appliedFilter]); // eslint-disable-line
+
+  const handleSearch = () => {
+    const f = { org_id: filterOrg, tool_name: filterTool, status: filterStatus, limit: filterLimit, start_date: filterStartDate, end_date: filterEndDate };
+    filterRef.current = f;
+    setAppliedFilter(f);
+  };
+
+  const handleReset = () => {
+    setFilterOrg(""); setFilterTool(""); setFilterStatus("");
+    setFilterLimit(25); setFilterStartDate(""); setFilterEndDate("");
+    filterRef.current = BLANK_FILTER;
+    setAppliedFilter(BLANK_FILTER);
+  };
 
   // ── auto-inject engine ────────────────────────────────────────────────────
 
@@ -221,7 +276,7 @@ function TestEvent() {
       clearInterval(autoTimerRef.current);
       clearInterval(countdownRef.current);
     };
-  }, [autoRunning]);
+  }, [autoRunning]); // eslint-disable-line
 
   const startAuto = () => {
     if (!orgId.trim() || !projectId.trim()) { setMessage("Enter Organization and Project first."); return; }
@@ -352,6 +407,11 @@ function TestEvent() {
 
   const fieldError = (n) => validationErrors[n] ? { borderColor: "var(--brand-primary)" } : {};
 
+  const activeFilterCount = [
+    appliedFilter.org_id, appliedFilter.tool_name, appliedFilter.status,
+    appliedFilter.start_date, appliedFilter.end_date,
+  ].filter(Boolean).length;
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
@@ -362,7 +422,7 @@ function TestEvent() {
         <div>
           <h2 style={{ margin: 0 }}>Event Tracing</h2>
           <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
-            Inject Email Support Agent telemetry — classify, draft, pipeline, and PII scenarios.
+            Inspect live telemetry events, drill into trace details, and simulate multi-tool AI pipeline scenarios.
           </p>
         </div>
         {message && <div className="feedback-msg" style={{ marginTop: 10 }}>{message}</div>}
@@ -478,7 +538,7 @@ function TestEvent() {
             <div>
               <h3>Auto-Inject</h3>
               <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Enter org and project — cycles all {PRESETS.length} Email Agent scenarios (classify, draft, pipeline, PII) every {AUTO_INTERVAL_MS / 1000}s.
+                Cycles through {PRESETS.length} preset scenarios every {AUTO_INTERVAL_MS / 1000}s to simulate real-world AI pipeline activity.
               </p>
             </div>
           </div>
@@ -518,7 +578,7 @@ function TestEvent() {
                 </>
               ) : (
                 <span style={{ color: "var(--gray-500)" }}>
-                  {autoCount > 0 ? `Stopped · ${autoCount} events injected` : "Ready · set org and project to start"}
+                  {autoCount > 0 ? `Stopped · ${autoCount} events injected` : "Ready — set Org and Project, then start"}
                 </span>
               )}
             </div>
@@ -563,39 +623,221 @@ function TestEvent() {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h3>Recent Events</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>Inspect, edit, or delete any captured event.</p>
-          </div>
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => loadEvents()}>↺ Refresh</button>
-        </div>
-        <div className="list-grid">
-          {events.length === 0 && (
-            <div className="empty-state">No events yet. Start auto-inject to simulate Email Agent pipeline events.</div>
-          )}
-          {events.map((item) => (
-            <div key={item.event_id} className="timeline-card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <strong>{item.tool_name || "—"}</strong>
-                  <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 2 }}>{item.event_id}</div>
-                  <div className="metric-chip-row" style={{ marginTop: 6 }}>
-                    <span className="metric-chip"><b>{item.total_tokens ?? 0}</b> tokens</span>
-                    <span className="metric-chip">$<b>{Number(item.total_cost || 0).toFixed(4)}</b></span>
-                    <span className="metric-chip"><b>{item.latency_ms ?? 0}</b> ms</span>
-                  </div>
-                </div>
-                <span className={`status-pill ${(item.status || "").toLowerCase()}`} style={{ flexShrink: 0, marginLeft: 12 }}>
-                  {item.status || "—"}
+            <h3>
+              Recent Events
+              {activeFilterCount > 0 && (
+                <span style={{
+                  marginLeft: 10, fontSize: 11, padding: "2px 8px", borderRadius: 12,
+                  background: "rgba(124,112,174,0.12)", color: "var(--brand-secondary)",
+                  fontWeight: 600, verticalAlign: "middle",
+                }}>
+                  {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active
                 </span>
-              </div>
-              <div className="action-row" style={{ marginTop: 12 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => openTrace(item.event_id)}>Trace</button>
-                <button type="button" className="btn btn-secondary" onClick={() => openEditModal(item)}>✎ Edit</button>
-                <button type="button" className="btn btn-ghost" style={{ color: "var(--brand-primary)" }} onClick={() => setDeleteConfirm(item.event_id)}>✕ Delete</button>
-              </div>
-            </div>
-          ))}
+              )}
+            </h3>
+          </div>
+          <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => loadEvents()}>
+            ↺ Refresh
+          </button>
         </div>
+
+        {/* Filter bar */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr auto auto auto auto",
+          gap: 10, marginBottom: 18, alignItems: "end",
+        }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Org ID</label>
+            <input
+              value={filterOrg}
+              onChange={(e) => setFilterOrg(e.target.value)}
+              placeholder="Filter by org"
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Tool / Model</label>
+            <input
+              value={filterTool}
+              onChange={(e) => setFilterTool(e.target.value)}
+              placeholder="Filter by tool or model"
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Status</label>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ minWidth: 110 }}>
+              <option value="">All</option>
+              {(eventStatuses.length ? eventStatuses : ["success", "error", "partial"]).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Limit</label>
+            <select value={filterLimit} onChange={(e) => setFilterLimit(Number(e.target.value))} style={{ minWidth: 80 }}>
+              {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={handleSearch} style={{ marginTop: 18 }}>
+            Search
+          </button>
+          {activeFilterCount > 0 && (
+            <button type="button" className="btn btn-ghost" onClick={handleReset} style={{ marginTop: 18, fontSize: 12 }}>
+              Reset
+            </button>
+          )}
+        </div>
+
+        {/* Date range row */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 18, alignItems: "end" }}>
+          <div className="field" style={{ margin: 0, flex: 1 }}>
+            <label style={{ fontSize: 11 }}>Start Date</label>
+            <input
+              type="date"
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+            />
+          </div>
+          <div className="field" style={{ margin: 0, flex: 1 }}>
+            <label style={{ fontSize: 11 }}>End Date</label>
+            <input
+              type="date"
+              value={filterEndDate}
+              onChange={(e) => setFilterEndDate(e.target.value)}
+            />
+          </div>
+          <div style={{ flex: 3 }} />
+        </div>
+
+        {loadingEv && (
+          <div style={{ textAlign: "center", padding: "20px 0", color: "var(--gray-500)", fontSize: 13 }}>
+            Loading events…
+          </div>
+        )}
+
+        {!loadingEv && (
+          <div className="list-grid">
+            {events.length === 0 && (
+              <div className="empty-state">
+                {activeFilterCount > 0
+                  ? "No events match your filters. Try adjusting or resetting."
+                  : "No events yet. Use Auto-Inject to simulate AI pipeline telemetry."}
+              </div>
+            )}
+            {events.map((item) => (
+              <div key={item.event_id} className="timeline-card">
+                {/* Top row: tool + status */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ fontSize: 15 }}>{item.tool_name || item.model_name || "—"}</strong>
+                    {item.provider && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-500)", fontWeight: 400 }}>
+                        via {item.provider}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`status-pill ${(item.status || "").toLowerCase()}`} style={{ flexShrink: 0, marginLeft: 12 }}>
+                    {item.status || "—"}
+                  </span>
+                </div>
+
+                {/* Event ID + timestamp */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--gray-500)", fontFamily: "monospace" }}>
+                    {truncate(item.event_id, 32)}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--gray-500)", flexShrink: 0 }}>
+                    {fmtTs(item.created_at)}
+                  </span>
+                </div>
+
+                {/* Org / Project badges */}
+                {(item.org_id || item.project_id) && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    {item.org_id && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                        background: "rgba(124,112,174,0.1)", color: "var(--brand-secondary)",
+                        fontWeight: 600,
+                      }}>
+                        {item.org_id}
+                      </span>
+                    )}
+                    {item.project_id && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                        background: "rgba(124,112,174,0.06)", color: "var(--gray-700)",
+                      }}>
+                        {item.project_id}
+                      </span>
+                    )}
+                    {item.service_type && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                        background: "var(--gray-100)", color: "var(--gray-500)",
+                      }}>
+                        {item.service_type}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Metric chips */}
+                <div className="metric-chip-row" style={{ marginTop: 10 }}>
+                  <span className="metric-chip">In <b>{item.prompt_tokens ?? 0}</b></span>
+                  <span className="metric-chip">Out <b>{item.completion_tokens ?? 0}</b></span>
+                  <span className="metric-chip">$<b>{Number(item.total_cost || 0).toFixed(4)}</b></span>
+                  <span className="metric-chip"><b>{item.latency_ms ?? 0}</b> ms</span>
+                  {Number(item.risk_score || 0) > 0 && (
+                    <span className="metric-chip" style={{ color: "var(--brand-primary)" }}>
+                      Risk <b>{Number(item.risk_score).toFixed(1)}</b>
+                    </span>
+                  )}
+                </div>
+
+                {/* Anomaly / misuse flags */}
+                {(item.misuse_detected || item.abnormal_usage_spike) && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {item.misuse_detected && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                        background: "rgba(158,42,151,0.1)", color: "var(--brand-primary)",
+                        fontWeight: 600, border: "1px solid rgba(158,42,151,0.2)",
+                      }}>
+                        Misuse Detected
+                      </span>
+                    )}
+                    {item.abnormal_usage_spike && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                        background: "rgba(230,126,34,0.1)", color: "#e67e22",
+                        fontWeight: 600, border: "1px solid rgba(230,126,34,0.2)",
+                      }}>
+                        Usage Spike
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="action-row" style={{ marginTop: 12 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => openTrace(item.event_id)}>Trace</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => openEditModal(item)}>✎ Edit</button>
+                  <button type="button" className="btn btn-ghost" style={{ color: "var(--brand-primary)" }} onClick={() => setDeleteConfirm(item.event_id)}>✕ Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loadingEv && events.length > 0 && (
+          <div style={{ marginTop: 16, textAlign: "center", fontSize: 12, color: "var(--gray-500)" }}>
+            Showing {events.length} event{events.length !== 1 ? "s" : ""}
+            {activeFilterCount > 0 ? " (filtered)" : ""}
+          </div>
+        )}
       </section>
 
       {/* ── Delete confirm ── */}
@@ -616,32 +858,157 @@ function TestEvent() {
       {/* ── Trace modal ── */}
       {selectedTrace && (
         <div className="modal-backdrop" onClick={() => setSelectedTrace(null)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-dialog" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Trace Details</h3>
+              <div>
+                <h3 style={{ margin: 0 }}>Trace Details</h3>
+                {selectedTrace.event?.trace_id && (
+                  <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-500)", marginTop: 2 }}>
+                    {selectedTrace.event.trace_id}
+                  </div>
+                )}
+              </div>
               <button type="button" className="btn-close" onClick={() => setSelectedTrace(null)}>✕</button>
             </div>
+
             <div className="stack">
+              {/* Identity row */}
               <div className="trace-summary-bar">
-                <div className="trace-summary-item" style={{ minWidth: 160, flex: 2 }}>
+                <div className="trace-summary-item" style={{ minWidth: 180, flex: 2 }}>
                   <span>Event ID</span>
-                  <strong style={{ fontSize: 13, wordBreak: "break-all", fontFamily: "monospace" }}>{selectedTrace.event.event_id}</strong>
+                  <strong style={{ fontSize: 12, wordBreak: "break-all", fontFamily: "monospace" }}>
+                    {selectedTrace.event.event_id}
+                  </strong>
                 </div>
-                {[
-                  ["Total Cost", `$${Number(selectedTrace.event.total_cost || 0).toFixed(4)}`],
-                  ["Latency",    `${selectedTrace.event.latency_ms ?? "—"} ms`],
-                  ["Risk Score", Number(selectedTrace.event.risk_score || 0).toFixed(1)],
-                ].map(([l, v]) => (
-                  <div key={l} className="trace-summary-item"><span>{l}</span><strong>{v}</strong></div>
-                ))}
-                {selectedTrace.event.tool_name  && <div className="trace-summary-item"><span>Tool</span><strong>{selectedTrace.event.tool_name}</strong></div>}
-                {selectedTrace.event.model_name && <div className="trace-summary-item"><span>Model</span><strong>{selectedTrace.event.model_name}</strong></div>}
+                {selectedTrace.event.org_id && (
+                  <div className="trace-summary-item">
+                    <span>Organization</span>
+                    <strong>{selectedTrace.event.org_id}</strong>
+                  </div>
+                )}
+                {selectedTrace.event.project_id && (
+                  <div className="trace-summary-item">
+                    <span>Project</span>
+                    <strong>{selectedTrace.event.project_id}</strong>
+                  </div>
+                )}
+                <div className="trace-summary-item">
+                  <span>Created</span>
+                  <strong style={{ fontSize: 12 }}>{fmtTs(selectedTrace.event.created_at)}</strong>
+                </div>
               </div>
 
+              {/* Tool & model row */}
+              <div className="trace-summary-bar" style={{ marginTop: 0 }}>
+                <div className="trace-summary-item">
+                  <span>Status</span>
+                  <strong>
+                    <span className={`status-pill ${(selectedTrace.event.status || "").toLowerCase()}`} style={{ fontSize: 11 }}>
+                      {selectedTrace.event.status || "—"}
+                    </span>
+                  </strong>
+                </div>
+                {selectedTrace.event.tool_name && (
+                  <div className="trace-summary-item">
+                    <span>Tool</span>
+                    <strong>{selectedTrace.event.tool_name}</strong>
+                  </div>
+                )}
+                {selectedTrace.event.model_name && (
+                  <div className="trace-summary-item">
+                    <span>Model</span>
+                    <strong>{selectedTrace.event.model_name}</strong>
+                  </div>
+                )}
+                {selectedTrace.event.provider && (
+                  <div className="trace-summary-item">
+                    <span>Provider</span>
+                    <strong>{selectedTrace.event.provider}</strong>
+                  </div>
+                )}
+                {selectedTrace.event.service_type && (
+                  <div className="trace-summary-item">
+                    <span>Service</span>
+                    <strong>{selectedTrace.event.service_type}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Tokens row */}
+              <div className="trace-summary-bar" style={{ marginTop: 0 }}>
+                <div className="trace-summary-item">
+                  <span>Prompt Tokens</span>
+                  <strong>{(selectedTrace.event.prompt_tokens ?? 0).toLocaleString()}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Completion Tokens</span>
+                  <strong>{(selectedTrace.event.completion_tokens ?? 0).toLocaleString()}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Total Tokens</span>
+                  <strong>{(selectedTrace.event.total_tokens ?? 0).toLocaleString()}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Latency</span>
+                  <strong>{selectedTrace.event.latency_ms ?? "—"} ms</strong>
+                </div>
+              </div>
+
+              {/* Cost row */}
+              <div className="trace-summary-bar" style={{ marginTop: 0 }}>
+                <div className="trace-summary-item">
+                  <span>Total Cost</span>
+                  <strong>${Number(selectedTrace.event.total_cost || 0).toFixed(6)}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>LLM Cost</span>
+                  <strong>${Number(selectedTrace.event.llm_cost || 0).toFixed(6)}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Infra Cost</span>
+                  <strong>${Number(selectedTrace.event.infra_cost || 0).toFixed(6)}</strong>
+                </div>
+                <div className="trace-summary-item">
+                  <span>Risk Score</span>
+                  <strong style={{ color: Number(selectedTrace.event.risk_score || 0) > 0.6 ? "var(--brand-primary)" : "inherit" }}>
+                    {Number(selectedTrace.event.risk_score || 0).toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Flags row — only if any flag is set */}
+              {(selectedTrace.event.misuse_detected || selectedTrace.event.abnormal_usage_spike || selectedTrace.event.pii_type) && (
+                <div style={{
+                  display: "flex", gap: 10, flexWrap: "wrap",
+                  padding: "10px 14px", borderRadius: 10,
+                  background: "rgba(158,42,151,0.05)",
+                  border: "1px solid rgba(158,42,151,0.15)",
+                }}>
+                  {selectedTrace.event.misuse_detected && (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--brand-primary)" }}>
+                      Misuse Detected
+                    </span>
+                  )}
+                  {selectedTrace.event.abnormal_usage_spike && (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#e67e22" }}>
+                      Abnormal Usage Spike
+                    </span>
+                  )}
+                  {selectedTrace.event.pii_type && (
+                    <span style={{ fontSize: 12, color: "var(--gray-700)" }}>
+                      PII: <strong>{selectedTrace.event.pii_type}</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Stages table */}
               {(selectedTrace.event.stages || []).length > 0 && (
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>#</th><th>Stage</th><th>System</th><th>Status</th><th>Latency</th><th>Retry</th></tr></thead>
+                    <thead>
+                      <tr><th>#</th><th>Stage</th><th>System</th><th>Status</th><th>Latency</th><th>Retry</th></tr>
+                    </thead>
                     <tbody>
                       {selectedTrace.event.stages.map((s) => (
                         <tr key={`${s.stage_order}-${s.stage_name}`}>
@@ -658,10 +1025,39 @@ function TestEvent() {
                 </div>
               )}
 
+              {/* Cost breakdown table */}
+              {(selectedTrace.event.cost_breakdown || []).length > 0 && (
+                <details>
+                  <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600 }}>
+                    Cost Breakdown ({selectedTrace.event.cost_breakdown.length})
+                  </summary>
+                  <div className="table-wrap" style={{ marginTop: 8 }}>
+                    <table>
+                      <thead>
+                        <tr><th>Type</th><th>Component</th><th>Cost</th><th>Units</th></tr>
+                      </thead>
+                      <tbody>
+                        {selectedTrace.event.cost_breakdown.map((cb, i) => (
+                          <tr key={i}>
+                            <td>{cb.cost_type || "—"}</td>
+                            <td>{cb.component_name || "—"}</td>
+                            <td>${Number(cb.cost || 0).toFixed(6)}</td>
+                            <td>{cb.units ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+
+              {/* Raw usage audit */}
               {selectedTrace.event.raw_usage_json && Object.keys(selectedTrace.event.raw_usage_json).length > 0 && (
-                <details style={{ marginTop: 4 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600 }}>Raw Usage (Audit)</summary>
-                  <pre style={{ marginTop: 8, padding: 14, borderRadius: 14, background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.16)", fontSize: 13, overflow: "auto", maxHeight: 220 }}>
+                <details>
+                  <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600 }}>
+                    Raw Usage (Audit)
+                  </summary>
+                  <pre style={{ marginTop: 8, padding: 14, borderRadius: 14, background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.16)", fontSize: 12, overflow: "auto", maxHeight: 220 }}>
                     {JSON.stringify(selectedTrace.event.raw_usage_json, null, 2)}
                   </pre>
                 </details>

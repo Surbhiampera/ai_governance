@@ -1,29 +1,13 @@
 import React, { useEffect, useState } from "react";
 import {
-  getSecurityLogs,
-  getSecuritySummary,
-  getUsageAnomalies,
+  getSecurityLogsCombined,
+  getSecuritySummaryCombined,
+  getAnomaliesCombined,
   getAdminPIIDetail,
   getOrganizations,
   getProjects,
 } from "../api";
-
-const RANGE_OPTIONS_S = [
-  { value: "all", label: "All Time" },
-  { value: "today", label: "Today" },
-  { value: "7d", label: "Last 7 Days" },
-  { value: "30d", label: "Last 30 Days" },
-  { value: "90d", label: "Last 90 Days" },
-];
-
-const rangeToStartDateS = (r) => {
-  if (r === "all") return undefined;
-  const d = new Date();
-  if (r === "today") return d.toISOString().split("T")[0];
-  const offsets = { "7d": 6, "30d": 29, "90d": 89 };
-  d.setDate(d.getDate() - (offsets[r] || 0));
-  return d.toISOString().split("T")[0];
-};
+import { RANGE_OPTIONS as RANGE_OPTIONS_S, rangeToStartDate as rangeToStartDateS } from "../utils/filters";
 
 const RISK_COLOR_S = (score) => {
   if (score >= 80) return "#ef4444";
@@ -200,9 +184,9 @@ function Security() {
       const org = selectedOrg || undefined;
       const proj = selectedProject || undefined;
       const [summaryRes, logsRes, anomaliesRes] = await Promise.all([
-        getSecuritySummary(startDate),
-        getSecurityLogs(undefined, undefined, startDate),
-        getUsageAnomalies("open", startDate),
+        getSecuritySummaryCombined(org, proj, startDate),
+        getSecurityLogsCombined(undefined, undefined, org, proj, startDate),
+        getAnomaliesCombined("open", org, proj, startDate),
       ]);
       setSummary(summaryRes.data);
       setLogs(logsRes.data || []);

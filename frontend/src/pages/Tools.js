@@ -17,6 +17,7 @@ import {
   triggerConnectorSync,
   updateConnector,
 } from "../api";
+import { RANGE_OPTIONS, rangeToStartDate } from "../utils/filters";
 
 
 const EMPTY_FORM = {
@@ -447,10 +448,12 @@ function Tools() {
   const [events, setEvents] = useState([]);
   const [loadingEv, setLoadingEv] = useState(false);
   const [sdkOrgId, setSdkOrgId] = useState("");
+  const [sdkProjectId, setSdkProjectId] = useState("");
   const [sdkProvider, setSdkProvider] = useState("");
   const [sdkStatus, setSdkStatus] = useState("");
   const [sdkLimit, setSdkLimit] = useState(20);
-  const [sdkApplied, setSdkApplied] = useState({ org_id: "", provider: "", status: "", limit: 20 });
+  const [sdkRange, setSdkRange] = useState("all");
+  const [sdkApplied, setSdkApplied] = useState({ org_id: "", project_id: "", provider: "", status: "", limit: 20, range: "all" });
   const [sdkEventStatuses, setSdkEventStatuses] = useState([]);
   const [notifStatus, setNotifStatus] = useState(null);
   const [quota, setQuota] = useState(null);
@@ -489,8 +492,11 @@ function Tools() {
     setLoadingEv(true);
     const params = { limit: sdkApplied.limit };
     if (sdkApplied.org_id) params.org_id = sdkApplied.org_id;
+    if (sdkApplied.project_id) params.project_id = sdkApplied.project_id;
     if (sdkApplied.provider) params.provider = sdkApplied.provider;
     if (sdkApplied.status) params.status = sdkApplied.status;
+    const startDate = rangeToStartDate(sdkApplied.range);
+    if (startDate) params.start_date = startDate;
     getTelemetryLogs(params)
       .then((r) => setEvents(r.data?.events || r.data || []))
       .catch(() => setEvents([]))
@@ -552,7 +558,14 @@ function Tools() {
   };
 
   const handleSdkSearch = () => {
-    setSdkApplied({ org_id: sdkOrgId, provider: sdkProvider, status: sdkStatus, limit: sdkLimit });
+    setSdkApplied({
+      org_id: sdkOrgId,
+      project_id: sdkProjectId,
+      provider: sdkProvider,
+      status: sdkStatus,
+      limit: sdkLimit,
+      range: sdkRange,
+    });
   };
 
   const handleCheckQuota = async () => {
@@ -1059,6 +1072,22 @@ function Tools() {
                   onChange={(e) => setSdkOrgId(e.target.value)}
                   placeholder="Filter by org…"
                 />
+              </div>
+              <div className="field" style={{ margin: 0, flex: "1 1 140px" }}>
+                <label>Project ID</label>
+                <input
+                  value={sdkProjectId}
+                  onChange={(e) => setSdkProjectId(e.target.value)}
+                  placeholder="Filter by project…"
+                />
+              </div>
+              <div className="field" style={{ margin: 0, flex: "0 0 140px" }}>
+                <label>Range</label>
+                <select value={sdkRange} onChange={(e) => setSdkRange(e.target.value)}>
+                  {RANGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="field" style={{ margin: 0, flex: "1 1 130px" }}>
                 <label>Provider</label>
