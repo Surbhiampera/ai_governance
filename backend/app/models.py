@@ -174,6 +174,9 @@ class TelemetryEvent(Base):
     api_key_id = Column(String(120), nullable=True)
     provider = Column(String(100), nullable=True)
     model_name = Column(String(100), nullable=True)
+    # Mirror of model_name kept in sync at ingest time so legacy queries /
+    # SDK clients that reference `telemetry_events.tool_name` keep working.
+    tool_name = Column(String(150), nullable=True, index=True)
     service_type = Column(String(50), nullable=True)
     component_name = Column(String(150), nullable=True)
     execution_type = Column(String(50), nullable=True)

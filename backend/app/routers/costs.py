@@ -521,6 +521,13 @@ def cost_breakdown_summary(
     tokens = int(row.total_tokens or 0) if row else 0
     pct = lambda v: round((v / total * 100), 2) if total > 0 else 0.0
 
+    # Pure informational formula string — never break the dashboard if the
+    # operator hasn't configured INFRA_COST_PER_MS_USD yet.
+    try:
+        infra_rate_str = f"latency_ms × ${get_infra_cost_per_ms_usd()}"
+    except RuntimeError:
+        infra_rate_str = "latency_ms × $INFRA_COST_PER_MS_USD (not configured)"
+
     return {
         "components": [
             {
@@ -533,7 +540,7 @@ def cost_breakdown_summary(
                 "name": "infra_cost",
                 "amount": round(infra, 6),
                 "percent": pct(infra),
-                "formula": f"latency_ms × ${get_infra_cost_per_ms_usd()}",
+                "formula": infra_rate_str,
             },
             {
                 "name": "external_cost",

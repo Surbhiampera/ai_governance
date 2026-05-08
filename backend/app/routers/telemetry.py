@@ -828,6 +828,7 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         api_key_id=event_data.api_key_id,
         provider=event_data.provider,
         model_name=event_data.model_name or event_data.tool_name,
+        tool_name=event_data.tool_name or event_data.model_name,
         service_type=event_data.service_type,
         component_name=event_data.component_name,
         execution_type=event_data.execution_type,

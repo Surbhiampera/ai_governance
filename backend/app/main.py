@@ -48,6 +48,10 @@ _SAFE_ALTERS = [
     "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)",
     "ALTER TABLE data_security_logs ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
     "ALTER TABLE usage_anomalies ADD COLUMN IF NOT EXISTS project_id VARCHAR(100)",
+    # telemetry_events.tool_name — mirror of model_name kept for legacy queries
+    "ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS tool_name VARCHAR(150)",
+    "UPDATE telemetry_events SET tool_name = model_name WHERE tool_name IS NULL AND model_name IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_telemetry_events_tool_name ON telemetry_events(tool_name)",
 ]
 
 _ALL_ROUTERS = [
