@@ -852,6 +852,8 @@ def _ingest_event(db: Session, event_data: TelemetryEventCreate) -> TelemetryEve
         latency_ms=event_data.latency_ms,
         tags=_json_safe(event_data.tags),
         metadata_json=_json_safe(event_data.metadata_json),
+        input_preview=event_data.input_preview,
+        output_preview=event_data.output_preview,
         raw_usage_json=_json_safe(event_data.raw_usage_json) if event_data.raw_usage_json else {
             "prompt_tokens": event_data.prompt_tokens,
             "completion_tokens": event_data.completion_tokens,

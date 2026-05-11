@@ -73,6 +73,8 @@ class TelemetryEventCreate(BaseModel):
     raw_usage_json: dict[str, Any] = Field(default_factory=dict)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    input_preview: Optional[str] = None
+    output_preview: Optional[str] = None
 
 
 class TelemetryEventUpdate(BaseModel):

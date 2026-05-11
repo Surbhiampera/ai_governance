@@ -70,6 +70,8 @@ class ControlIngestRequest(BaseModel):
     data_out_violation: bool = False
     input_data_size_mb: float = 0.0
     output_data_size_mb: float = 0.0
+    input_preview: Optional[str] = None
+    output_preview: Optional[str] = None
     event_id: Optional[str] = None
 
 
@@ -132,6 +134,8 @@ def _build_sdk_event(item: ControlIngestRequest) -> SDKEvent:
         data_out_violation=item.data_out_violation,
         input_data_size_mb=item.input_data_size_mb,
         output_data_size_mb=item.output_data_size_mb,
+        input_preview=item.input_preview,
+        output_preview=item.output_preview,
         event_id=item.event_id,
     )
 

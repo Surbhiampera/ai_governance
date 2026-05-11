@@ -59,6 +59,8 @@ class SDKEvent:
         data_out_violation: bool = False,
         input_data_size_mb: float = 0.0,
         output_data_size_mb: float = 0.0,
+        input_preview: str | None = None,
+        output_preview: str | None = None,
         event_id: str | None = None,
     ) -> None:
         self.event_id = event_id or str(uuid.uuid4())
@@ -86,6 +88,8 @@ class SDKEvent:
         self.data_out_violation = data_out_violation
         self.input_data_size_mb = float(input_data_size_mb or 0)
         self.output_data_size_mb = float(output_data_size_mb or 0)
+        self.input_preview = input_preview
+        self.output_preview = output_preview
 
 
 class SDKIngestService:
@@ -121,6 +125,8 @@ class SDKIngestService:
             data_out_violation=sdk_event.data_out_violation,
             input_data_size_mb=Decimal(str(sdk_event.input_data_size_mb)),
             output_data_size_mb=Decimal(str(sdk_event.output_data_size_mb)),
+            input_preview=sdk_event.input_preview,
+            output_preview=sdk_event.output_preview,
             infra_cost=Decimal("0"),
             raw_usage_json={
                 "input_tokens": sdk_event.input_tokens,
