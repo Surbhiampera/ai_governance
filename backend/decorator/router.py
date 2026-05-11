@@ -13,13 +13,13 @@ GET  /decorator/stats                 — high-level summary counts
 """
 
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_db, require_api_key
 from decorator.models import (
     DecoratorRegistration,
     ProjectModelUsage,
@@ -36,7 +36,11 @@ router = APIRouter(tags=["decorator"])
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/tools/inventory/upsert", summary="SDK: upsert tool function inventory")
-def upsert_tool_inventory(payload: dict, db: Session = Depends(get_db)):
+def upsert_tool_inventory(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: Any = Depends(require_api_key),
+):
     """
     Upsert an entry in tool_api_inventory and decorator_registrations.
     Called automatically by the governance SDK — external callers should not
@@ -351,7 +355,11 @@ def decorator_stats(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/decorator/ingest", summary="Receive telemetry from governance_logger decorator")
-def ingest_decorator_telemetry(payload: dict, db: Session = Depends(get_db)):
+def ingest_decorator_telemetry(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: Any = Depends(require_api_key),
+):
     # ── unpack ─────────────────────────────────────────────────────────────
     org_id        = payload.get("org_id") or payload.get("organization") or "unknown"
     project_id    = payload.get("project_id") or payload.get("project_name") or "unknown"

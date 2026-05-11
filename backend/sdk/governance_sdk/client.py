@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import functools
+import logging
+import time
 import uuid
 from typing import Any, Callable, Optional
 
 import requests
+
+_logger = logging.getLogger(__name__)
+_RETRY_DELAYS = (1, 2, 4)
 
 from .batch import BatchBuffer
 from .context import _ContextFrame, push_context
@@ -237,23 +242,49 @@ class GovernanceSDK:
             self._send_single(event)
 
     def _send_single(self, event: dict) -> None:
-        try:
-            requests.post(
-                f"{self._endpoint}/control/ingest",
-                json=event,
-                headers=self._headers,
-                timeout=5,
-            )
-        except Exception:
-            pass
+        url = f"{self._endpoint}/control/ingest"
+        for attempt, delay in enumerate(_RETRY_DELAYS, 1):
+            try:
+                resp = requests.post(url, json=event, headers=self._headers, timeout=5)
+                if resp.status_code < 500:
+                    return
+                _logger.warning(
+                    "governance ingest HTTP %d (attempt %d/%d)",
+                    resp.status_code, attempt, len(_RETRY_DELAYS),
+                )
+            except requests.exceptions.RequestException as exc:
+                _logger.warning(
+                    "governance ingest attempt %d/%d network error: %s",
+                    attempt, len(_RETRY_DELAYS), exc,
+                )
+            if attempt < len(_RETRY_DELAYS):
+                time.sleep(delay)
+        _logger.error(
+            "governance: event dropped after %d attempts (fn=%s)",
+            len(_RETRY_DELAYS), event.get("function_name", "unknown"),
+        )
 
     def _send_batch(self, events: list[dict]) -> None:
-        try:
-            requests.post(
-                f"{self._endpoint}/control/ingest/batch",
-                json={"events": events},
-                headers=self._headers,
-                timeout=10,
-            )
-        except Exception:
-            pass
+        url = f"{self._endpoint}/control/ingest/batch"
+        for attempt, delay in enumerate(_RETRY_DELAYS, 1):
+            try:
+                resp = requests.post(
+                    url, json={"events": events}, headers=self._headers, timeout=10,
+                )
+                if resp.status_code < 500:
+                    return
+                _logger.warning(
+                    "governance batch ingest HTTP %d (attempt %d/%d)",
+                    resp.status_code, attempt, len(_RETRY_DELAYS),
+                )
+            except requests.exceptions.RequestException as exc:
+                _logger.warning(
+                    "governance batch ingest attempt %d/%d network error: %s",
+                    attempt, len(_RETRY_DELAYS), exc,
+                )
+            if attempt < len(_RETRY_DELAYS):
+                time.sleep(delay)
+        _logger.error(
+            "governance: batch of %d events dropped after %d attempts",
+            len(events), len(_RETRY_DELAYS),
+        )

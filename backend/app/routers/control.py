@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db
+from app.core.deps import get_db, require_api_key
 from app.models import (
     Budget,
     DailyOrgSummary,
@@ -139,7 +139,11 @@ def _build_sdk_event(item: ControlIngestRequest) -> SDKEvent:
 # ─────────────────────── Endpoints ───────────────────────
 
 @router.post("/ingest")
-def control_ingest(payload: ControlIngestRequest, db: Session = Depends(get_db)):
+def control_ingest(
+    payload: ControlIngestRequest,
+    db: Session = Depends(get_db),
+    _: Any = Depends(require_api_key),
+):
     """Ingest a single event from any AI vendor via the control plane."""
     sdk_event = _build_sdk_event(payload)
     telemetry_create = sdk_ingest_service.to_telemetry(sdk_event, db)
@@ -159,7 +163,11 @@ def control_ingest(payload: ControlIngestRequest, db: Session = Depends(get_db))
 
 
 @router.post("/ingest/batch")
-def control_ingest_batch(payload: BatchControlIngestRequest, db: Session = Depends(get_db)):
+def control_ingest_batch(
+    payload: BatchControlIngestRequest,
+    db: Session = Depends(get_db),
+    _: Any = Depends(require_api_key),
+):
     """Ingest a batch of events from any AI vendor via the control plane."""
     results = []
     for item in payload.events:
@@ -189,7 +197,11 @@ def control_ingest_batch(payload: BatchControlIngestRequest, db: Session = Depen
 
 
 @router.post("/ingest/trace")
-def control_ingest_unified_trace(payload: UnifiedTraceRequest, db: Session = Depends(get_db)):
+def control_ingest_unified_trace(
+    payload: UnifiedTraceRequest,
+    db: Session = Depends(get_db),
+    _: Any = Depends(require_api_key),
+):
     """
     Ingest a unified trace event capturing multiple models and tools in one call.
 

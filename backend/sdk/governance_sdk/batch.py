@@ -1,6 +1,9 @@
 """BatchBuffer — thread-safe buffer that auto-flushes on size or time."""
+import logging
 import threading
 from typing import Callable
+
+_logger = logging.getLogger(__name__)
 
 
 class BatchBuffer:
@@ -32,8 +35,8 @@ class BatchBuffer:
         events, self._buffer = self._buffer[:], []
         try:
             self._flush_fn(events)
-        except Exception:
-            pass  # never crash the caller
+        except Exception as exc:
+            _logger.warning("governance: batch flush raised unexpectedly: %s", exc)
 
     def _schedule_flush(self, interval: float) -> None:
         def _tick():

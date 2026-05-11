@@ -6,7 +6,10 @@
       "Bash(python -c ' *)",
       "Bash(node -e ' *)",
       "Bash(PowerShell.exe -Command \"Get-ChildItem 'c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\services' | Select-Object Name\")",
-      "Bash(mkdir \"c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\decorators\")"
+      "Bash(mkdir \"c:\\\\Users\\\\SurbhiVikramaditya\\\\Documents\\\\ai_governance\\\\backend\\\\app\\\\decorators\")",
+      "Bash(ls venv/)",
+      "Bash(ls .venv/)",
+      "Bash(pip show *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\SurbhiVikramaditya\\Documents\\ai_governance\\backend\\app"
