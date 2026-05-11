@@ -53,6 +53,22 @@ export default function Decorator() {
   const [projectId, setProjectId] = useState("");
   const [toolName,  setToolName]  = useState("");
 
+  // all distinct tool names seen by the server — populated once on mount
+  const [knownTools, setKnownTools] = useState([]);
+
+  // fetch the full unfiltered tool list once so the dropdown is always populated
+  useEffect(() => {
+    Promise.all([
+      getDecoratorRegistrations({ limit: 1000 }),
+      getDecoratorInventory({ limit: 1000 }),
+    ]).then(([r, i]) => {
+      const names = new Set();
+      (r.data?.items || []).forEach((x) => x.tool_name && names.add(x.tool_name));
+      (i.data?.items || []).forEach((x) => x.tool_name && names.add(x.tool_name));
+      setKnownTools([...names].sort());
+    }).catch(() => {});
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -70,10 +86,19 @@ export default function Decorator() {
         getDecoratorLogs({}),
       ]);
       setStats(s.data);
-      setRegistrations(r.data?.items || []);
-      setInventory(i.data?.items || []);
+      const regs = r.data?.items || [];
+      const invs = i.data?.items || [];
+      setRegistrations(regs);
+      setInventory(invs);
       setUsage(u.data?.items || []);
       setLogs(l.data?.items || []);
+      // keep knownTools up-to-date with freshly loaded names
+      setKnownTools((prev) => {
+        const names = new Set(prev);
+        regs.forEach((x) => x.tool_name && names.add(x.tool_name));
+        invs.forEach((x) => x.tool_name && names.add(x.tool_name));
+        return [...names].sort();
+      });
     } catch (e) {
       setError(e.message || "Failed to load decorator data");
     } finally {
@@ -98,11 +123,10 @@ export default function Decorator() {
       </div>
 
       {/* ─── filters ── */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "flex-end" }}>
         {[
-          ["Org ID",     orgId,     setOrgId],
+          ["Org ID", orgId, setOrgId],
           ["Project ID", projectId, setProjectId],
-          ["Tool Name",  toolName,  setToolName],
         ].map(([label, val, setter]) => (
           <div key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>{label}</label>
@@ -120,24 +144,54 @@ export default function Decorator() {
             />
           </div>
         ))}
-        <div style={{ display: "flex", alignItems: "flex-end" }}>
-          <button
-            onClick={load}
-            disabled={loading}
+
+        {/* Tool Name — dropdown from names the server has already seen */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+            Tool Name
+            {knownTools.length === 0 && (
+              <span style={{ marginLeft: 6, fontWeight: 400, color: "#94a3b8" }}>
+                (none registered yet)
+              </span>
+            )}
+          </label>
+          <select
+            value={toolName}
+            onChange={(e) => setToolName(e.target.value)}
             style={{
-              background: "#1e40af",
-              color: "#fff",
-              border: "none",
+              border: "1px solid #e2e8f0",
               borderRadius: 6,
-              padding: "7px 16px",
-              cursor: "pointer",
+              padding: "6px 10px",
               fontSize: 13,
-              fontWeight: 600,
+              width: 200,
+              background: "#fff",
+              color: toolName ? "#1e293b" : "#94a3b8",
             }}
           >
-            {loading ? "Loading…" : "Refresh"}
-          </button>
+            <option value="">All tools</option>
+            {knownTools.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
+
+        <button
+          onClick={load}
+          disabled={loading}
+          style={{
+            background: "#1e40af",
+            color: "#fff",
+            border: "none",
+            borderRadius: 6,
+            padding: "7px 16px",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+
       </div>
 
       {error && (

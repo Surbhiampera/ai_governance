@@ -12,6 +12,7 @@ import AlertsSecurity from "./pages/AlertsSecurity";
 import TestEvent from "./pages/TestEvent";
 import SuperAdminLogs from "./pages/SuperAdminLogs";
 import Decorator from "./pages/Decorator";
+import Setup from "./pages/Setup";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
@@ -20,6 +21,7 @@ const navItems = [
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/tracing", label: "Tracing" },
   { to: "/decorator", label: "Decorator" },
+  { to: "/setup", label: "Tenant Setup" },
   { to: "/admin-logs", label: "Super Admin Logs" },
 ];
 
@@ -57,6 +59,7 @@ function App() {
             <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/tracing" element={<TestEvent />} />
             <Route path="/decorator" element={<Decorator />} />
+            <Route path="/setup" element={<Setup />} />
             <Route path="/admin-logs" element={<SuperAdminLogs />} />
           </Routes>
         </main>
