@@ -12,7 +12,9 @@ GET  /decorator/logs                  — per-call input/output audit trail
 GET  /decorator/stats                 — high-level summary counts
 """
 
+import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +22,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_api_key
+from app.routers.telemetry import _ingest_event
+from app.schemas import TelemetryEventCreate
 from decorator.models import (
     DecoratorRegistration,
     ProjectModelUsage,
@@ -494,6 +498,52 @@ def ingest_decorator_telemetry(
         pii_fields="detected in input/output" if contains_pii else None,
     )
     db.add(log)
+
+    # ── 5. full governance pipeline ────────────────────────────────────────
+    # Forward into _ingest_event so every decorator call also writes to
+    # telemetry_events, cost_breakdown, data_security_logs, alerts, and
+    # daily_org_summary — powering Dashboard, Cost, Alerts & Security, etc.
+    try:
+        input_mb  = Decimal(str(float(payload.get("input_data_size_mb")  or 0)))
+        output_mb = Decimal(str(float(payload.get("output_data_size_mb") or 0)))
+        # Use SDK-supplied cost only when no model_name is present (so the
+        # CostEngine can't compute from model_pricing table).
+        precomputed = Decimal(str(estimated_cost)) if (estimated_cost > 0 and not model_name) else None
+
+        tec = TelemetryEventCreate(
+            event_id=f"dec-{uuid.uuid4().hex}",
+            org_id=org_id,
+            project_id=project_id,
+            tool_name=tool_name,
+            provider=provider if provider != "unknown" else None,
+            model_name=model_name,
+            service_type=payload.get("service_type") or decorator_type,
+            execution_type=decorator_type,
+            status=status,
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            contains_pii=contains_pii,
+            pii_type=payload.get("pii_type"),
+            input_data_size_mb=input_mb,
+            output_data_size_mb=output_mb,
+            input_preview=input_preview,
+            output_preview=output_preview,
+            precomputed_llm_cost=precomputed,
+            metadata_json={
+                "function_name": function_name,
+                "module_path": module_path,
+                "decorator_type": decorator_type,
+                "execution_env": execution_env,
+                **{k: v for k, v in metadata.items()
+                   if isinstance(v, (str, int, float, bool, type(None)))},
+            },
+            tags=payload.get("tags") or [],
+        )
+        telemetry = _ingest_event(db, tec)
+        log.event_id = telemetry.event_id  # link audit log → telemetry event
+    except Exception:
+        pass  # never let governance pipeline failure break decorator ingest
 
     db.commit()
     return {
