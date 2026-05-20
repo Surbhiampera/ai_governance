@@ -330,33 +330,91 @@ function UsagePanel({ rows }) {
 
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 function LogsPanel({ rows }) {
+  const totalCost = rows.reduce((s, r) => s + Number(r.estimated_cost_usd || 0), 0);
+  const totalPrompt = rows.reduce((s, r) => s + Number(r.prompt_tokens || 0), 0);
+  const totalCompletion = rows.reduce((s, r) => s + Number(r.completion_tokens || 0), 0);
+  const totalTokens = rows.reduce((s, r) => s + Number(r.total_tokens || 0), 0);
+
+  const HEADERS = [
+    "Timestamp", "Route", "Model", "Provider",
+    "Prompt Tokens", "Completion Tokens", "Total Tokens",
+    "Latency (s)", "Cost (USD)", "PII",
+  ];
+
   return (
-    <TableWrapper
-      title="Request / Response Audit Logs"
-      subtitle="PII-masked input/output previews captured by the decorator. [EMAIL], [SSN] etc. are redacted."
-      headers={["Function", "PII", "Input Preview", "Output Preview", "Input Size", "Output Size", "Timestamp"]}
-      empty={rows.length === 0}
-    >
-      {rows.map((r) => (
-        <tr key={r.id}>
-          <td><code style={{ fontSize: 12 }}>{r.function_name || "—"}</code></td>
-          <td style={{ textAlign: "center" }}>
-            {r.pii_detected
-              ? <span className="status-pill critical">YES</span>
-              : <span style={{ color: "var(--gray-500)" }}>—</span>}
-          </td>
-          <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--gray-500)" }}>
-            {r.input_preview || "—"}
-          </td>
-          <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--gray-500)" }}>
-            {r.output_preview || "—"}
-          </td>
-          <td style={{ textAlign: "right" }}>{fmt(r.input_size_bytes)} B</td>
-          <td style={{ textAlign: "right" }}>{fmt(r.output_size_bytes)} B</td>
-          <td>{fmtDate(r.created_at)}</td>
-        </tr>
-      ))}
-    </TableWrapper>
+    <section className="panel">
+      <div className="section-head">
+        <div>
+          <h3>Per-Call Decorator Logs</h3>
+          <p>Every decorated invocation — one row per call. Token counts and cost accumulate dynamically as usage grows.</p>
+        </div>
+      </div>
+
+      {/* summary strip */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", padding: "12px 0 16px" }}>
+        {[
+          { label: "Total Calls", value: fmt(rows.length) },
+          { label: "Prompt Tokens", value: fmt(totalPrompt) },
+          { label: "Completion Tokens", value: fmt(totalCompletion) },
+          { label: "Total Tokens", value: fmt(totalTokens) },
+          { label: "Total Cost", value: `$${totalCost.toFixed(6)}` },
+        ].map((c) => (
+          <div key={c.label} className="metric-card" style={{ flex: "1 1 140px", minWidth: 120 }}>
+            <div className="metric-eyebrow">{c.label}</div>
+            <div className="metric-value" style={{ fontSize: 20 }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {HEADERS.map((h) => <th key={h}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={HEADERS.length} style={{ textAlign: "center", color: "var(--gray-500)", padding: 32 }}>
+                  No data yet — decorate a function with <code>@gov.trace()</code> to get started.
+                </td>
+              </tr>
+            ) : rows.map((r) => (
+              <tr key={r.id}>
+                <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{fmtDate(r.created_at)}</td>
+                <td><code style={{ fontSize: 12 }}>{r.route || r.function_name || "—"}</code></td>
+                <td>{r.model_name || <span style={{ color: "var(--gray-300)" }}>—</span>}</td>
+                <td>{r.provider || <span style={{ color: "var(--gray-300)" }}>—</span>}</td>
+                <td style={{ textAlign: "right" }}>{fmt(r.prompt_tokens)}</td>
+                <td style={{ textAlign: "right" }}>{fmt(r.completion_tokens)}</td>
+                <td style={{ textAlign: "right" }}>{fmt(r.total_tokens)}</td>
+                <td style={{ textAlign: "right" }}>{Number(r.latency_seconds).toFixed(4)}</td>
+                <td style={{ textAlign: "right" }}>${Number(r.estimated_cost_usd).toFixed(6)}</td>
+                <td style={{ textAlign: "center" }}>
+                  {r.pii_detected
+                    ? <span className="status-pill critical">YES</span>
+                    : <span style={{ color: "var(--gray-300)" }}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr style={{ fontWeight: 700, borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                <td colSpan={4} style={{ paddingTop: 8 }}>Totals ({rows.length} calls)</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalPrompt)}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalCompletion)}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalTokens)}</td>
+                <td style={{ paddingTop: 8 }}>—</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>${totalCost.toFixed(6)}</td>
+                <td style={{ paddingTop: 8 }} />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </section>
   );
 }
 

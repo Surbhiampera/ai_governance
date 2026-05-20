@@ -27,13 +27,13 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./aigovernance_backend/backend
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://governance:governance_dev@postgres:5432/ai_governance
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
-      CORS_ORIGINS: "http://localhost:3000"
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
     ports:
       - "8000:8000"
     depends_on:
@@ -45,7 +45,7 @@ services:
 
   worker:
     build:
-      context: ./backend
+      context: ./aigovernance_backend/backend
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://governance:governance_dev@postgres:5432/ai_governance

@@ -75,7 +75,7 @@ function Cost() {
         breakdownRes,
         perToolDailyRes,
         spendCapsRes,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         API.get("/costs/totals"),
         API.get("/costs/by-model", { params: scope }),
         API.get("/costs/by-project", { params: { org_id: selectedOrg || undefined } }),
@@ -91,20 +91,21 @@ function Cost() {
         getCostPerToolDaily(days, selectedOrg || undefined, selectedProject || undefined),
         getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined),
       ]);
-      setTotals(totalsRes.data);
-      setByModel(modelRes.data || []);
-      setByProject(projectRes.data || []);
-      setByOrg(orgRes.data || []);
-      setDailyCost(dailyRes.data || []);
-      setMonthlyCost(monthlyRes.data || []);
-      setOrgs(orgsRes.data || []);
-      setByTool(toolRes.data || []);
-      setByProvider(providerRes.data || []);
-      setByExecutionType(execRes.data || []);
-      setByServiceType(serviceRes.data || []);
-      setBreakdown(breakdownRes.data || null);
-      setPerToolDaily(perToolDailyRes.data || []);
-      setSpendCaps(spendCapsRes.data || []);
+      const val = (res, fallback) => res.status === "fulfilled" ? (res.value?.data ?? fallback) : fallback;
+      setTotals(val(totalsRes, null));
+      setByModel(val(modelRes, []));
+      setByProject(val(projectRes, []));
+      setByOrg(val(orgRes, []));
+      setDailyCost(val(dailyRes, []));
+      setMonthlyCost(val(monthlyRes, []));
+      setOrgs(val(orgsRes, []));
+      setByTool(val(toolRes, []));
+      setByProvider(val(providerRes, []));
+      setByExecutionType(val(execRes, []));
+      setByServiceType(val(serviceRes, []));
+      setBreakdown(val(breakdownRes, null));
+      setPerToolDaily(val(perToolDailyRes, []));
+      setSpendCaps(val(spendCapsRes, []));
       setError("");
       if (selectedOrg) {
         getControlQuota(selectedOrg, selectedProject || undefined)
@@ -114,7 +115,7 @@ function Cost() {
         setQuota(null);
       }
     } catch {
-      setError("Unable to load cost data. Check backend connectivity.");
+      setError("Some cost data could not be loaded. Showing available data.");
     } finally {
       setLoading(false);
     }
@@ -125,7 +126,9 @@ function Cost() {
   }, [selectedOrg, selectedProject, range]);
 
   useEffect(() => {
-    getTracingProjects(selectedOrg || "").then((res) => setProjects(res.data || []));
+    getTracingProjects(selectedOrg || "")
+      .then((res) => setProjects(res.data || []))
+      .catch(() => setProjects([]));
     setSelectedProject("");
   }, [selectedOrg]);
 
@@ -221,7 +224,6 @@ function Cost() {
   };
 
   if (loading) return <div className="loading">Loading cost analytics...</div>;
-  if (error) return <div className="error-message">{error}</div>;
 
   const dailyByDate = Object.values(
     dailyCost.reduce((acc, r) => {
@@ -289,6 +291,11 @@ function Cost() {
 
   return (
     <div className="page-shell">
+      {error && (
+        <div style={{ background: "#fff7ed", border: "1px solid #f97316", borderRadius: 8, padding: "10px 18px", marginBottom: 8, fontSize: 13, color: "#c2410c" }}>
+          {error}
+        </div>
+      )}
       <section className="panel" style={{ padding: "14px 24px" }}>
         <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ minWidth: 180 }}>
