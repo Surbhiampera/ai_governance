@@ -464,6 +464,8 @@ function Dashboard() {
                       <th>Org</th>
                       <th>Tools</th>
                       <th>Events</th>
+                      <th>Tokens</th>
+                      <th>Avg Latency</th>
                       <th>LLM</th>
                       <th>Infra</th>
                       <th>External</th>
@@ -482,6 +484,8 @@ function Dashboard() {
                             <td>{r.org_id}</td>
                             <td>{r.tool_count}</td>
                             <td>{num(r.total_events)}</td>
+                            <td>{num(r.total_tokens)}</td>
+                            <td>{num(r.avg_latency_ms)} ms</td>
                             <td>{money(r.llm_cost)}</td>
                             <td>{money(r.infra_cost)}</td>
                             <td>{money(r.external_cost)}</td>
@@ -502,6 +506,8 @@ function Dashboard() {
                   <tfoot>
                     <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
                       <td colSpan={4}><strong>Grand Total</strong></td>
+                      <td>{num(costByProject.reduce((s, r) => s + Number(r.total_tokens || 0), 0))}</td>
+                      <td>—</td>
                       <td>{money(costByProject.reduce((s, r) => s + Number(r.llm_cost || 0), 0))}</td>
                       <td>{money(costByProject.reduce((s, r) => s + Number(r.infra_cost || 0), 0))}</td>
                       <td>{money(costByProject.reduce((s, r) => s + Number(r.external_cost || 0), 0))}</td>
@@ -925,6 +931,145 @@ function Dashboard() {
           </div>
         </div>
       </section>
+
+      {trends.length > 0 && (
+        <section className="two-column">
+          <div className="panel">
+            <div className="section-head">
+              <div>
+                <h3>Token Usage Trend</h3>
+                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                  Total tokens consumed per day across all tools and models.
+                </p>
+              </div>
+            </div>
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trends}>
+                  <defs>
+                    <linearGradient id="tokenFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3FB6D4" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#3FB6D4" stopOpacity={0.03} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                  <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                  <Tooltip formatter={(v) => num(v)} />
+                  <Area
+                    type="monotone"
+                    dataKey="total_tokens"
+                    stroke="#3FB6D4"
+                    fill="url(#tokenFill)"
+                    strokeWidth={3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="section-head">
+              <div>
+                <h3>Latency Trend</h3>
+                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                  Average response latency (ms) per day — rising trend may indicate capacity or cost issues.
+                </p>
+              </div>
+            </div>
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trends}>
+                  <defs>
+                    <linearGradient id="latencyFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F2A33C" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#F2A33C" stopOpacity={0.03} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                  <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} unit=" ms" />
+                  <Tooltip formatter={(v) => `${Number(v).toFixed(0)} ms`} />
+                  <Area
+                    type="monotone"
+                    dataKey="avg_latency_ms"
+                    stroke="#F2A33C"
+                    fill="url(#latencyFill)"
+                    strokeWidth={3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {costByProject.length > 0 && (
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Project-wise Metrics</h3>
+              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                Token usage, latency, and cost breakdown per project.
+              </p>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Org</th>
+                  <th>Events</th>
+                  <th>Tokens</th>
+                  <th>Avg Latency</th>
+                  <th>LLM Cost</th>
+                  <th>Infra Cost</th>
+                  <th>Total Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costByProject.map((r) => (
+                  <tr key={`proj-metrics-${r.project_id}-${r.org_id}`}>
+                    <td><strong>{r.project_name || r.project_id}</strong>{r.project_name && r.project_name !== r.project_id && <span style={{ fontSize: 11, color: "var(--gray-500)", marginLeft: 6 }}>({r.project_id})</span>}</td>
+                    <td>{r.org_name || r.org_id}</td>
+                    <td>{num(r.total_events)}</td>
+                    <td>
+                      <span style={{ fontWeight: 600 }}>{num(r.total_tokens)}</span>
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        fontSize: 12,
+                        background: Number(r.avg_latency_ms) > 2000 ? "rgba(239,68,68,0.1)" : Number(r.avg_latency_ms) > 1000 ? "rgba(245,158,11,0.1)" : "rgba(34,197,94,0.1)",
+                        color: Number(r.avg_latency_ms) > 2000 ? "#ef4444" : Number(r.avg_latency_ms) > 1000 ? "#f59e0b" : "#22c55e",
+                        fontWeight: 600,
+                      }}>
+                        {num(r.avg_latency_ms)} ms
+                      </span>
+                    </td>
+                    <td>{money(r.llm_cost)}</td>
+                    <td>{money(r.infra_cost)}</td>
+                    <td><strong>{money(r.total_cost)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                  <td colSpan={2}><strong>Total</strong></td>
+                  <td>{num(costByProject.reduce((s, r) => s + Number(r.total_events || 0), 0))}</td>
+                  <td><strong>{num(costByProject.reduce((s, r) => s + Number(r.total_tokens || 0), 0))}</strong></td>
+                  <td>—</td>
+                  <td>{money(costByProject.reduce((s, r) => s + Number(r.llm_cost || 0), 0))}</td>
+                  <td>{money(costByProject.reduce((s, r) => s + Number(r.infra_cost || 0), 0))}</td>
+                  <td><strong>{money(costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0))}</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="two-column">
         <div className="panel">

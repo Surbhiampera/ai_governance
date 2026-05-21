@@ -1147,6 +1147,7 @@ function Cost() {
                                     <th>Tool / Model</th>
                                     <th>Vendor</th>
                                     <th>Events</th>
+                                    <th>Tokens</th>
                                     <th>LLM</th>
                                     <th>Infra</th>
                                     <th>External</th>
@@ -1160,6 +1161,7 @@ function Cost() {
                                       <td><strong style={{ color: "var(--brand-primary)" }}>{t.tool_name}</strong></td>
                                       <td>{t.vendor}</td>
                                       <td>{num(t.total_events)}</td>
+                                      <td>{num(t.total_tokens)}</td>
                                       <td>{money4(t.llm_cost)}</td>
                                       <td>{money4(t.infra_cost)}</td>
                                       <td>{money4(t.external_cost)}</td>
@@ -1178,6 +1180,7 @@ function Cost() {
                                 <tfoot>
                                   <tr style={{ borderTop: "1px solid rgba(124,112,174,0.2)" }}>
                                     <td colSpan={3}><strong>Project Total</strong></td>
+                                    <td>{num(bd.total_tokens)}</td>
                                     <td>{money4(bd.llm_cost)}</td>
                                     <td>{money4(bd.infra_cost)}</td>
                                     <td>{money4(bd.external_cost)}</td>
