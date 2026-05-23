@@ -22,6 +22,7 @@ import {
   getUsageTrends,
   getCostTotals,
   getCostByProject,
+  getDecoratorStats,
 } from "../api";
 import FilterBar from "../components/FilterBar";
 import {
@@ -31,13 +32,7 @@ import {
   rangeLabelOf,
 } from "../utils/filters";
 
-const SEV_CLASS = {
-  critical: "critical",
-  high: "high",
-  medium: "medium",
-  low: "low",
-};
-
+const SEV_CLASS = { critical: "critical", high: "high", medium: "medium", low: "low" };
 const SEV_LABEL = {
   token_limit_exhausted: "Token Exhausted",
   token_limit_approaching: "Token Limit",
@@ -46,14 +41,12 @@ const SEV_LABEL = {
   abnormal_usage: "Anomaly",
   governance_alert: "Alert",
 };
-
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4"];
-
-const money = (value) => `$${Number(value || 0).toFixed(2)}`;
-const num = (value, decimals = 0) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
+const money = (v) => `$${Number(v || 0).toFixed(2)}`;
+const num = (v, d = 0) =>
+  Number(v || 0).toLocaleString(undefined, {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
   });
 
 function Dashboard() {
@@ -61,10 +54,10 @@ function Dashboard() {
   const [overview, setOverview] = useState(null);
   const [trends, setTrends] = useState([]);
   const [security, setSecurity] = useState(null);
-  const [toolUsage, setToolUsage] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
   const [costTotals, setCostTotals] = useState(null);
   const [costByProject, setCostByProject] = useState([]);
+  const [decoratorStats, setDecoratorStats] = useState(null);
   const [activeMetric, setActiveMetric] = useState(null);
   const [insights, setInsights] = useState(null);
   const [dismissedNotifications, setDismissedNotifications] = useState(false);
@@ -74,8 +67,6 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState(null);
-  const [activeCostTile, setActiveCostTile] = useState(null);
-  // Default = overall system activity (all-time) per spec.
   const [range, setRange] = useState("all");
 
   const load = useCallback(
@@ -87,23 +78,31 @@ function Dashboard() {
         const days = rangeToDays(currentRange);
         const startDate = rangeToStartDate(currentRange);
 
-        const [overviewRes, trendsRes, securityRes, logsRes, costTotalsRes, costProjectRes] =
-          await Promise.all([
-            getGovernanceOverview(null, days, currentRange),
-            getUsageTrends(null, days),
-            getSecuritySummaryCombined(null, null, startDate),
-            getTelemetryLogs({ limit: 20, start_date: startDate }),
-            getCostTotals(),
-            getCostByProject(),
-          ]);
+        const [
+          overviewRes,
+          trendsRes,
+          securityRes,
+          logsRes,
+          costTotalsRes,
+          costProjectRes,
+          decStatsRes,
+        ] = await Promise.all([
+          getGovernanceOverview(null, days, currentRange),
+          getUsageTrends(null, days),
+          getSecuritySummaryCombined(null, null, startDate),
+          getTelemetryLogs({ limit: 20, start_date: startDate }),
+          getCostTotals(),
+          getCostByProject(),
+          getDecoratorStats(),
+        ]);
 
         setOverview(overviewRes.data);
         setTrends(trendsRes.data || []);
         setSecurity(securityRes.data);
-        setToolUsage([]);
         setRecentLogs(logsRes.data || []);
         setCostTotals(costTotalsRes.data || null);
         setCostByProject(costProjectRes.data || []);
+        setDecoratorStats(decStatsRes.data || null);
         setError("");
       } catch (err) {
         setError(
@@ -118,9 +117,7 @@ function Dashboard() {
     [range],
   );
 
-  useEffect(() => {
-    load(false, range);
-  }, [range, load]);
+  useEffect(() => { load(false, range); }, [range, load]);
 
   const fetchInsights = useCallback(async () => {
     setLoadingInsights(true);
@@ -135,46 +132,36 @@ function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchInsights();
-  }, [fetchInsights]);
+  useEffect(() => { fetchInsights(); }, [fetchInsights]);
 
-  // Poll insights every 30 s for real-time notifications
   useEffect(() => {
-    insightsPollRef.current = setInterval(() => {
-      fetchInsights();
-    }, 30000);
+    insightsPollRef.current = setInterval(() => { fetchInsights(); }, 30000);
     return () => clearInterval(insightsPollRef.current);
   }, [fetchInsights]);
 
   const rangeLabel = rangeLabelOf(range);
 
   if (loading) {
-    return (
-      <div className="loading">Loading centralized governance dashboard...</div>
-    );
+    return <div className="loading">Loading centralized governance dashboard...</div>;
   }
-
   if (error) {
     return <div className="error-message">{error}</div>;
   }
 
-  const alertsBySeverity = Object.entries(
-    overview?.alerts_by_severity || {},
-  ).map(([name, value]) => ({ name, value }));
-
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const alertsBySeverity = Object.entries(overview?.alerts_by_severity || {}).map(
+    ([name, value]) => ({ name, value }),
+  );
   const costMix = Object.entries(overview?.cost_by_type || {}).map(
     ([name, value]) => ({ name, value: Number(value || 0) }),
   );
-
-  // Aggregate tool_rollup (already time-filtered by the overview endpoint) for the chart.
   const topTools = Object.values(
     (overview?.tool_rollup || []).reduce((acc, row) => {
       if (!acc[row.tool_name]) acc[row.tool_name] = { tool: row.tool_name, cost: 0, tokens: 0 };
       acc[row.tool_name].cost += Number(row.total_cost || 0);
       acc[row.tool_name].tokens += Number(row.total_tokens || 0);
       return acc;
-    }, {})
+    }, {}),
   ).slice(0, 6);
 
   const recentAlerts = overview?.recent_alerts || [];
@@ -182,38 +169,30 @@ function Dashboard() {
   const notifications = insights?.notifications || [];
   const criticalNotifs = notifications.filter((n) => n.severity === "critical");
   const highNotifs = notifications.filter((n) => n.severity === "high");
-  const restNotifs = notifications.filter(
-    (n) => n.severity !== "critical" && n.severity !== "high",
-  );
+  const restNotifs = notifications.filter((n) => n.severity !== "critical" && n.severity !== "high");
   const orderedNotifs = [...criticalNotifs, ...highNotifs, ...restNotifs];
+
   const securitySignals =
     (security?.open_anomalies || 0) +
     (security?.total_with_pii || 0) +
     (security?.misuse_events || 0) +
     (security?.data_out_events || 0);
 
+  const uniqueToolCount = new Set(
+    (overview?.tool_rollup || []).map((r) => r.tool_name),
+  ).size;
+
+  // ── KPI cards (clickable drill-down) ──────────────────────────────────────
   const metricCards = [
     {
       id: "latency",
       title: "Avg Latency",
       value: `${Number(overview?.avg_latency_today || 0).toFixed(0)} ms`,
       detailRows: [
-        {
-          label: "Today average",
-          value: `${Number(overview?.avg_latency_today || 0).toFixed(0)} ms`,
-        },
-        {
-          label: "Health average",
-          value: `${Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms`,
-        },
-        {
-          label: "Success rate",
-          value: `${Number(overview?.health?.success_rate || 0).toFixed(1)}%`,
-        },
-        {
-          label: "Failure rate",
-          value: `${Number(overview?.health?.failure_rate || 0).toFixed(1)}%`,
-        },
+        { label: "Today average", value: `${Number(overview?.avg_latency_today || 0).toFixed(0)} ms` },
+        { label: "Health average", value: `${Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms` },
+        { label: "Success rate", value: `${Number(overview?.health?.success_rate || 0).toFixed(1)}%` },
+        { label: "Failure rate", value: `${Number(overview?.health?.failure_rate || 0).toFixed(1)}%` },
       ],
     },
     {
@@ -223,14 +202,8 @@ function Dashboard() {
       detailRows: [
         { label: "Active rules", value: num(overview?.rules_active || 0) },
         { label: "Active alerts", value: num(overview?.active_alerts || 0) },
-        {
-          label: "Highest risk score",
-          value: Number(overview?.highest_risk_score || 0).toFixed(1),
-        },
-        {
-          label: "Average risk score",
-          value: Number(overview?.avg_risk_score || 0).toFixed(1),
-        },
+        { label: "Highest risk score", value: Number(overview?.highest_risk_score || 0).toFixed(1) },
+        { label: "Average risk score", value: Number(overview?.avg_risk_score || 0).toFixed(1) },
       ],
     },
     {
@@ -238,16 +211,10 @@ function Dashboard() {
       title: "Connectors",
       value: num(overview?.connectors_active || 0),
       detailRows: [
-        {
-          label: "Active connectors",
-          value: num(overview?.connectors_active || 0),
-        },
-        { label: "Tools tracked", value: num(toolUsage.length) },
+        { label: "Active connectors", value: num(overview?.connectors_active || 0) },
+        { label: "Unique tools", value: num(uniqueToolCount) },
         { label: "Recent events loaded", value: num(recentLogs.length) },
-        {
-          label: "Refresh state",
-          value: refreshing ? "Refreshing data" : "Live snapshot ready",
-        },
+        { label: "Refresh state", value: refreshing ? "Refreshing…" : "Live snapshot ready" },
       ],
     },
     {
@@ -258,27 +225,95 @@ function Dashboard() {
         { label: "Combined signals", value: num(securitySignals) },
         { label: "PII events", value: num(security?.total_with_pii || 0) },
         { label: "Misuse events", value: num(security?.misuse_events || 0) },
+        { label: "Data-out violations", value: num(security?.data_out_events || 0) },
+      ],
+    },
+  ];
+  const activeMetricData = metricCards.find((c) => c.id === activeMetric);
+
+  // ── Module overview cards ──────────────────────────────────────────────────
+  const moduleCards = [
+    {
+      label: "Cost",
+      path: "/cost",
+      color: "#9E2A97",
+      metrics: [
+        { label: "Today", value: money(costTotals?.today?.cost) },
+        { label: "This Month", value: money(costTotals?.this_month?.cost) },
+        { label: "All Time", value: money(costTotals?.all_time?.cost) },
+        { label: "Projects", value: num(costByProject.length) },
+      ],
+    },
+    {
+      label: "Controls",
+      path: "/controls",
+      color: "#3B82F6",
+      metrics: [
+        { label: "Connectors", value: num(overview?.connectors_active || 0) },
+        { label: "Unique Tools", value: num(uniqueToolCount) },
+        { label: "Total Events", value: num(overview?.total_events_today || 0) },
+        { label: "Success Rate", value: `${Number(overview?.health?.success_rate || 0).toFixed(1)}%` },
+      ],
+    },
+    {
+      label: "Alerts & Security",
+      path: "/alerts-security",
+      color: "#EF4444",
+      metrics: [
+        { label: "Active Alerts", value: num(overview?.active_alerts || 0) },
+        { label: "PII Events", value: num(security?.total_with_pii || 0) },
+        { label: "Misuse Events", value: num(security?.misuse_events || 0) },
+        { label: "Anomalies Open", value: num(overview?.anomalies_open || 0) },
+      ],
+    },
+    {
+      label: "Governance",
+      path: "/controls",
+      color: "#F59E0B",
+      metrics: [
+        { label: "Active Rules", value: num(overview?.rules_active || 0) },
+        { label: "Avg Risk Score", value: Number(overview?.avg_risk_score || 0).toFixed(1) },
+        { label: "Highest Risk", value: Number(overview?.highest_risk_score || 0).toFixed(1) },
+        { label: "Data-Out Events", value: num(security?.data_out_events || 0) },
+      ],
+    },
+    {
+      label: "Decorator",
+      path: "/decorator",
+      color: "#10B981",
+      metrics: [
+        { label: "Registrations", value: num(decoratorStats?.total_registrations || decoratorStats?.registrations || 0) },
+        { label: "Total Calls", value: num(decoratorStats?.total_calls || 0) },
+        { label: "Unique Tools", value: num(decoratorStats?.unique_tools || 0) },
         {
-          label: "Data-out violations",
-          value: num(security?.data_out_events || 0),
+          label: "Avg Latency",
+          value: decoratorStats?.avg_latency_ms != null
+            ? `${Number(decoratorStats.avg_latency_ms).toFixed(0)} ms`
+            : "—",
         },
+      ],
+    },
+    {
+      label: "Admin Logs",
+      path: "/admin-logs",
+      color: "#6366F1",
+      metrics: [
+        { label: "Loaded Events", value: num(recentLogs.length) },
+        { label: "Tokens Today", value: num(overview?.total_tokens_today || 0) },
+        { label: "Avg Latency", value: `${Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms` },
+        { label: "Failure Rate", value: `${Number(overview?.health?.failure_rate || 0).toFixed(1)}%` },
       ],
     },
   ];
 
-  const activeMetricData = metricCards.find((card) => card.id === activeMetric);
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="page-shell">
+
+      {/* ══ 1. HERO ══════════════════════════════════════════════════════════ */}
       <section className="hero">
         <div className="hero-card">
           <h2>AI Governance Overview</h2>
-          <p>
-            {/* Comprehensive view of cost, tokens, latency, and security across
-            every integrated AI tool. Default scope is the full system
-            activity — adjust the range below to focus on a window. */}
-          </p>
-
           <div className="action-row" style={{ marginTop: 16 }}>
             {RANGE_OPTIONS.map((opt) => (
               <button
@@ -300,7 +335,6 @@ function Dashboard() {
               </button>
             ))}
           </div>
-
           <div style={{ marginTop: 12 }}>
             <FilterBar
               range={range}
@@ -311,7 +345,6 @@ function Dashboard() {
               compact
             />
           </div>
-
           <div className="hero-metrics">
             <div className="hero-chip">
               <span>Cost · {rangeLabel}</span>
@@ -327,9 +360,7 @@ function Dashboard() {
             </div>
             <div className="hero-chip">
               <span>Success Rate</span>
-              <strong>
-                {Number(overview?.success_rate_today || 0).toFixed(1)}%
-              </strong>
+              <strong>{Number(overview?.success_rate_today || 0).toFixed(1)}%</strong>
             </div>
           </div>
         </div>
@@ -346,16 +377,15 @@ function Dashboard() {
               onClick={() => load(true)}
               disabled={refreshing}
             >
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing ? "Refreshing…" : "Refresh"}
             </button>
           </div>
-
           <div className="pill-row">
             {[
-              { id: "alerts", label: "Active alerts", value: overview?.active_alerts || 0 },
-              { id: "anomalies", label: "Open anomalies", value: overview?.anomalies_open || 0 },
-              { id: "connectors", label: "Connectors", value: overview?.connectors_active || 0 },
-              { id: "rules", label: "Rules", value: overview?.rules_active || 0 },
+              { id: "alerts",     label: "Active alerts",   value: overview?.active_alerts    || 0 },
+              { id: "anomalies",  label: "Open anomalies",  value: overview?.anomalies_open   || 0 },
+              { id: "connectors", label: "Connectors",      value: overview?.connectors_active || 0 },
+              { id: "rules",      label: "Rules",           value: overview?.rules_active      || 0 },
             ].map((pill) => (
               <button
                 key={pill.id}
@@ -363,35 +393,32 @@ function Dashboard() {
                 className="pill pill-btn"
                 onClick={() => setActiveSnapshot(pill.id)}
               >
-                {pill.label}{" "}
-                <span className="highlight">{pill.value}</span>
+                {pill.label} <span className="highlight">{pill.value}</span>
               </button>
             ))}
           </div>
-
           <div className="stack" style={{ marginTop: 18 }}>
             <div className="list-item">
               <strong>Health</strong>
               <div className="list-meta">
-                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}
-                % · Failure{" "}
-                {Number(overview?.health?.failure_rate || 0).toFixed(1)}% · Avg
-                latency{" "}
-                {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
+                Success {Number(overview?.health?.success_rate || 0).toFixed(1)}% ·
+                Failure {Number(overview?.health?.failure_rate || 0).toFixed(1)}% ·
+                Avg latency {Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms
               </div>
             </div>
             <div className="list-item">
               <strong>Security</strong>
               <div className="list-meta">
-                PII events {security?.total_with_pii || 0} · Misuse{" "}
-                {security?.misuse_events || 0} · Data-out violations{" "}
-                {security?.data_out_events || 0}
+                PII events {security?.total_with_pii || 0} ·
+                Misuse {security?.misuse_events || 0} ·
+                Data-out violations {security?.data_out_events || 0}
               </div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* ══ 2. KPI CARDS ═════════════════════════════════════════════════════ */}
       <section className="stats-grid stats-grid-overview">
         {metricCards.map((card) => (
           <button
@@ -406,506 +433,32 @@ function Dashboard() {
         ))}
       </section>
 
-      {/* ── Total Cost Overview ── */}
-      {costTotals && (
-        <section className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Total Cost Overview</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Aggregated spend across all projects, tools, and models.
-              </p>
-            </div>
-          </div>
-
-          {/* Today / This Month / All-Time tiles */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 20 }}>
-            {[
-              { label: "Today", data: costTotals.today },
-              { label: "This Month", data: costTotals.this_month },
-              { label: "All Time", data: costTotals.all_time },
-            ].map(({ label, data }) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => setActiveCostTile({ label, data })}
-                style={{
-                  background: "var(--gray-50)",
-                  border: "1px solid rgba(124,112,174,0.18)",
-                  padding: "14px 18px",
-                  borderRadius: 10,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "box-shadow 0.15s",
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 0 0 2px rgba(158,42,151,0.25)"}
-                onMouseLeave={(e) => e.currentTarget.style.boxShadow = "none"}
-              >
-                <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{money(data?.cost)}</div>
-                <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 4 }}>
-                  {num(data?.tokens)} tokens · {num(data?.events)} events
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Top projects by cost */}
-          {costByProject.length > 0 && (
-            <>
-              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Cost by Project
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Project</th>
-                      <th>Org</th>
-                      <th>Tools</th>
-                      <th>Events</th>
-                      <th>Tokens</th>
-                      <th>Avg Latency</th>
-                      <th>LLM</th>
-                      <th>Infra</th>
-                      <th>External</th>
-                      <th>Total Cost</th>
-                      <th>Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const grandTotal = costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0);
-                      return costByProject.map((r) => {
-                        const share = grandTotal > 0 ? Math.round((Number(r.total_cost) / grandTotal) * 100) : 0;
-                        return (
-                          <tr key={`${r.project_id}-${r.org_id}`}>
-                            <td><strong>{r.project_id}</strong></td>
-                            <td>{r.org_id}</td>
-                            <td>{r.tool_count}</td>
-                            <td>{num(r.total_events)}</td>
-                            <td>{num(r.total_tokens)}</td>
-                            <td>{num(r.avg_latency_ms)} ms</td>
-                            <td>{money(r.llm_cost)}</td>
-                            <td>{money(r.infra_cost)}</td>
-                            <td>{money(r.external_cost)}</td>
-                            <td><strong>{money(r.total_cost)}</strong></td>
-                            <td style={{ minWidth: 110 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{ flex: 1, background: "rgba(124,112,174,0.12)", borderRadius: 4, height: 6, overflow: "hidden" }}>
-                                  <div style={{ width: `${share}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
-                                </div>
-                                <span style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{share}%</span>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
-                      <td colSpan={4}><strong>Grand Total</strong></td>
-                      <td>{num(costByProject.reduce((s, r) => s + Number(r.total_tokens || 0), 0))}</td>
-                      <td>—</td>
-                      <td>{money(costByProject.reduce((s, r) => s + Number(r.llm_cost || 0), 0))}</td>
-                      <td>{money(costByProject.reduce((s, r) => s + Number(r.infra_cost || 0), 0))}</td>
-                      <td>{money(costByProject.reduce((s, r) => s + Number(r.external_cost || 0), 0))}</td>
-                      <td><strong>{money(costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0))}</strong></td>
-                      <td><span style={{ fontSize: 12, color: "var(--gray-500)" }}>100%</span></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </>
-          )}
-        </section>
-      )}
-
-      {activeMetricData ? (
-        <div
-          className="modal-backdrop metric-modal-backdrop"
-          onClick={() => setActiveMetric(null)}
-        >
-          <div
-            className="modal-dialog metric-modal"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <div className="metric-eyebrow">{activeMetricData.title}</div>
-                <h3 style={{ marginTop: 8 }}>{activeMetricData.value}</h3>
-              </div>
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setActiveMetric(null)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="metric-modal-grid">
-              {activeMetricData.detailRows.map((row) => (
-                <div key={row.label} className="tool-cost-chip">
-                  <strong>{row.label}</strong>
-                  <div>{row.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {activeSnapshot && (
-        <div
-          className="modal-backdrop metric-modal-backdrop"
-          onClick={() => setActiveSnapshot(null)}
-        >
-          <div
-            className="modal-dialog metric-modal"
-            style={{ maxWidth: 720 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <div className="metric-eyebrow">Control Snapshot</div>
-                <h3 style={{ marginTop: 8 }}>
-                  {activeSnapshot === "alerts" && `Active Alerts · ${overview?.active_alerts || 0}`}
-                  {activeSnapshot === "anomalies" && `Open Anomalies · ${overview?.anomalies_open || 0}`}
-                  {activeSnapshot === "connectors" && `Connectors · ${overview?.connectors_active || 0}`}
-                  {activeSnapshot === "rules" && `Governance Rules · ${overview?.rules_active || 0}`}
-                </h3>
-              </div>
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setActiveSnapshot(null)}
-              >
-                ×
-              </button>
-            </div>
-
-            {activeSnapshot === "alerts" && (
-              <>
-                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
-                  <div className="tool-cost-chip">
-                    <strong>Total Active</strong>
-                    <div>{overview?.active_alerts || 0}</div>
-                  </div>
-                  {Object.entries(overview?.alerts_by_severity || {}).map(([sev, count]) => (
-                    <div key={sev} className="tool-cost-chip">
-                      <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
-                      <div>
-                        <span className={`status-pill ${sev}`}>{count} alert{count !== 1 ? "s" : ""}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Alerts</div>
-                <div className="list-grid">
-                  {recentAlerts.length ? (
-                    recentAlerts.map((a) => (
-                      <div key={a.id} className="list-item">
-                        <strong>{a.alert_type}</strong>
-                        <div className="list-meta">
-                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
-                          {a.message}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="empty-state">No recent alerts.</div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {activeSnapshot === "anomalies" && (
-              <>
-                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
-                  <div className="tool-cost-chip">
-                    <strong>Total Open</strong>
-                    <div>{overview?.anomalies_open || 0}</div>
-                  </div>
-                </div>
-                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Anomalies</div>
-                <div className="list-grid">
-                  {recentAnomalies.length ? (
-                    recentAnomalies.map((a) => (
-                      <div key={a.id} className="list-item">
-                        <strong>{a.anomaly_type}</strong>
-                        <div className="list-meta">
-                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
-                          {a.message}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="empty-state">No open anomalies.</div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {activeSnapshot === "connectors" && (
-              <>
-                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
-                  <div className="tool-cost-chip">
-                    <strong>Active Connectors</strong>
-                    <div>{overview?.connectors_active || 0}</div>
-                  </div>
-                  <div className="tool-cost-chip">
-                    <strong>Tools Tracked</strong>
-                    <div>{toolUsage.length}</div>
-                  </div>
-                </div>
-                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Tool Breakdown</div>
-                {toolUsage.length ? (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Tool</th>
-                          <th>Total Cost</th>
-                          <th>Tokens</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {toolUsage.map((t) => (
-                          <tr key={t.tool_name}>
-                            <td><strong>{t.tool_name}</strong></td>
-                            <td>{money(t.total_cost)}</td>
-                            <td>{num(t.total_tokens)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="empty-state">No tools tracked.</div>
-                )}
-              </>
-            )}
-
-            {activeSnapshot === "rules" && (
-              <>
-                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
-                  <div className="tool-cost-chip">
-                    <strong>Active Rules</strong>
-                    <div>{overview?.rules_active || 0}</div>
-                  </div>
-                  <div className="tool-cost-chip">
-                    <strong>Active Alerts</strong>
-                    <div>{overview?.active_alerts || 0}</div>
-                  </div>
-                  <div className="tool-cost-chip">
-                    <strong>Avg Risk Score</strong>
-                    <div>{Number(overview?.avg_risk_score || 0).toFixed(1)}</div>
-                  </div>
-                  <div className="tool-cost-chip">
-                    <strong>Highest Risk Score</strong>
-                    <div>{Number(overview?.highest_risk_score || 0).toFixed(1)}</div>
-                  </div>
-                </div>
-                {Object.keys(overview?.alerts_by_severity || {}).length > 0 && (
-                  <>
-                    <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Alerts by Severity</div>
-                    <div className="list-grid">
-                      {Object.entries(overview?.alerts_by_severity || {}).map(([sev, count]) => (
-                        <div key={sev} className="list-item">
-                          <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
-                          <div className="list-meta">
-                            <span className={`status-pill ${sev}`}>{count} alert{count !== 1 ? "s" : ""}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeCostTile && (
-        <div
-          className="modal-backdrop metric-modal-backdrop"
-          onClick={() => setActiveCostTile(null)}
-        >
-          <div
-            className="modal-dialog metric-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <div className="metric-eyebrow">Total Cost Overview</div>
-                <h3 style={{ marginTop: 8 }}>{activeCostTile.label}</h3>
-              </div>
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setActiveCostTile(null)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="metric-modal-grid">
-              {[
-                { label: "Total Cost", value: money(activeCostTile.data?.cost) },
-                { label: "Tokens", value: num(activeCostTile.data?.tokens) },
-                { label: "Events", value: num(activeCostTile.data?.events) },
-              ].map((row) => (
-                <div key={row.label} className="tool-cost-chip">
-                  <strong>{row.label}</strong>
-                  <div>{row.value}</div>
-                </div>
-              ))}
-            </div>
-            <div className="action-row" style={{ marginTop: 16 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setActiveCostTile(null)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Recent Events</h3>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Org</th>
-                <th>Project</th>
-                <th>Tool</th>
-                <th>Provider</th>
-                <th>Model</th>
-                <th>Status</th>
-                <th>Service</th>
-                <th>Exec Type</th>
-                <th>User</th>
-                <th>Tokens In</th>
-                <th>Tokens Out</th>
-                <th>Latency</th>
-                <th>Cost</th>
-                <th>Input MB</th>
-                <th>Output MB</th>
-                <th>PII</th>
-                <th>Tags</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentLogs.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={17}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No events recorded yet.
-                  </td>
-                </tr>
-              ) : null}
-              {recentLogs.slice(0, 10).map((row) => (
-                <tr key={row.event_id}>
-                  <td>{row.org_id || "-"}</td>
-                  <td>{row.project_id || "-"}</td>
-                  <td>
-                    <strong>{row.tool_name || "-"}</strong>
-                  </td>
-                  <td>{row.provider || "-"}</td>
-                  <td>{row.model_name || "-"}</td>
-                  <td>
-                    <span
-                      className={`status-pill ${(row.status || "").toLowerCase()}`}
-                    >
-                      {row.status || "-"}
-                    </span>
-                  </td>
-                  <td>{row.service_type || "-"}</td>
-                  <td>{row.execution_type || "-"}</td>
-                  <td>{row.user_id || "-"}</td>
-                  <td>{num(row.prompt_tokens)}</td>
-                  <td>{num(row.completion_tokens)}</td>
-                  <td>{num(row.latency_ms)} ms</td>
-                  <td>{money(row.total_cost)}</td>
-                  <td>{num(row.input_data_size_mb, 2)}</td>
-                  <td>{num(row.output_data_size_mb, 2)}</td>
-                  <td>
-                    {row.pii_type ? (
-                      <span className="status-pill critical">
-                        {row.pii_type}
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--gray-500)" }}>none</span>
-                    )}
-                  </td>
-                  <td>
-                    {Array.isArray(row.tags) && row.tags.length > 0
-                      ? row.tags.join(", ")
-                      : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
+      {/* ══ 3. TREND CHARTS — ROW 1 ══════════════════════════════════════════ */}
       <section className="two-column">
         <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Cost &amp; Events Trend</h3>
-            </div>
-          </div>
+          <div className="section-head"><div><h3>Cost &amp; Events Trend</h3></div></div>
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trends}>
                 <defs>
                   <linearGradient id="costFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#9E2A97" stopOpacity={0.45} />
+                    <stop offset="5%"  stopColor="#9E2A97" stopOpacity={0.45} />
                     <stop offset="95%" stopColor="#9E2A97" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid
-                  stroke="rgba(124,112,174,0.12)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#6d6782", fontSize: 12 }}
-                />
+                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
                 <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="total_cost"
-                  stroke="#9E2A97"
-                  fill="url(#costFill)"
-                  strokeWidth={3}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="total_events"
-                  stroke="#7C70AE"
-                  fill="transparent"
-                  strokeWidth={2}
-                />
+                <Area type="monotone" dataKey="total_cost"   stroke="#9E2A97" fill="url(#costFill)" strokeWidth={3} />
+                <Area type="monotone" dataKey="total_events" stroke="#7C70AE" fill="transparent"    strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Cost Composition</h3>
-            </div>
-          </div>
+          <div className="section-head"><div><h3>Cost Composition</h3></div></div>
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -918,20 +471,18 @@ function Dashboard() {
                   outerRadius={96}
                   innerRadius={58}
                 >
-                  {costMix.map((entry, index) => (
-                    <Cell
-                      key={entry.name}
-                      fill={CHART_COLORS[index % CHART_COLORS.length]}
-                    />
+                  {costMix.map((entry, i) => (
+                    <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => money(value)} />
+                <Tooltip formatter={(v) => money(v)} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       </section>
 
+      {/* ══ 4. TREND CHARTS — ROW 2 ══════════════════════════════════════════ */}
       {trends.length > 0 && (
         <section className="two-column">
           <div className="panel">
@@ -948,21 +499,18 @@ function Dashboard() {
                 <AreaChart data={trends}>
                   <defs>
                     <linearGradient id="tokenFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3FB6D4" stopOpacity={0.45} />
+                      <stop offset="5%"  stopColor="#3FB6D4" stopOpacity={0.45} />
                       <stop offset="95%" stopColor="#3FB6D4" stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
                   <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
-                  <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-                  <Tooltip formatter={(v) => num(v)} />
-                  <Area
-                    type="monotone"
-                    dataKey="total_tokens"
-                    stroke="#3FB6D4"
-                    fill="url(#tokenFill)"
-                    strokeWidth={3}
+                  <YAxis
+                    tick={{ fill: "#6d6782", fontSize: 12 }}
+                    tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
                   />
+                  <Tooltip formatter={(v) => num(v)} />
+                  <Area type="monotone" dataKey="total_tokens" stroke="#3FB6D4" fill="url(#tokenFill)" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -973,7 +521,7 @@ function Dashboard() {
               <div>
                 <h3>Latency Trend</h3>
                 <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Average response latency (ms) per day — rising trend may indicate capacity or cost issues.
+                  Average response latency per day — a rising trend may indicate capacity issues.
                 </p>
               </div>
             </div>
@@ -982,7 +530,7 @@ function Dashboard() {
                 <AreaChart data={trends}>
                   <defs>
                     <linearGradient id="latencyFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F2A33C" stopOpacity={0.45} />
+                      <stop offset="5%"  stopColor="#F2A33C" stopOpacity={0.45} />
                       <stop offset="95%" stopColor="#F2A33C" stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
@@ -990,13 +538,7 @@ function Dashboard() {
                   <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 12 }} />
                   <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} unit=" ms" />
                   <Tooltip formatter={(v) => `${Number(v).toFixed(0)} ms`} />
-                  <Area
-                    type="monotone"
-                    dataKey="avg_latency_ms"
-                    stroke="#F2A33C"
-                    fill="url(#latencyFill)"
-                    strokeWidth={3}
-                  />
+                  <Area type="monotone" dataKey="avg_latency_ms" stroke="#F2A33C" fill="url(#latencyFill)" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -1004,13 +546,84 @@ function Dashboard() {
         </section>
       )}
 
+      {/* ══ 5. MODULE OVERVIEW ═══════════════════════════════════════════════ */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3>Module Overview</h3>
+            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+              Key metrics at a glance across all platform modules.
+            </p>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gap: 14,
+            marginTop: 12,
+          }}
+        >
+          {moduleCards.map((mod) => (
+            <div
+              key={mod.label}
+              style={{
+                background: "var(--surface-1, #fff)",
+                border: "1px solid rgba(124,112,174,0.15)",
+                borderTop: `3px solid ${mod.color}`,
+                borderRadius: 10,
+                padding: "16px 18px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: 14, color: mod.color }}>
+                  {mod.label}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 12, padding: "2px 10px" }}
+                  onClick={() => navigate(mod.path)}
+                >
+                  View →
+                </button>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "8px 12px",
+                }}
+              >
+                {mod.metrics.map((m) => (
+                  <div key={m.label}>
+                    <div style={{ fontSize: 11, color: "var(--gray-500)", marginBottom: 2 }}>
+                      {m.label}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{m.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══ 6. COST BY PROJECT ════════════════════════════════════════════════ */}
       {costByProject.length > 0 && (
         <section className="panel">
           <div className="section-head">
             <div>
-              <h3>Project-wise Metrics</h3>
+              <h3>Cost by Project</h3>
               <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Token usage, latency, and cost breakdown per project.
+                Aggregated spend per project including token usage, latency, and cost breakdown.
               </p>
             </div>
           </div>
@@ -1020,50 +633,112 @@ function Dashboard() {
                 <tr>
                   <th>Project</th>
                   <th>Org</th>
+                  <th>Tools</th>
                   <th>Events</th>
                   <th>Tokens</th>
                   <th>Avg Latency</th>
-                  <th>LLM Cost</th>
-                  <th>Infra Cost</th>
+                  <th>LLM</th>
+                  <th>Infra</th>
+                  <th>External</th>
                   <th>Total Cost</th>
+                  <th>Share</th>
                 </tr>
               </thead>
               <tbody>
-                {costByProject.map((r) => (
-                  <tr key={`proj-metrics-${r.project_id}-${r.org_id}`}>
-                    <td><strong>{r.project_name || r.project_id}</strong>{r.project_name && r.project_name !== r.project_id && <span style={{ fontSize: 11, color: "var(--gray-500)", marginLeft: 6 }}>({r.project_id})</span>}</td>
-                    <td>{r.org_name || r.org_id}</td>
-                    <td>{num(r.total_events)}</td>
-                    <td>
-                      <span style={{ fontWeight: 600 }}>{num(r.total_tokens)}</span>
-                    </td>
-                    <td>
-                      <span style={{
-                        padding: "2px 8px",
-                        borderRadius: 10,
-                        fontSize: 12,
-                        background: Number(r.avg_latency_ms) > 2000 ? "rgba(239,68,68,0.1)" : Number(r.avg_latency_ms) > 1000 ? "rgba(245,158,11,0.1)" : "rgba(34,197,94,0.1)",
-                        color: Number(r.avg_latency_ms) > 2000 ? "#ef4444" : Number(r.avg_latency_ms) > 1000 ? "#f59e0b" : "#22c55e",
-                        fontWeight: 600,
-                      }}>
-                        {num(r.avg_latency_ms)} ms
-                      </span>
-                    </td>
-                    <td>{money(r.llm_cost)}</td>
-                    <td>{money(r.infra_cost)}</td>
-                    <td><strong>{money(r.total_cost)}</strong></td>
-                  </tr>
-                ))}
+                {(() => {
+                  const grandTotal = costByProject.reduce(
+                    (s, r) => s + Number(r.total_cost || 0),
+                    0,
+                  );
+                  return costByProject.map((r) => {
+                    const share =
+                      grandTotal > 0
+                        ? Math.round((Number(r.total_cost) / grandTotal) * 100)
+                        : 0;
+                    return (
+                      <tr key={`${r.project_id}-${r.org_id}`}>
+                        <td>
+                          <strong>{r.project_name || r.project_id}</strong>
+                          {r.project_name && r.project_name !== r.project_id && (
+                            <span style={{ fontSize: 11, color: "var(--gray-500)", marginLeft: 6 }}>
+                              ({r.project_id})
+                            </span>
+                          )}
+                        </td>
+                        <td>{r.org_name || r.org_id}</td>
+                        <td>{r.tool_count ?? "—"}</td>
+                        <td>{num(r.total_events)}</td>
+                        <td>{num(r.total_tokens)}</td>
+                        <td>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 10,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background:
+                                Number(r.avg_latency_ms) > 2000
+                                  ? "rgba(239,68,68,0.1)"
+                                  : Number(r.avg_latency_ms) > 1000
+                                  ? "rgba(245,158,11,0.1)"
+                                  : "rgba(34,197,94,0.1)",
+                              color:
+                                Number(r.avg_latency_ms) > 2000
+                                  ? "#ef4444"
+                                  : Number(r.avg_latency_ms) > 1000
+                                  ? "#f59e0b"
+                                  : "#22c55e",
+                            }}
+                          >
+                            {num(r.avg_latency_ms)} ms
+                          </span>
+                        </td>
+                        <td>{money(r.llm_cost)}</td>
+                        <td>{money(r.infra_cost)}</td>
+                        <td>{money(r.external_cost)}</td>
+                        <td><strong>{money(r.total_cost)}</strong></td>
+                        <td style={{ minWidth: 110 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div
+                              style={{
+                                flex: 1,
+                                background: "rgba(124,112,174,0.12)",
+                                borderRadius: 4,
+                                height: 6,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${share}%`,
+                                  height: "100%",
+                                  background: "#9E2A97",
+                                  borderRadius: 4,
+                                }}
+                              />
+                            </div>
+                            <span
+                              style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}
+                            >
+                              {share}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
-                  <td colSpan={2}><strong>Total</strong></td>
-                  <td>{num(costByProject.reduce((s, r) => s + Number(r.total_events || 0), 0))}</td>
-                  <td><strong>{num(costByProject.reduce((s, r) => s + Number(r.total_tokens || 0), 0))}</strong></td>
+                  <td colSpan={4}><strong>Grand Total</strong></td>
+                  <td>{num(costByProject.reduce((s, r) => s + Number(r.total_tokens || 0), 0))}</td>
                   <td>—</td>
                   <td>{money(costByProject.reduce((s, r) => s + Number(r.llm_cost || 0), 0))}</td>
                   <td>{money(costByProject.reduce((s, r) => s + Number(r.infra_cost || 0), 0))}</td>
+                  <td>{money(costByProject.reduce((s, r) => s + Number(r.external_cost || 0), 0))}</td>
                   <td><strong>{money(costByProject.reduce((s, r) => s + Number(r.total_cost || 0), 0))}</strong></td>
+                  <td><span style={{ fontSize: 12, color: "var(--gray-500)" }}>100%</span></td>
                 </tr>
               </tfoot>
             </table>
@@ -1071,62 +746,7 @@ function Dashboard() {
         </section>
       )}
 
-      <section className="two-column">
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Top Tools by Cost &amp; Tokens</h3>
-            </div>
-          </div>
-          <div className="chart-box">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topTools}>
-                <CartesianGrid
-                  stroke="rgba(124,112,174,0.12)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="tool"
-                  tick={{ fill: "#6d6782", fontSize: 12 }}
-                />
-                <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
-                <Tooltip
-                  formatter={(value, name) =>
-                    name === "cost" ? money(value) : value
-                  }
-                />
-                <Bar dataKey="cost" fill="#9E2A97" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="tokens" fill="#7C70AE" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Alert Severity</h3>
-            </div>
-          </div>
-          <div className="list-grid">
-            {alertsBySeverity.length ? (
-              alertsBySeverity.map((item) => (
-                <div key={item.name} className="list-item">
-                  <strong>{item.name}</strong>
-                  <div className="list-meta">
-                    <span className={`status-pill ${item.name}`}>
-                      {item.value} active
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">No active alerts.</div>
-            )}
-          </div>
-        </div>
-      </section>
-
+      {/* ══ 7. ALERTS & ANOMALIES ════════════════════════════════════════════ */}
       <section className="two-column">
         <div
           className="panel"
@@ -1141,27 +761,16 @@ function Dashboard() {
               <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span>Recent Alerts</span>
                 {!dismissedNotifications && criticalNotifs.length > 0 && (
-                  <span className="status-pill critical">
-                    {criticalNotifs.length} critical
-                  </span>
+                  <span className="status-pill critical">{criticalNotifs.length} critical</span>
                 )}
                 {!dismissedNotifications && highNotifs.length > 0 && (
-                  <span className="status-pill high">
-                    {highNotifs.length} high
-                  </span>
+                  <span className="status-pill high">{highNotifs.length} high</span>
                 )}
               </h3>
-              <p
-                style={{
-                  margin: "2px 0 0",
-                  color: "var(--gray-500)",
-                  fontSize: 13,
-                }}
-              >
-                {!loadingInsights &&
-                notifications.length === 0
-                  ? "No active alerts — all token limits and cost budgets are within acceptable thresholds."
-                  : "Live alerts for token limits, cost thresholds, and abnormal usage — auto-refreshed every 30 s."}
+              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                {!loadingInsights && notifications.length === 0
+                  ? "No active alerts — all token limits and cost budgets are within thresholds."
+                  : "Live alerts for token limits, cost thresholds, and abnormal usage — refreshed every 30 s."}
               </p>
             </div>
             {!dismissedNotifications && notifications.length > 0 && (
@@ -1176,24 +785,13 @@ function Dashboard() {
           </div>
 
           {!loadingInsights && !dismissedNotifications && notifications.length > 0 ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                marginTop: 12,
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
               {orderedNotifs.map((n, i) => {
                 const ctxBits = [];
-                if (n.project_name || n.project_id) {
-                  ctxBits.push(
-                    `Project: ${n.project_name || n.project_id}`,
-                  );
-                }
-                if (n.tool_name || n.model_name) {
+                if (n.project_name || n.project_id)
+                  ctxBits.push(`Project: ${n.project_name || n.project_id}`);
+                if (n.tool_name || n.model_name)
                   ctxBits.push(`Tool: ${n.tool_name || n.model_name}`);
-                }
                 return (
                   <div
                     key={i}
@@ -1270,20 +868,14 @@ function Dashboard() {
         </div>
 
         <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Open Anomalies</h3>
-            </div>
-          </div>
+          <div className="section-head"><div><h3>Open Anomalies</h3></div></div>
           <div className="list-grid">
             {recentAnomalies.length ? (
               recentAnomalies.map((item) => (
                 <div key={item.id} className="list-item">
                   <strong>{item.anomaly_type}</strong>
                   <div className="list-meta">
-                    <span className={`status-pill ${item.severity}`}>
-                      {item.severity}
-                    </span>{" "}
+                    <span className={`status-pill ${item.severity}`}>{item.severity}</span>{" "}
                     {item.message}
                   </div>
                 </div>
@@ -1295,11 +887,47 @@ function Dashboard() {
         </div>
       </section>
 
+      {/* ══ 8. TOP TOOLS + ALERT SEVERITY ════════════════════════════════════ */}
+      <section className="two-column">
+        <div className="panel">
+          <div className="section-head"><div><h3>Top Tools by Cost &amp; Tokens</h3></div></div>
+          <div className="chart-box">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topTools}>
+                <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                <XAxis dataKey="tool" tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#6d6782", fontSize: 12 }} />
+                <Tooltip formatter={(v, name) => (name === "cost" ? money(v) : v)} />
+                <Bar dataKey="cost"   fill="#9E2A97" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="tokens" fill="#7C70AE" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="section-head"><div><h3>Alert Severity</h3></div></div>
+          <div className="list-grid">
+            {alertsBySeverity.length ? (
+              alertsBySeverity.map((item) => (
+                <div key={item.name} className="list-item">
+                  <strong>{item.name}</strong>
+                  <div className="list-meta">
+                    <span className={`status-pill ${item.name}`}>{item.value} active</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state">No active alerts.</div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ 9. TOOL ROLLUP ════════════════════════════════════════════════════ */}
       <section className="panel">
         <div className="section-head">
-          <div>
-            <h3>Tool Rollup · {rangeLabel}</h3>
-          </div>
+          <div><h3>Tool Rollup · {rangeLabel}</h3></div>
         </div>
         <div className="table-wrap">
           <table>
@@ -1320,19 +948,14 @@ function Dashboard() {
             <tbody>
               {(overview?.tool_rollup || []).length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={10}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
+                  <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
                     No tool data for {rangeLabel.toLowerCase()}.
                   </td>
                 </tr>
               ) : null}
               {(overview?.tool_rollup || []).map((row) => (
                 <tr key={`${row.tool_name}-${row.date}`}>
-                  <td>
-                    <strong>{row.tool_name}</strong>
-                  </td>
+                  <td><strong>{row.tool_name}</strong></td>
                   <td>{num(row.total_events)}</td>
                   <td>{money(row.total_cost)}</td>
                   <td>{num(row.total_tokens)}</td>
@@ -1348,6 +971,267 @@ function Dashboard() {
           </table>
         </div>
       </section>
+
+      {/* ══ 10. RECENT EVENTS ════════════════════════════════════════════════ */}
+      <section className="panel">
+        <div className="section-head"><div><h3>Recent Events</h3></div></div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Org</th>
+                <th>Project</th>
+                <th>Tool</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>Service</th>
+                <th>Exec Type</th>
+                <th>User</th>
+                <th>Tokens In</th>
+                <th>Tokens Out</th>
+                <th>Latency</th>
+                <th>Cost</th>
+                <th>Input MB</th>
+                <th>Output MB</th>
+                <th>PII</th>
+                <th>Tags</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={17} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                    No events recorded yet.
+                  </td>
+                </tr>
+              ) : null}
+              {recentLogs.slice(0, 10).map((row) => (
+                <tr key={row.event_id}>
+                  <td>{row.org_id || "-"}</td>
+                  <td>{row.project_id || "-"}</td>
+                  <td><strong>{row.tool_name || "-"}</strong></td>
+                  <td>{row.provider || "-"}</td>
+                  <td>{row.model_name || "-"}</td>
+                  <td>
+                    <span className={`status-pill ${(row.status || "").toLowerCase()}`}>
+                      {row.status || "-"}
+                    </span>
+                  </td>
+                  <td>{row.service_type || "-"}</td>
+                  <td>{row.execution_type || "-"}</td>
+                  <td>{row.user_id || "-"}</td>
+                  <td>{num(row.prompt_tokens)}</td>
+                  <td>{num(row.completion_tokens)}</td>
+                  <td>{num(row.latency_ms)} ms</td>
+                  <td>{money(row.total_cost)}</td>
+                  <td>{num(row.input_data_size_mb, 2)}</td>
+                  <td>{num(row.output_data_size_mb, 2)}</td>
+                  <td>
+                    {row.pii_type ? (
+                      <span className="status-pill critical">{row.pii_type}</span>
+                    ) : (
+                      <span style={{ color: "var(--gray-500)" }}>none</span>
+                    )}
+                  </td>
+                  <td>
+                    {Array.isArray(row.tags) && row.tags.length > 0
+                      ? row.tags.join(", ")
+                      : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ══ MODALS ═══════════════════════════════════════════════════════════ */}
+
+      {/* KPI drill-down */}
+      {activeMetricData ? (
+        <div
+          className="modal-backdrop metric-modal-backdrop"
+          onClick={() => setActiveMetric(null)}
+        >
+          <div
+            className="modal-dialog metric-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">{activeMetricData.title}</div>
+                <h3 style={{ marginTop: 8 }}>{activeMetricData.value}</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setActiveMetric(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="metric-modal-grid">
+              {activeMetricData.detailRows.map((row) => (
+                <div key={row.label} className="tool-cost-chip">
+                  <strong>{row.label}</strong>
+                  <div>{row.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Control snapshot drill-down */}
+      {activeSnapshot && (
+        <div
+          className="modal-backdrop metric-modal-backdrop"
+          onClick={() => setActiveSnapshot(null)}
+        >
+          <div
+            className="modal-dialog metric-modal"
+            style={{ maxWidth: 720 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="metric-eyebrow">Control Snapshot</div>
+                <h3 style={{ marginTop: 8 }}>
+                  {activeSnapshot === "alerts"     && `Active Alerts · ${overview?.active_alerts || 0}`}
+                  {activeSnapshot === "anomalies"  && `Open Anomalies · ${overview?.anomalies_open || 0}`}
+                  {activeSnapshot === "connectors" && `Connectors · ${overview?.connectors_active || 0}`}
+                  {activeSnapshot === "rules"      && `Governance Rules · ${overview?.rules_active || 0}`}
+                </h3>
+              </div>
+              <button type="button" className="btn-close" onClick={() => setActiveSnapshot(null)}>×</button>
+            </div>
+
+            {activeSnapshot === "alerts" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Total Active</strong>
+                    <div>{overview?.active_alerts || 0}</div>
+                  </div>
+                  {Object.entries(overview?.alerts_by_severity || {}).map(([sev, count]) => (
+                    <div key={sev} className="tool-cost-chip">
+                      <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
+                      <div>
+                        <span className={`status-pill ${sev}`}>
+                          {count} alert{count !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Alerts</div>
+                <div className="list-grid">
+                  {recentAlerts.length ? (
+                    recentAlerts.map((a) => (
+                      <div key={a.id} className="list-item">
+                        <strong>{a.alert_type}</strong>
+                        <div className="list-meta">
+                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
+                          {a.message}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No recent alerts.</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeSnapshot === "anomalies" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Total Open</strong>
+                    <div>{overview?.anomalies_open || 0}</div>
+                  </div>
+                </div>
+                <div className="metric-eyebrow" style={{ marginBottom: 12 }}>Recent Anomalies</div>
+                <div className="list-grid">
+                  {recentAnomalies.length ? (
+                    recentAnomalies.map((a) => (
+                      <div key={a.id} className="list-item">
+                        <strong>{a.anomaly_type}</strong>
+                        <div className="list-meta">
+                          <span className={`status-pill ${a.severity}`}>{a.severity}</span>{" "}
+                          {a.message}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">No open anomalies.</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeSnapshot === "connectors" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Active Connectors</strong>
+                    <div>{overview?.connectors_active || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Unique Tools</strong>
+                    <div>{uniqueToolCount}</div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {activeSnapshot === "rules" && (
+              <>
+                <div className="metric-modal-grid" style={{ marginBottom: 18 }}>
+                  <div className="tool-cost-chip">
+                    <strong>Active Rules</strong>
+                    <div>{overview?.rules_active || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Active Alerts</strong>
+                    <div>{overview?.active_alerts || 0}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Avg Risk Score</strong>
+                    <div>{Number(overview?.avg_risk_score || 0).toFixed(1)}</div>
+                  </div>
+                  <div className="tool-cost-chip">
+                    <strong>Highest Risk Score</strong>
+                    <div>{Number(overview?.highest_risk_score || 0).toFixed(1)}</div>
+                  </div>
+                </div>
+                {Object.keys(overview?.alerts_by_severity || {}).length > 0 && (
+                  <>
+                    <div className="metric-eyebrow" style={{ marginBottom: 12 }}>
+                      Alerts by Severity
+                    </div>
+                    <div className="list-grid">
+                      {Object.entries(overview?.alerts_by_severity || {}).map(
+                        ([sev, count]) => (
+                          <div key={sev} className="list-item">
+                            <strong style={{ textTransform: "capitalize" }}>{sev}</strong>
+                            <div className="list-meta">
+                              <span className={`status-pill ${sev}`}>
+                                {count} alert{count !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

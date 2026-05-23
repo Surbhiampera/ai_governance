@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
-import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget } from "../api";
+import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget, getDecoratorLogs } from "../api";
 import { RANGE_OPTIONS, rangeToDays } from "../utils/filters";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
@@ -54,6 +54,9 @@ function Cost() {
   const [addCapMsg, setAddCapMsg] = useState("");
   const [addCapSubmitting, setAddCapSubmitting] = useState(false);
   const [range, setRange] = useState("30d");
+  const [decoratorLogs, setDecoratorLogs] = useState([]);
+  const [decoratorAuditTab, setDecoratorAuditTab] = useState("logs");
+  const [decoratorPreviewModal, setDecoratorPreviewModal] = useState(null);
 
   const load = async () => {
     try {
@@ -75,6 +78,7 @@ function Cost() {
         breakdownRes,
         perToolDailyRes,
         spendCapsRes,
+        decLogsRes,
       ] = await Promise.allSettled([
         API.get("/costs/totals"),
         API.get("/costs/by-model", { params: scope }),
@@ -90,6 +94,7 @@ function Cost() {
         API.get("/costs/breakdown", { params: scope }),
         getCostPerToolDaily(days, selectedOrg || undefined, selectedProject || undefined),
         getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined),
+        getDecoratorLogs({ org_id: selectedOrg || undefined, project_id: selectedProject || undefined, limit: 100 }),
       ]);
       const val = (res, fallback) => res.status === "fulfilled" ? (res.value?.data ?? fallback) : fallback;
       setTotals(val(totalsRes, null));
@@ -106,6 +111,7 @@ function Cost() {
       setBreakdown(val(breakdownRes, null));
       setPerToolDaily(val(perToolDailyRes, []));
       setSpendCaps(val(spendCapsRes, []));
+      setDecoratorLogs(decLogsRes.status === "fulfilled" ? (decLogsRes.value?.data?.items || []) : []);
       setError("");
       if (selectedOrg) {
         getControlQuota(selectedOrg, selectedProject || undefined)
@@ -224,6 +230,51 @@ function Cost() {
   };
 
   if (loading) return <div className="loading">Loading cost analytics...</div>;
+
+  const fmtN   = (v) => (v == null ? "—" : Number(v).toLocaleString());
+  const fmtMs  = (v) => (v == null ? "—" : `${Number(v).toLocaleString()} ms`);
+  const fmtUsd = (v) => (v == null ? "—" : `$${Number(v).toFixed(6)}`);
+  const fmtBytes = (b) => {
+    if (!b) return "—";
+    if (b >= 1048576) return `${(b / 1048576).toFixed(2)} MB`;
+    if (b >= 1024)    return `${(b / 1024).toFixed(1)} KB`;
+    return `${b} B`;
+  };
+  const fmtDt  = (v) =>
+    v ? new Date(v).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "—";
+  const truncate = (s, n = 60) => s.length > n ? s.slice(0, n) + "…" : s;
+
+  // Extract the request/query text from input_preview JSON
+  const extractInputQuery = (raw) => {
+    if (raw == null) return null;
+    try {
+      const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (obj && typeof obj === "object") {
+        for (const k of ["req", "request", "query", "input", "message", "text", "prompt", "user_input", "question"]) {
+          if (obj[k] != null) return String(obj[k]);
+        }
+        const firstStr = Object.values(obj).find((v) => typeof v === "string" && v.length > 0);
+        if (firstStr) return firstStr;
+      }
+    } catch { /* not JSON */ }
+    return typeof raw === "string" ? raw : JSON.stringify(raw);
+  };
+
+  // Extract only the email response text from output_preview JSON
+  const extractEmailResponse = (raw) => {
+    if (raw == null) return null;
+    try {
+      const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (obj && typeof obj === "object") {
+        for (const k of ["email_response", "response", "output", "answer", "reply", "result", "text", "message"]) {
+          if (obj[k] != null) return String(obj[k]);
+        }
+        const firstStr = Object.values(obj).find((v) => typeof v === "string" && v.length > 0);
+        if (firstStr) return firstStr;
+      }
+    } catch { /* not JSON */ }
+    return typeof raw === "string" ? raw : JSON.stringify(raw);
+  };
 
   const dailyByDate = Object.values(
     dailyCost.reduce((acc, r) => {
@@ -708,6 +759,215 @@ function Cost() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* ── Decorator Audit ── */}
+      {decoratorLogs.length > 0 && (
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Decorator Audit</h3>
+              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
+                Per-call audit from <code>request_response_logs</code>
+                {selectedProject ? ` · project: ${selectedProject}` : ""}
+                {selectedOrg ? ` · org: ${selectedOrg}` : ""}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["logs", "summary"].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`btn ${decoratorAuditTab === tab ? "btn-primary" : "btn-ghost"}`}
+                  style={{ fontSize: 12, padding: "5px 14px" }}
+                  onClick={() => setDecoratorAuditTab(tab)}
+                >
+                  {tab === "logs" ? "Decorator Audit Logs" : "Decorator Audit"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Tab: Decorator Audit Logs ── */}
+          {decoratorAuditTab === "logs" && (() => {
+            const groups = selectedProject
+              ? { [selectedProject]: decoratorLogs }
+              : decoratorLogs.reduce((acc, r) => {
+                  const key = r.project_id || "(no project)";
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(r);
+                  return acc;
+                }, {});
+
+            return Object.entries(groups).map(([proj, rows]) => (
+              <div key={proj} style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                  Project: {proj}
+                </div>
+                <div className="table-wrap" style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Function</th>
+                        <th>Route</th>
+                        <th>Model</th>
+                        <th>Tokens In</th>
+                        <th>Tokens Out</th>
+                        <th>Total Tokens</th>
+                        <th>Latency</th>
+                        <th>Cost (USD)</th>
+                        <th>Input Size</th>
+                        <th>Output Size</th>
+                        <th>Input Preview</th>
+                        <th>Output Preview</th>
+                        <th>PII</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => {
+                        const inpQuery = extractInputQuery(r.input_preview);
+                        const outResp  = extractEmailResponse(r.output_preview);
+                        return (
+                          <tr key={r.id}>
+                            <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{fmtDt(r.created_at)}</td>
+                            <td><strong>{r.function_name || "—"}</strong></td>
+                            <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{r.route || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{r.model_name || "—"}</td>
+                            <td>{fmtN(r.prompt_tokens)}</td>
+                            <td>{fmtN(r.completion_tokens)}</td>
+                            <td>{fmtN(r.total_tokens)}</td>
+                            <td>{fmtMs(r.latency_ms)}</td>
+                            <td>{fmtUsd(r.estimated_cost_usd)}</td>
+                            <td style={{ fontSize: 12 }}>{fmtBytes(r.input_size_bytes)}</td>
+                            <td style={{ fontSize: 12 }}>{fmtBytes(r.output_size_bytes)}</td>
+                            <td
+                              title={inpQuery || undefined}
+                              style={{ maxWidth: 180, cursor: inpQuery ? "pointer" : "default", fontSize: 12, color: "var(--gray-700)" }}
+                              onClick={() => inpQuery && setDecoratorPreviewModal({ label: `Request Query — ${r.function_name || r.route || "call"}`, content: inpQuery })}
+                            >
+                              {inpQuery ? truncate(inpQuery, 55) : "—"}
+                            </td>
+                            <td
+                              title={outResp || undefined}
+                              style={{ maxWidth: 180, cursor: outResp ? "pointer" : "default", fontSize: 12, color: "var(--gray-700)" }}
+                              onClick={() => outResp && setDecoratorPreviewModal({ label: `Email Response — ${r.function_name || r.route || "call"}`, content: outResp })}
+                            >
+                              {outResp ? truncate(outResp, 55) : "—"}
+                            </td>
+                            <td>
+                              {r.pii_detected
+                                ? <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: "#fef2f2", color: "#ef4444", fontWeight: 600 }}>PII</span>
+                                : <span style={{ fontSize: 11, color: "var(--gray-400)" }}>—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {rows.length > 1 && (() => {
+                      const totPT = rows.reduce((s, r) => r.prompt_tokens != null ? s + r.prompt_tokens : s, 0);
+                      const totCT = rows.reduce((s, r) => r.completion_tokens != null ? s + r.completion_tokens : s, 0);
+                      const totTT = rows.reduce((s, r) => r.total_tokens != null ? s + r.total_tokens : s, 0);
+                      const totCost = rows.reduce((s, r) => r.estimated_cost_usd != null ? s + r.estimated_cost_usd : s, 0);
+                      return (
+                        <tfoot>
+                          <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                            <td colSpan={4}><strong>{rows.length} calls</strong></td>
+                            <td><strong>{totPT.toLocaleString()}</strong></td>
+                            <td><strong>{totCT.toLocaleString()}</strong></td>
+                            <td><strong>{totTT.toLocaleString()}</strong></td>
+                            <td colSpan={2}><strong>{fmtUsd(totCost)}</strong></td>
+                            <td colSpan={5} />
+                          </tr>
+                        </tfoot>
+                      );
+                    })()}
+                  </table>
+                </div>
+              </div>
+            ));
+          })()}
+
+          {/* ── Tab: Decorator Audit (summary by function/route) ── */}
+          {decoratorAuditTab === "summary" && (() => {
+            const byFn = decoratorLogs.reduce((acc, r) => {
+              const key = r.function_name || r.route || "unknown";
+              if (!acc[key]) acc[key] = { function_name: key, route: r.route, model_name: r.model_name, project_id: r.project_id, calls: 0, prompt: 0, completion: 0, total: 0, cost: 0, pii: 0 };
+              acc[key].calls += 1;
+              if (r.prompt_tokens != null) acc[key].prompt += r.prompt_tokens;
+              if (r.completion_tokens != null) acc[key].completion += r.completion_tokens;
+              if (r.total_tokens != null) acc[key].total += r.total_tokens;
+              if (r.estimated_cost_usd != null) acc[key].cost += r.estimated_cost_usd;
+              if (r.pii_detected) acc[key].pii += 1;
+              return acc;
+            }, {});
+            const rows = Object.values(byFn).sort((a, b) => b.calls - a.calls);
+            return (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Function / Route</th>
+                      <th>Project</th>
+                      <th>Model</th>
+                      <th>Calls</th>
+                      <th>Tokens In</th>
+                      <th>Tokens Out</th>
+                      <th>Total Tokens</th>
+                      <th>Total Cost</th>
+                      <th>PII Hits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.function_name}>
+                        <td><strong>{r.function_name}</strong></td>
+                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{r.project_id || "—"}</td>
+                        <td style={{ fontSize: 12 }}>{r.model_name || "—"}</td>
+                        <td>{r.calls}</td>
+                        <td>{r.prompt.toLocaleString()}</td>
+                        <td>{r.completion.toLocaleString()}</td>
+                        <td>{r.total.toLocaleString()}</td>
+                        <td>{fmtUsd(r.cost)}</td>
+                        <td>
+                          {r.pii > 0
+                            ? <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: "#fef2f2", color: "#ef4444", fontWeight: 600 }}>{r.pii}</span>
+                            : <span style={{ color: "var(--gray-400)" }}>0</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </section>
+      )}
+
+      {/* ── Preview Modal ── */}
+      {decoratorPreviewModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setDecoratorPreviewModal(null)}
+          style={{ zIndex: 1100 }}
+        >
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 640, width: "90%" }}
+          >
+            <div className="modal-header">
+              <h4 style={{ margin: 0, fontSize: 14 }}>{decoratorPreviewModal.label}</h4>
+              <button type="button" className="btn-close" onClick={() => setDecoratorPreviewModal(null)}>×</button>
+            </div>
+            <pre style={{ fontSize: 12, padding: 16, borderRadius: 8, background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)", overflowY: "auto", maxHeight: 400, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>
+              {decoratorPreviewModal.content}
+            </pre>
+            <div className="action-row" style={{ marginTop: 12 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setDecoratorPreviewModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeMetricData ? (

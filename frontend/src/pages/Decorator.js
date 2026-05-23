@@ -329,16 +329,28 @@ function UsagePanel({ rows }) {
 }
 
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
+const fmtLatency = (ms) => (ms == null ? "—" : `${Number(ms).toLocaleString()} ms`);
+const fmtCost    = (v)  => (v  == null ? "—" : `$${Number(v).toFixed(6)}`);
+const fmtBytes   = (b)  => {
+  if (!b) return "—";
+  if (b >= 1048576) return `${(b / 1048576).toFixed(2)} MB`;
+  if (b >= 1024)    return `${(b / 1024).toFixed(1)} KB`;
+  return `${b} B`;
+};
+
 function LogsPanel({ rows }) {
-  const totalCost = rows.reduce((s, r) => s + Number(r.estimated_cost_usd || 0), 0);
-  const totalPrompt = rows.reduce((s, r) => s + Number(r.prompt_tokens || 0), 0);
-  const totalCompletion = rows.reduce((s, r) => s + Number(r.completion_tokens || 0), 0);
-  const totalTokens = rows.reduce((s, r) => s + Number(r.total_tokens || 0), 0);
+  const totalCost       = rows.reduce((s, r) => s + (r.estimated_cost_usd != null ? Number(r.estimated_cost_usd) : 0), 0);
+  const totalPrompt     = rows.reduce((s, r) => s + (r.prompt_tokens     != null ? Number(r.prompt_tokens)     : 0), 0);
+  const totalCompletion = rows.reduce((s, r) => s + (r.completion_tokens != null ? Number(r.completion_tokens) : 0), 0);
+  const totalTokens     = rows.reduce((s, r) => s + (r.total_tokens      != null ? Number(r.total_tokens)      : 0), 0);
+
+  const hasAnyCost    = rows.some((r) => r.estimated_cost_usd != null);
+  const hasAnyTokens  = rows.some((r) => r.prompt_tokens != null || r.total_tokens != null);
 
   const HEADERS = [
     "Timestamp", "Route", "Model", "Provider",
     "Prompt Tokens", "Completion Tokens", "Total Tokens",
-    "Latency (s)", "Cost (USD)", "PII",
+    "Latency (ms)", "Cost (USD)", "Input Size", "Output Size", "PII",
   ];
 
   return (
@@ -353,11 +365,11 @@ function LogsPanel({ rows }) {
       {/* summary strip */}
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", padding: "12px 0 16px" }}>
         {[
-          { label: "Total Calls", value: fmt(rows.length) },
-          { label: "Prompt Tokens", value: fmt(totalPrompt) },
-          { label: "Completion Tokens", value: fmt(totalCompletion) },
-          { label: "Total Tokens", value: fmt(totalTokens) },
-          { label: "Total Cost", value: `$${totalCost.toFixed(6)}` },
+          { label: "Total Calls",        value: fmt(rows.length) },
+          { label: "Prompt Tokens",      value: hasAnyTokens  ? fmt(totalPrompt)     : "—" },
+          { label: "Completion Tokens",  value: hasAnyTokens  ? fmt(totalCompletion) : "—" },
+          { label: "Total Tokens",       value: hasAnyTokens  ? fmt(totalTokens)     : "—" },
+          { label: "Total Cost",         value: hasAnyCost    ? `$${totalCost.toFixed(6)}` : "—" },
         ].map((c) => (
           <div key={c.label} className="metric-card" style={{ flex: "1 1 140px", minWidth: 120 }}>
             <div className="metric-eyebrow">{c.label}</div>
@@ -389,8 +401,10 @@ function LogsPanel({ rows }) {
                 <td style={{ textAlign: "right" }}>{fmt(r.prompt_tokens)}</td>
                 <td style={{ textAlign: "right" }}>{fmt(r.completion_tokens)}</td>
                 <td style={{ textAlign: "right" }}>{fmt(r.total_tokens)}</td>
-                <td style={{ textAlign: "right" }}>{Number(r.latency_seconds).toFixed(4)}</td>
-                <td style={{ textAlign: "right" }}>${Number(r.estimated_cost_usd).toFixed(6)}</td>
+                <td style={{ textAlign: "right" }}>{fmtLatency(r.latency_ms)}</td>
+                <td style={{ textAlign: "right" }}>{fmtCost(r.estimated_cost_usd)}</td>
+                <td style={{ textAlign: "right", fontSize: 12 }}>{fmtBytes(r.input_size_bytes)}</td>
+                <td style={{ textAlign: "right", fontSize: 12 }}>{fmtBytes(r.output_size_bytes)}</td>
                 <td style={{ textAlign: "center" }}>
                   {r.pii_detected
                     ? <span className="status-pill critical">YES</span>
@@ -403,11 +417,13 @@ function LogsPanel({ rows }) {
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: "2px solid rgba(124,112,174,0.2)" }}>
                 <td colSpan={4} style={{ paddingTop: 8 }}>Totals ({rows.length} calls)</td>
-                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalPrompt)}</td>
-                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalCompletion)}</td>
-                <td style={{ textAlign: "right", paddingTop: 8 }}>{fmt(totalTokens)}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{hasAnyTokens ? fmt(totalPrompt)     : "—"}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{hasAnyTokens ? fmt(totalCompletion) : "—"}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{hasAnyTokens ? fmt(totalTokens)     : "—"}</td>
                 <td style={{ paddingTop: 8 }}>—</td>
-                <td style={{ textAlign: "right", paddingTop: 8 }}>${totalCost.toFixed(6)}</td>
+                <td style={{ textAlign: "right", paddingTop: 8 }}>{hasAnyCost ? `$${totalCost.toFixed(6)}` : "—"}</td>
+                <td style={{ paddingTop: 8 }} />
+                <td style={{ paddingTop: 8 }} />
                 <td style={{ paddingTop: 8 }} />
               </tr>
             </tfoot>
