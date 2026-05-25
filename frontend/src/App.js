@@ -7,21 +7,31 @@ import {
 } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
-import Tools from "./pages/Tools";
 import AlertsSecurity from "./pages/AlertsSecurity";
-import TestEvent from "./pages/TestEvent";
-import SuperAdminLogs from "./pages/SuperAdminLogs";
-import Decorator from "./pages/Decorator";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
-  { to: "/cost", label: "Cost" },
-  { to: "/controls", label: "Controls" },
   { to: "/alerts-security", label: "Alerts & Security" },
-  { to: "/tracing", label: "Tracing" },
-  { to: "/decorator", label: "Decorator" },
-  { to: "/admin-logs", label: "Super Admin Logs" },
+  { to: "/cost", label: "Cost Module" },
 ];
+
+const NAV_ICONS = {
+  "/": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+    </svg>
+  ),
+  "/alerts-security": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  ),
+  "/cost": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  ),
+};
 
 function App() {
   return (
@@ -43,21 +53,27 @@ function App() {
                   isActive ? "nav-link active" : "nav-link"
                 }
               >
-                {item.label}
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {NAV_ICONS[item.to]}
+                  {item.label}
+                </span>
               </NavLink>
             ))}
           </nav>
+
+          <div className="sidebar-footer">
+            <span>Platform</span>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
+              3 active modules
+            </div>
+          </div>
         </aside>
 
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/cost" element={<Cost />} />
-            <Route path="/controls" element={<Tools />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />
-            <Route path="/tracing" element={<TestEvent />} />
-            <Route path="/decorator" element={<Decorator />} />
-            <Route path="/admin-logs" element={<SuperAdminLogs />} />
+            <Route path="/cost" element={<Cost />} />
           </Routes>
         </main>
       </div>

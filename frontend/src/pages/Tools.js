@@ -611,9 +611,6 @@ function Tools() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
             <h2 style={{ margin: 0 }}>Control Plane</h2>
-            <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 14 }}>
-              Connector health, automated pull scheduling, tool usage metrics, and live telemetry.
-            </p>
           </div>
           <div className="pill-row" style={{ gap: 8 }}>
             <span className="pill">
@@ -684,9 +681,6 @@ function Tools() {
             <div className="section-head">
               <div>
                 <h3>Data Connectors</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Register each AI tool as a connector. Pull-mode connectors are polled every 15 minutes by the scheduler.
-                </p>
               </div>
               <div className="action-row" style={{ gap: 8 }}>
                 <button
@@ -830,9 +824,6 @@ function Tools() {
             <div className="section-head">
               <div>
                 <h3>How Automated Pull Works</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Each pull-mode connector is called on a schedule. Returned events are ingested through the full governance pipeline.
-                </p>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
@@ -866,9 +857,6 @@ function Tools() {
           <div className="section-head">
             <div>
               <h3>Tool Usage Summary</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Aggregated cost, token, and latency metrics per AI tool.
-              </p>
             </div>
           </div>
           <div className="table-wrap">
@@ -925,9 +913,6 @@ function Tools() {
             <div className="section-head">
               <div>
                 <h3>Notification Channels</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Alert delivery configuration. Critical and high severity events are dispatched automatically across configured channels.
-                </p>
               </div>
             </div>
             {notifStatus ? (
@@ -972,9 +957,6 @@ function Tools() {
             <div className="section-head">
               <div>
                 <h3>Quota & Budget Monitor</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Real-time month-to-date spend vs budget with velocity-based end-of-month forecast. Enter an org ID to check.
-                </p>
               </div>
             </div>
 
@@ -1052,9 +1034,6 @@ function Tools() {
             <div className="section-head">
               <div>
                 <h3>Live Telemetry</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Real-time ingestion events across all tools. Click a Trace ID to drill into the full trace.
-                </p>
               </div>
               <div className="pill-row" style={{ gap: 8 }}>
                 <span className="pill">Projects <span className="highlight">{projects.length}</span></span>

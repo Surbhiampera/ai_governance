@@ -61,9 +61,6 @@ function NotificationBanner({ notifications, onDismiss, onOrgClick }) {
               <span className="status-pill high">{high.length} high</span>
             )}
           </h3>
-          <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-            Live alerts for token limits, cost thresholds, and abnormal usage — auto-refreshed every 30 s.
-          </p>
         </div>
         {onDismiss && (
           <button className="btn btn-ghost" onClick={onDismiss} style={{ alignSelf: "flex-start" }}>
@@ -799,9 +796,6 @@ function SuperAdminLogs() {
           <div className="section-head">
             <div>
               <h3>Filters</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Narrow logs by organization, tool, provider or time window.
-              </p>
             </div>
           </div>
 
@@ -927,9 +921,6 @@ function SuperAdminLogs() {
           <div className="section-head">
             <div>
               <h3>Real-Time Governance Notifications</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                No active alerts — all token limits and cost budgets are within acceptable thresholds.
-              </p>
             </div>
           </div>
         </section>
@@ -940,9 +931,6 @@ function SuperAdminLogs() {
         <div className="section-head">
           <div>
             <h3>Tool Cost Summary</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Total cost per integrated tool across all projects and organizations — sourced from all telemetry events.
-            </p>
           </div>
         </div>
 
@@ -997,10 +985,6 @@ function SuperAdminLogs() {
         <div className="section-head">
           <div>
             <h3>Model Token Usage &amp; Limits</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Token consumption per model per organization — compared against configured daily token limits.
-              Status turns warning at 75%, critical at 90%, and exhausted at 100%.
-            </p>
           </div>
         </div>
 
@@ -1085,10 +1069,6 @@ function SuperAdminLogs() {
         <div className="section-head">
           <div>
             <h3>Usage Aggregation by Tool</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Centralized computation of token usage, cost consumption, and remaining budget
-              across all tools and projects — sourced from tracing data.
-            </p>
           </div>
         </div>
 
@@ -1158,10 +1138,6 @@ function SuperAdminLogs() {
         <div className="section-head">
           <div>
             <h3>Cross-Tool Log Stream</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Auto-ingested from every connected vendor — normalized for org-wide cost tracking and governance.
-              Click a <strong style={{ color: "#ef4444" }}>PII</strong> row to view full detection detail.
-            </p>
           </div>
         </div>
 

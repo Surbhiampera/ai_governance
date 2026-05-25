@@ -234,25 +234,14 @@ function Dashboard() {
   // ── Module overview cards ──────────────────────────────────────────────────
   const moduleCards = [
     {
-      label: "Cost",
+      label: "Cost Module",
       path: "/cost",
       color: "#9E2A97",
       metrics: [
-        { label: "Today", value: money(costTotals?.today?.cost) },
+        { label: "Today",      value: money(costTotals?.today?.cost) },
         { label: "This Month", value: money(costTotals?.this_month?.cost) },
-        { label: "All Time", value: money(costTotals?.all_time?.cost) },
-        { label: "Projects", value: num(costByProject.length) },
-      ],
-    },
-    {
-      label: "Controls",
-      path: "/controls",
-      color: "#3B82F6",
-      metrics: [
-        { label: "Connectors", value: num(overview?.connectors_active || 0) },
-        { label: "Unique Tools", value: num(uniqueToolCount) },
-        { label: "Total Events", value: num(overview?.total_events_today || 0) },
-        { label: "Success Rate", value: `${Number(overview?.health?.success_rate || 0).toFixed(1)}%` },
+        { label: "All Time",   value: money(costTotals?.all_time?.cost) },
+        { label: "Projects",   value: num(costByProject.length) },
       ],
     },
     {
@@ -260,48 +249,21 @@ function Dashboard() {
       path: "/alerts-security",
       color: "#EF4444",
       metrics: [
-        { label: "Active Alerts", value: num(overview?.active_alerts || 0) },
-        { label: "PII Events", value: num(security?.total_with_pii || 0) },
-        { label: "Misuse Events", value: num(security?.misuse_events || 0) },
+        { label: "Active Alerts",  value: num(overview?.active_alerts || 0) },
+        { label: "PII Events",     value: num(security?.total_with_pii || 0) },
+        { label: "Misuse Events",  value: num(security?.misuse_events || 0) },
         { label: "Anomalies Open", value: num(overview?.anomalies_open || 0) },
       ],
     },
     {
-      label: "Governance",
-      path: "/controls",
-      color: "#F59E0B",
-      metrics: [
-        { label: "Active Rules", value: num(overview?.rules_active || 0) },
-        { label: "Avg Risk Score", value: Number(overview?.avg_risk_score || 0).toFixed(1) },
-        { label: "Highest Risk", value: Number(overview?.highest_risk_score || 0).toFixed(1) },
-        { label: "Data-Out Events", value: num(security?.data_out_events || 0) },
-      ],
-    },
-    {
-      label: "Decorator",
-      path: "/decorator",
+      label: "Project Intelligence",
+      path: "/cost",
       color: "#10B981",
       metrics: [
-        { label: "Registrations", value: num(decoratorStats?.total_registrations || decoratorStats?.registrations || 0) },
-        { label: "Total Calls", value: num(decoratorStats?.total_calls || 0) },
-        { label: "Unique Tools", value: num(decoratorStats?.unique_tools || 0) },
-        {
-          label: "Avg Latency",
-          value: decoratorStats?.avg_latency_ms != null
-            ? `${Number(decoratorStats.avg_latency_ms).toFixed(0)} ms`
-            : "—",
-        },
-      ],
-    },
-    {
-      label: "Admin Logs",
-      path: "/admin-logs",
-      color: "#6366F1",
-      metrics: [
-        { label: "Loaded Events", value: num(recentLogs.length) },
-        { label: "Tokens Today", value: num(overview?.total_tokens_today || 0) },
-        { label: "Avg Latency", value: `${Number(overview?.health?.avg_latency_ms || 0).toFixed(0)} ms` },
-        { label: "Failure Rate", value: `${Number(overview?.health?.failure_rate || 0).toFixed(1)}%` },
+        { label: "Tracked Functions", value: num(decoratorStats?.registered_functions || 0) },
+        { label: "API Routes",        value: num(decoratorStats?.inventory_functions || 0) },
+        { label: "Usage Records",     value: num(decoratorStats?.usage_records || 0) },
+        { label: "Audit Entries",     value: num(decoratorStats?.audit_log_entries || 0) },
       ],
     },
   ];
@@ -489,9 +451,6 @@ function Dashboard() {
             <div className="section-head">
               <div>
                 <h3>Token Usage Trend</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Total tokens consumed per day across all tools and models.
-                </p>
               </div>
             </div>
             <div className="chart-box">
@@ -520,9 +479,6 @@ function Dashboard() {
             <div className="section-head">
               <div>
                 <h3>Latency Trend</h3>
-                <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                  Average response latency per day — a rising trend may indicate capacity issues.
-                </p>
               </div>
             </div>
             <div className="chart-box">
@@ -551,9 +507,6 @@ function Dashboard() {
         <div className="section-head">
           <div>
             <h3>Module Overview</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Key metrics at a glance across all platform modules.
-            </p>
           </div>
         </div>
         <div
@@ -622,9 +575,6 @@ function Dashboard() {
           <div className="section-head">
             <div>
               <h3>Cost by Project</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Aggregated spend per project including token usage, latency, and cost breakdown.
-              </p>
             </div>
           </div>
           <div className="table-wrap">
@@ -767,11 +717,6 @@ function Dashboard() {
                   <span className="status-pill high">{highNotifs.length} high</span>
                 )}
               </h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                {!loadingInsights && notifications.length === 0
-                  ? "No active alerts — all token limits and cost budgets are within thresholds."
-                  : "Live alerts for token limits, cost thresholds, and abnormal usage — refreshed every 30 s."}
-              </p>
             </div>
             {!dismissedNotifications && notifications.length > 0 && (
               <button
@@ -921,54 +866,6 @@ function Dashboard() {
               <div className="empty-state">No active alerts.</div>
             )}
           </div>
-        </div>
-      </section>
-
-      {/* ══ 9. TOOL ROLLUP ════════════════════════════════════════════════════ */}
-      <section className="panel">
-        <div className="section-head">
-          <div><h3>Tool Rollup · {rangeLabel}</h3></div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tool</th>
-                <th>Events</th>
-                <th>Total Cost</th>
-                <th>Tokens</th>
-                <th>Success</th>
-                <th>Failure</th>
-                <th>Avg Latency</th>
-                <th>Avg Risk</th>
-                <th>Anomalies</th>
-                <th>Misuse</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(overview?.tool_rollup || []).length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
-                    No tool data for {rangeLabel.toLowerCase()}.
-                  </td>
-                </tr>
-              ) : null}
-              {(overview?.tool_rollup || []).map((row) => (
-                <tr key={`${row.tool_name}-${row.date}`}>
-                  <td><strong>{row.tool_name}</strong></td>
-                  <td>{num(row.total_events)}</td>
-                  <td>{money(row.total_cost)}</td>
-                  <td>{num(row.total_tokens)}</td>
-                  <td>{num(row.success_count)}</td>
-                  <td>{num(row.failure_count)}</td>
-                  <td>{num(row.avg_latency_ms)} ms</td>
-                  <td>{Number(row.avg_risk_score || 0).toFixed(1)}</td>
-                  <td>{num(row.anomaly_count)}</td>
-                  <td>{num(row.misuse_count)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </section>
 

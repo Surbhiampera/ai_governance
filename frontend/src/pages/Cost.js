@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import API from "../api";
-import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget, getDecoratorLogs } from "../api";
+import { getTracingOrgs, getTracingProjects, getControlQuota, getProjectCostBreakdown, controlIngest, getCostDaily, getCostPerToolDaily, getCostSpendCapStatus, createBudget, deleteBudget, getDecoratorLogs, getDecoratorStats, getDecoratorRegistrations, getDecoratorInventory, getDecoratorUsage } from "../api";
 import { RANGE_OPTIONS, rangeToDays } from "../utils/filters";
 
 const money = (v) => `$${Number(v || 0).toFixed(2)}`;
@@ -22,9 +22,6 @@ function Cost() {
   const [byProject, setByProject] = useState([]);
   const [byOrg, setByOrg] = useState([]);
   const [byTool, setByTool] = useState([]);
-  const [byProvider, setByProvider] = useState([]);
-  const [byExecutionType, setByExecutionType] = useState([]);
-  const [byServiceType, setByServiceType] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
   const [dailyCost, setDailyCost] = useState([]);
   const [monthlyCost, setMonthlyCost] = useState([]);
@@ -54,9 +51,14 @@ function Cost() {
   const [addCapMsg, setAddCapMsg] = useState("");
   const [addCapSubmitting, setAddCapSubmitting] = useState(false);
   const [range, setRange] = useState("30d");
+  const [costBreakdownTab, setCostBreakdownTab] = useState("tool");
   const [decoratorLogs, setDecoratorLogs] = useState([]);
   const [decoratorAuditTab, setDecoratorAuditTab] = useState("logs");
   const [decoratorPreviewModal, setDecoratorPreviewModal] = useState(null);
+  const [decoratorStats, setDecoratorStats] = useState(null);
+  const [decoratorRegistry, setDecoratorRegistry] = useState([]);
+  const [decoratorInventory, setDecoratorInventory] = useState([]);
+  const [decoratorUsage, setDecoratorUsage] = useState([]);
 
   const load = async () => {
     try {
@@ -72,13 +74,14 @@ function Cost() {
         monthlyRes,
         orgsRes,
         toolRes,
-        providerRes,
-        execRes,
-        serviceRes,
         breakdownRes,
         perToolDailyRes,
         spendCapsRes,
         decLogsRes,
+        decStatsRes,
+        decRegRes,
+        decInvRes,
+        decUsageRes,
       ] = await Promise.allSettled([
         API.get("/costs/totals"),
         API.get("/costs/by-model", { params: scope }),
@@ -88,13 +91,14 @@ function Cost() {
         API.get("/costs/monthly", { params: scope }),
         getTracingOrgs(),
         API.get("/costs/by-tool", { params: scope }),
-        API.get("/costs/by-provider", { params: scope }),
-        API.get("/costs/by-execution-type", { params: scope }),
-        API.get("/costs/by-service-type", { params: scope }),
         API.get("/costs/breakdown", { params: scope }),
         getCostPerToolDaily(days, selectedOrg || undefined, selectedProject || undefined),
         getCostSpendCapStatus(selectedOrg || undefined, selectedProject || undefined),
         getDecoratorLogs({ org_id: selectedOrg || undefined, project_id: selectedProject || undefined, limit: 100 }),
+        getDecoratorStats(selectedOrg || undefined),
+        getDecoratorRegistrations({ org_id: selectedOrg || undefined, project_id: selectedProject || undefined, limit: 500 }),
+        getDecoratorInventory({ org_id: selectedOrg || undefined, project_id: selectedProject || undefined, limit: 500 }),
+        getDecoratorUsage({ org_id: selectedOrg || undefined, project_id: selectedProject || undefined, limit: 200 }),
       ]);
       const val = (res, fallback) => res.status === "fulfilled" ? (res.value?.data ?? fallback) : fallback;
       setTotals(val(totalsRes, null));
@@ -105,13 +109,14 @@ function Cost() {
       setMonthlyCost(val(monthlyRes, []));
       setOrgs(val(orgsRes, []));
       setByTool(val(toolRes, []));
-      setByProvider(val(providerRes, []));
-      setByExecutionType(val(execRes, []));
-      setByServiceType(val(serviceRes, []));
       setBreakdown(val(breakdownRes, null));
       setPerToolDaily(val(perToolDailyRes, []));
       setSpendCaps(val(spendCapsRes, []));
       setDecoratorLogs(decLogsRes.status === "fulfilled" ? (decLogsRes.value?.data?.items || []) : []);
+      setDecoratorStats(decStatsRes.status === "fulfilled" ? (decStatsRes.value?.data ?? null) : null);
+      setDecoratorRegistry(decRegRes.status === "fulfilled" ? (decRegRes.value?.data?.items || []) : []);
+      setDecoratorInventory(decInvRes.status === "fulfilled" ? (decInvRes.value?.data?.items || []) : []);
+      setDecoratorUsage(decUsageRes.status === "fulfilled" ? (decUsageRes.value?.data?.items || []) : []);
       setError("");
       if (selectedOrg) {
         getControlQuota(selectedOrg, selectedProject || undefined)
@@ -347,7 +352,10 @@ function Cost() {
           {error}
         </div>
       )}
-      <section className="panel" style={{ padding: "14px 24px" }}>
+      <section className="panel" style={{ padding: "20px 24px 14px" }}>
+        <div style={{ marginBottom: 14 }}>
+          <h2 style={{ margin: 0 }}>Cost Module</h2>
+        </div>
         <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ minWidth: 180 }}>
             <label style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Organization</label>
@@ -397,15 +405,47 @@ function Cost() {
         ))}
       </section>
 
+      {/* ══════════ PROJECT INTELLIGENCE ══════════ */}
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3 style={{ margin: 0 }}>
+              Project Intelligence
+              {selectedProject && (
+                <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 400, color: "var(--brand-secondary)", background: "rgba(124,112,174,0.1)", padding: "3px 10px", borderRadius: 20 }}>
+                  {selectedProject}
+                </span>
+              )}
+            </h3>
+          </div>
+        </div>
+
+        {/* KPI strip */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
+          {[
+            { label: "Registered Functions", value: decoratorStats?.registered_functions ?? decoratorRegistry.length, icon: "ƒ" },
+            { label: "API Routes Tracked",   value: decoratorInventory.length,                                        icon: "⇄" },
+            { label: "Usage Records",         value: decoratorStats?.usage_records ?? decoratorUsage.length,           icon: "↗" },
+            { label: "Audit Log Entries",     value: decoratorStats?.audit_log_entries ?? decoratorLogs.length,        icon: "≡" },
+          ].map((c) => (
+            <div key={c.label} style={{ padding: "16px 18px", background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.15)", borderRadius: "var(--radius-md)", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, var(--brand-primary), var(--brand-secondary))" }} />
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--gray-500)", marginBottom: 8 }}>{c.label}</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: "var(--gray-700)" }}>
+                {typeof c.value === "number" ? c.value.toLocaleString() : (c.value ?? "—")}
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </section>
+
       {/* ── Token Usage & Limits ── */}
       {quota && (
         <section className="panel">
           <div className="section-head">
             <div>
               <h3>Token Usage &amp; Limits</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Month-to-date token consumption, daily quota, and budget forecast for the selected organization.
-              </p>
             </div>
             {quota.will_exceed_budget && (
               <span className="status-pill critical" style={{ fontSize: 12 }}>Budget Overrun Risk</span>
@@ -500,9 +540,6 @@ function Cost() {
         <div className="section-head">
           <div>
             <h3>Spend Cap &amp; Alerts</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Configure spend limits per org or project. Alerts fire at your threshold%, 90%, and 100%, plus a predictive overrun warning.
-            </p>
           </div>
           <button type="button" className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => { setShowAddCap(!showAddCap); setAddCapMsg(""); }}>
             {showAddCap ? "Cancel" : "+ Add Spend Cap"}
@@ -658,9 +695,6 @@ function Cost() {
           <div className="section-head">
             <div>
               <h3>Project Cost Summary — {projectBreakdown.project_id}</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Total spend aggregated across all models and tools used in this project.
-              </p>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 12, color: "var(--gray-500)" }}>Total project cost</div>
@@ -767,11 +801,6 @@ function Cost() {
           <div className="section-head">
             <div>
               <h3>Decorator Audit</h3>
-              <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-                Per-call audit from <code>request_response_logs</code>
-                {selectedProject ? ` · project: ${selectedProject}` : ""}
-                {selectedOrg ? ` · org: ${selectedOrg}` : ""}
-              </p>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {["logs", "summary"].map((tab) => (
@@ -1079,264 +1108,112 @@ function Cost() {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h3>Cost by Tool</h3>
-            <p
-              style={{
-                margin: "2px 0 0",
-                color: "var(--gray-500)",
-                fontSize: 13,
-              }}
-            >
-              LLM + Infrastructure + External split for every tool registered
-              through the Control Module.
-            </p>
+            <h3>Cost by Tool &amp; Model</h3>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[{ key: "tool", label: "By Tool" }, { key: "model", label: "By Model" }].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                className={`btn ${costBreakdownTab === key ? "btn-primary" : "btn-ghost"}`}
+                style={{ fontSize: 12, padding: "5px 14px" }}
+                onClick={() => setCostBreakdownTab(key)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tool</th>
-                <th>Vendor</th>
-                <th>Cost Model</th>
-                <th>Events</th>
-                <th>Tokens</th>
-                <th>LLM</th>
-                <th>Infra</th>
-                <th>External</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byTool.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={9}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No tool data yet.
-                  </td>
-                </tr>
-              )}
-              {byTool.map((r) => (
-                <tr key={r.tool_name}>
-                  <td>
-                    <strong>{r.tool_name}</strong>
-                  </td>
-                  <td>{r.vendor}</td>
-                  <td>{r.cost_model}</td>
-                  <td>{num(r.total_events)}</td>
-                  <td>{num(r.total_tokens)}</td>
-                  <td>{money4(r.llm_cost)}</td>
-                  <td>{money4(r.infra_cost)}</td>
-                  <td>{money4(r.external_cost)}</td>
-                  <td>
-                    <strong>{money(r.total_cost)}</strong>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Cost by Provider</h3>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Events</th>
-                <th>Tokens</th>
-                <th>LLM</th>
-                <th>Infra</th>
-                <th>External</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byProvider.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No provider data yet.
-                  </td>
-                </tr>
-              )}
-              {byProvider.map((r) => (
-                <tr key={r.provider}>
-                  <td>
-                    <strong>{r.provider}</strong>
-                  </td>
-                  <td>{num(r.total_events)}</td>
-                  <td>{num(r.total_tokens)}</td>
-                  <td>{money4(r.llm_cost)}</td>
-                  <td>{money4(r.infra_cost)}</td>
-                  <td>{money4(r.external_cost)}</td>
-                  <td>
-                    <strong>{money(r.total_cost)}</strong>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="two-column">
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Cost by Execution Type</h3>
-            </div>
-          </div>
+        {costBreakdownTab === "tool" && (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Execution Type</th>
+                  <th>Tool</th>
+                  <th>Vendor</th>
+                  <th>Cost Model</th>
                   <th>Events</th>
                   <th>Tokens</th>
+                  <th>LLM</th>
+                  <th>Infra</th>
+                  <th>External</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byTool.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                      No tool data yet.
+                    </td>
+                  </tr>
+                )}
+                {byTool.map((r) => (
+                  <tr key={r.tool_name}>
+                    <td><strong>{r.tool_name}</strong></td>
+                    <td>{r.vendor}</td>
+                    <td>{r.cost_model}</td>
+                    <td>{num(r.total_events)}</td>
+                    <td>{num(r.total_tokens)}</td>
+                    <td>{money4(r.llm_cost)}</td>
+                    <td>{money4(r.infra_cost)}</td>
+                    <td>{money4(r.external_cost)}</td>
+                    <td><strong>{money(r.total_cost)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {costBreakdownTab === "model" && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Provider</th>
+                  <th>Events</th>
+                  <th>Tokens In</th>
+                  <th>Tokens Out</th>
+                  <th>Total Tokens</th>
+                  <th>Total Cost</th>
                   <th>Avg Latency</th>
-                  <th>Total Cost</th>
+                  <th>Success %</th>
                 </tr>
               </thead>
               <tbody>
-                {byExecutionType.length === 0 && (
+                {byModel.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={5}
-                      style={{ textAlign: "center", color: "var(--gray-500)" }}
-                    >
-                      No execution-type data yet.
+                    <td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                      No model data yet.
                     </td>
                   </tr>
                 )}
-                {byExecutionType.map((r) => (
-                  <tr key={r.execution_type}>
-                    <td>
-                      <strong>{r.execution_type}</strong>
-                    </td>
+                {byModel.map((r) => (
+                  <tr key={`${r.model_name}-${r.provider}`}>
+                    <td><strong>{r.model_name}</strong></td>
+                    <td>{r.provider}</td>
                     <td>{num(r.total_events)}</td>
+                    <td>{num(r.prompt_tokens)}</td>
+                    <td>{num(r.completion_tokens)}</td>
                     <td>{num(r.total_tokens)}</td>
+                    <td>{money(r.total_cost)}</td>
                     <td>{r.avg_latency_ms} ms</td>
-                    <td>{money(r.total_cost)}</td>
+                    <td>{r.success_rate}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Cost by Service Type</h3>
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Service Type</th>
-                  <th>Events</th>
-                  <th>Tokens</th>
-                  <th>Total Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byServiceType.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      style={{ textAlign: "center", color: "var(--gray-500)" }}
-                    >
-                      No service-type data yet.
-                    </td>
-                  </tr>
-                )}
-                {byServiceType.map((r) => (
-                  <tr key={r.service_type}>
-                    <td>
-                      <strong>{r.service_type}</strong>
-                    </td>
-                    <td>{num(r.total_events)}</td>
-                    <td>{num(r.total_tokens)}</td>
-                    <td>{money(r.total_cost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Cost by Model</h3>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Provider</th>
-                <th>Events</th>
-                <th>Tokens In</th>
-                <th>Tokens Out</th>
-                <th>Total Tokens</th>
-                <th>Total Cost</th>
-                <th>Avg Latency</th>
-                <th>Success %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byModel.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={9}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No model data yet.
-                  </td>
-                </tr>
-              )}
-              {byModel.map((r) => (
-                <tr key={`${r.model_name}-${r.provider}`}>
-                  <td>
-                    <strong>{r.model_name}</strong>
-                  </td>
-                  <td>{r.provider}</td>
-                  <td>{num(r.total_events)}</td>
-                  <td>{num(r.prompt_tokens)}</td>
-                  <td>{num(r.completion_tokens)}</td>
-                  <td>{num(r.total_tokens)}</td>
-                  <td>{money(r.total_cost)}</td>
-                  <td>{r.avg_latency_ms} ms</td>
-                  <td>{r.success_rate}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        )}
       </section>
 
       <section className="panel">
         <div className="section-head">
           <div>
             <h3>Cost by Project</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Click any row to expand tool-wise cost breakdown for that project.
-            </p>
           </div>
         </div>
         <div className="table-wrap">
@@ -1462,50 +1339,6 @@ function Cost() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Cost by Organization</h3>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Organization</th>
-                <th>Events</th>
-                <th>Tokens</th>
-                <th>Total Cost</th>
-                <th>Avg Latency</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byOrg.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No organization data yet.
-                  </td>
-                </tr>
-              )}
-              {byOrg.map((r) => (
-                <tr key={r.org_id}>
-                  <td>
-                    <strong>{r.org_id}</strong>
-                  </td>
-                  <td>{num(r.total_events)}</td>
-                  <td>{num(r.total_tokens)}</td>
-                  <td>{money(r.total_cost)}</td>
-                  <td>{r.avg_latency_ms} ms</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <section className="two-column">
         <div className="panel">
           <div className="section-head">
@@ -1574,9 +1407,6 @@ function Cost() {
         <div className="section-head">
           <div>
             <h3>Per-Tool Daily Cost Monitoring</h3>
-            <p style={{ margin: "2px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-              Input/output token usage, cost, and email volume for each AI tool — last 14 days.
-            </p>
           </div>
           <div className="field" style={{ minWidth: 160 }}>
             <select value={toolDailyFilter} onChange={(e) => setToolDailyFilter(e.target.value)} style={{ fontSize: 13 }}>
@@ -1757,10 +1587,6 @@ function Cost() {
             {/* ── Tab: Inject Telemetry Event ── */}
             {toolModalTab === "inject" && (
               <form className="stack" onSubmit={handleInjectEvent}>
-                <p style={{ margin: "0 0 12px", color: "var(--gray-500)", fontSize: 13 }}>
-                  Inject a new telemetry event for <strong>{toolModal.tool.tool_name}</strong> in project <strong>{toolModal.projectId}</strong>.
-                  Org and tool are pre-filled — add provider, tokens, and latency.
-                </p>
                 <div className="form-grid">
                   <div className="field">
                     <label>Organization</label>
@@ -1824,9 +1650,6 @@ function Cost() {
             {/* ── Tab: API Snippet ── */}
             {toolModalTab === "snippet" && (
               <div className="stack">
-                <p style={{ margin: "0 0 8px", color: "var(--gray-500)", fontSize: 13 }}>
-                  Ready-to-use payload for <code>POST /control/ingest</code>. Copy and adapt as needed.
-                </p>
                 <pre style={{ fontSize: 12, padding: 16, borderRadius: 10, background: "var(--gray-50)", border: "1px solid rgba(124,112,174,0.18)", overflow: "auto", margin: 0, lineHeight: 1.8 }}>
 {`POST /control/ingest
 
