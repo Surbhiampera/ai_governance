@@ -12,7 +12,7 @@ dist/
 build/
 .venv/
 venv/
-
+.claude
 # Environment
 .env
 .env.local
