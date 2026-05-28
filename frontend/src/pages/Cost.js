@@ -81,6 +81,7 @@ function Cost() {
   const [decoratorRegistry, setDecoratorRegistry] = useState([]);
   const [decoratorInventory, setDecoratorInventory] = useState([]);
   const [decoratorUsage, setDecoratorUsage] = useState([]);
+  const [decoratorAuditOpen, setDecoratorAuditOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -575,110 +576,148 @@ function Cost() {
         ))}
       </section>
 
-      {/* ══════════ PROJECT INTELLIGENCE ══════════ */}
+      {/* ── Cost by Project ── */}
       <section className="panel">
         <div className="section-head">
           <div>
-            <h3 style={{ margin: 0 }}>
-              Project Intelligence
-              {selectedProject && (
-                <span
-                  style={{
-                    marginLeft: 10,
-                    fontSize: 13,
-                    fontWeight: 400,
-                    color: "var(--brand-secondary)",
-                    background: "rgba(124,112,174,0.1)",
-                    padding: "3px 10px",
-                    borderRadius: 20,
-                  }}
-                >
-                  {selectedProject}
-                </span>
-              )}
-            </h3>
+            <h3>Cost by Project</h3>
           </div>
         </div>
-
-        {/* KPI strip */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-            gap: 14,
-            marginBottom: 24,
-          }}
-        >
-          {[
-            {
-              label: "Registered Functions",
-              value:
-                decoratorStats?.registered_functions ??
-                decoratorRegistry.length,
-              icon: "ƒ",
-            },
-            {
-              label: "API Routes Tracked",
-              value: decoratorInventory.length,
-              icon: "⇄",
-            },
-            {
-              label: "Usage Records",
-              value: decoratorStats?.usage_records ?? decoratorUsage.length,
-              icon: "↗",
-            },
-            {
-              label: "Audit Log Entries",
-              value: decoratorStats?.audit_log_entries ?? decoratorLogs.length,
-              icon: "≡",
-            },
-          ].map((c) => (
-            <div
-              key={c.label}
-              style={{
-                padding: "16px 18px",
-                background: "var(--gray-50)",
-                border: "1px solid rgba(124,112,174,0.15)",
-                borderRadius: "var(--radius-md)",
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 3,
-                  background:
-                    "linear-gradient(90deg, var(--brand-primary), var(--brand-secondary))",
-                }}
-              />
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.14em",
-                  color: "var(--gray-500)",
-                  marginBottom: 8,
-                }}
-              >
-                {c.label}
-              </div>
-              <div
-                style={{
-                  fontSize: 26,
-                  fontWeight: 700,
-                  color: "var(--gray-700)",
-                }}
-              >
-                {typeof c.value === "number"
-                  ? c.value.toLocaleString()
-                  : (c.value ?? "—")}
-              </div>
-            </div>
-          ))}
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Org</th>
+                <th>Tools</th>
+                <th>Events</th>
+                <th>Tokens</th>
+                <th>LLM</th>
+                <th>Infra</th>
+                <th>External</th>
+                <th>Total Cost</th>
+                <th>Avg Latency</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byProject.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: "center", color: "var(--gray-500)" }}
+                  >
+                    No project data yet.
+                  </td>
+                </tr>
+              )}
+              {byProject.map((r) => {
+                const isExpanded = expandedProjectRow === r.project_id;
+                const bd = rowBreakdown[r.project_id];
+                return (
+                  <React.Fragment key={`${r.project_id}-${r.org_id}`}>
+                    <tr
+                      style={{
+                        cursor: "pointer",
+                        background: isExpanded
+                          ? "rgba(158,42,151,0.06)"
+                          : undefined,
+                      }}
+                      onClick={() => toggleProjectRow(r.project_id, r.org_id)}
+                    >
+                      <td>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, color: "var(--gray-500)", lineHeight: 1 }}>
+                            {isExpanded ? "▲" : "▶"}
+                          </span>
+                          <strong>{r.project_id}</strong>
+                        </span>
+                      </td>
+                      <td>{r.org_id}</td>
+                      <td>{r.tool_count}</td>
+                      <td>{num(r.total_events)}</td>
+                      <td>{num(r.total_tokens)}</td>
+                      <td>{money4(r.llm_cost)}</td>
+                      <td>{money4(r.infra_cost)}</td>
+                      <td>{money4(r.external_cost)}</td>
+                      <td><strong>{money(r.total_cost)}</strong></td>
+                      <td>{r.avg_latency_ms} ms</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={10} style={{ padding: 0, background: "rgba(158,42,151,0.03)" }}>
+                          {!bd ? (
+                            <div style={{ padding: "12px 24px", color: "var(--gray-500)", fontSize: 13 }}>
+                              Loading breakdown…
+                            </div>
+                          ) : bd.tools.length === 0 ? (
+                            <div style={{ padding: "12px 24px", color: "var(--gray-500)", fontSize: 13 }}>
+                              No tool data for this project.
+                            </div>
+                          ) : (
+                            <div style={{ padding: "12px 24px" }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-500)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                Tool-wise Cost Breakdown
+                              </div>
+                              <table style={{ width: "100%" }}>
+                                <thead>
+                                  <tr>
+                                    <th>Tool / Model</th>
+                                    <th>Vendor</th>
+                                    <th>Events</th>
+                                    <th>Tokens</th>
+                                    <th>LLM</th>
+                                    <th>Infra</th>
+                                    <th>External</th>
+                                    <th>Total</th>
+                                    <th>Share of Project</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {bd.tools.map((t) => (
+                                    <tr key={t.tool_name} style={{ cursor: "pointer" }} onClick={() => openToolModal(t, r.project_id, r.org_id)}>
+                                      <td><strong style={{ color: "var(--brand-primary)" }}>{t.tool_name}</strong></td>
+                                      <td>{t.vendor}</td>
+                                      <td>{num(t.total_events)}</td>
+                                      <td>{num(t.total_tokens)}</td>
+                                      <td>{money4(t.llm_cost)}</td>
+                                      <td>{money4(t.infra_cost)}</td>
+                                      <td>{money4(t.external_cost)}</td>
+                                      <td><strong>{money(t.total_cost)}</strong></td>
+                                      <td style={{ minWidth: 120 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <div style={{ flex: 1, background: "rgba(124,112,174,0.15)", borderRadius: 4, height: 6, overflow: "hidden" }}>
+                                            <div style={{ width: `${t.cost_share_pct}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
+                                          </div>
+                                          <span style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>
+                                            {t.cost_share_pct}%
+                                          </span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr style={{ borderTop: "1px solid rgba(124,112,174,0.2)" }}>
+                                    <td colSpan={3}><strong>Project Total</strong></td>
+                                    <td>{num(bd.total_tokens)}</td>
+                                    <td>{money4(bd.llm_cost)}</td>
+                                    <td>{money4(bd.infra_cost)}</td>
+                                    <td>{money4(bd.external_cost)}</td>
+                                    <td><strong>{money(bd.total_cost)}</strong></td>
+                                    <td><span style={{ fontSize: 12, color: "var(--gray-500)" }}>100%</span></td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -897,413 +936,6 @@ function Cost() {
           </div>
         </section>
       )}
-
-      {/* ── Spend Cap & Alerts ── */}
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Spend Cap &amp; Alerts</h3>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ fontSize: 13 }}
-            onClick={() => {
-              setShowAddCap(!showAddCap);
-              setAddCapMsg("");
-            }}
-          >
-            {showAddCap ? "Cancel" : "+ Add Spend Cap"}
-          </button>
-        </div>
-
-        {showAddCap && (
-          <form
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-              gap: 12,
-              padding: "14px 0 4px",
-              borderBottom: "1px solid var(--gray-100)",
-              marginBottom: 18,
-            }}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!addCapForm.org_id || !addCapForm.limit_amount) {
-                setAddCapMsg("Org ID and limit are required.");
-                return;
-              }
-              setAddCapSubmitting(true);
-              setAddCapMsg("");
-              try {
-                await createBudget({
-                  org_id: addCapForm.org_id,
-                  project_id: addCapForm.project_id || null,
-                  budget_type: addCapForm.budget_type,
-                  limit_amount: parseFloat(addCapForm.limit_amount),
-                  alert_threshold_percent:
-                    parseInt(addCapForm.alert_threshold_percent, 10) || 80,
-                });
-                setAddCapMsg("Spend cap created.");
-                setShowAddCap(false);
-                const r = await getCostSpendCapStatus(
-                  selectedOrg || undefined,
-                  selectedProject || undefined,
-                );
-                setSpendCaps(r.data || []);
-              } catch {
-                setAddCapMsg("Failed to create spend cap.");
-              } finally {
-                setAddCapSubmitting(false);
-              }
-            }}
-          >
-            <div className="field">
-              <label>Org ID *</label>
-              <input
-                value={addCapForm.org_id}
-                onChange={(e) =>
-                  setAddCapForm({ ...addCapForm, org_id: e.target.value })
-                }
-                placeholder="e.g. org-acme"
-              />
-            </div>
-            <div className="field">
-              <label>Project ID</label>
-              <input
-                value={addCapForm.project_id}
-                onChange={(e) =>
-                  setAddCapForm({ ...addCapForm, project_id: e.target.value })
-                }
-                placeholder="optional"
-              />
-            </div>
-            <div className="field">
-              <label>Type</label>
-              <select
-                value={addCapForm.budget_type}
-                onChange={(e) =>
-                  setAddCapForm({ ...addCapForm, budget_type: e.target.value })
-                }
-              >
-                <option value="monthly">Monthly</option>
-                <option value="daily">Daily</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Limit ($) *</label>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={addCapForm.limit_amount}
-                onChange={(e) =>
-                  setAddCapForm({ ...addCapForm, limit_amount: e.target.value })
-                }
-                placeholder="e.g. 500"
-              />
-            </div>
-            <div className="field">
-              <label>Alert at (%)</label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={addCapForm.alert_threshold_percent}
-                onChange={(e) =>
-                  setAddCapForm({
-                    ...addCapForm,
-                    alert_threshold_percent: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div
-              className="field"
-              style={{ display: "flex", alignItems: "flex-end" }}
-            >
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%" }}
-                disabled={addCapSubmitting}
-              >
-                {addCapSubmitting ? "Saving…" : "Save Cap"}
-              </button>
-            </div>
-            {addCapMsg && (
-              <div
-                style={{
-                  gridColumn: "1/-1",
-                  fontSize: 13,
-                  color: addCapMsg.includes("created")
-                    ? "var(--success)"
-                    : "#c0392b",
-                }}
-              >
-                {addCapMsg}
-              </div>
-            )}
-          </form>
-        )}
-
-        {spendCaps.length === 0 ? (
-          <div
-            style={{
-              color: "var(--gray-500)",
-              fontSize: 13,
-              padding: "12px 0",
-            }}
-          >
-            No spend caps configured yet. Click "+ Add Spend Cap" to set a daily
-            or monthly budget limit.
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {spendCaps.map((cap) => {
-              const STATUS_COLOR = {
-                ok: "#22c55e",
-                warning: "#f59e0b",
-                critical: "#f97316",
-                exceeded: "#ef4444",
-              };
-              const barColor = STATUS_COLOR[cap.status] || "#22c55e";
-              const fcPct =
-                cap.forecast != null
-                  ? Math.min((cap.forecast / cap.limit_amount) * 100, 150)
-                  : null;
-              const budgetAlerts = cap.active_alerts.filter(
-                (a) =>
-                  a.alert_type.startsWith("budget") ||
-                  a.alert_type.includes("cost"),
-              );
-              return (
-                <div
-                  key={cap.budget_id}
-                  style={{
-                    background: "var(--gray-50)",
-                    border: `1px solid ${cap.status === "ok" ? "rgba(124,112,174,0.18)" : barColor + "55"}`,
-                    borderRadius: 10,
-                    padding: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>
-                        {cap.org_id}
-                      </div>
-                      {cap.project_id && (
-                        <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                          {cap.project_id}
-                        </div>
-                      )}
-                    </div>
-                    <div
-                      style={{ display: "flex", gap: 6, alignItems: "center" }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          padding: "2px 8px",
-                          borderRadius: 12,
-                          background: "rgba(124,112,174,0.12)",
-                          color: "var(--gray-500)",
-                          fontWeight: 600,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {cap.budget_type}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          padding: "2px 8px",
-                          borderRadius: 12,
-                          background: barColor + "22",
-                          color: barColor,
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {cap.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>
-                    {money(cap.spent)}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--gray-500)",
-                      marginBottom: 8,
-                    }}
-                  >
-                    of {money(cap.limit_amount)} limit · {money(cap.remaining)}{" "}
-                    remaining
-                  </div>
-
-                  {/* Spend bar */}
-                  <div
-                    style={{
-                      background: "var(--gray-100)",
-                      borderRadius: 6,
-                      height: 8,
-                      overflow: "hidden",
-                      position: "relative",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${Math.min(cap.pct_used, 100)}%`,
-                        height: "100%",
-                        background: barColor,
-                        borderRadius: 6,
-                        transition: "width 0.4s",
-                      }}
-                    />
-                    {fcPct != null && fcPct > cap.pct_used && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: `${Math.min(cap.pct_used, 100)}%`,
-                          width: `${Math.min(fcPct - cap.pct_used, 100 - Math.min(cap.pct_used, 100))}%`,
-                          height: "100%",
-                          background: "rgba(239,68,68,0.25)",
-                          borderRight: "2px dashed #ef4444",
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 12,
-                      color: "var(--gray-500)",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span>Used {cap.pct_used.toFixed(1)}%</span>
-                    {cap.forecast != null && (
-                      <span
-                        style={{
-                          color:
-                            cap.forecast > cap.limit_amount
-                              ? "#ef4444"
-                              : "var(--gray-500)",
-                        }}
-                      >
-                        Forecast {money(cap.forecast)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Alert threshold marker */}
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--gray-500)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Alert threshold: <strong>{cap.threshold_pct}%</strong>
-                    {cap.today_tokens > 0 && (
-                      <span style={{ marginLeft: 8 }}>
-                        · {num(cap.today_tokens)} tokens today
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Active alerts */}
-                  {budgetAlerts.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                      }}
-                    >
-                      {budgetAlerts.slice(0, 3).map((a, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            fontSize: 11,
-                            padding: "4px 8px",
-                            borderRadius: 6,
-                            background:
-                              a.severity === "critical"
-                                ? "#fef2f2"
-                                : a.severity === "high"
-                                  ? "#fff7ed"
-                                  : "#fefce8",
-                            color:
-                              a.severity === "critical"
-                                ? "#ef4444"
-                                : a.severity === "high"
-                                  ? "#f97316"
-                                  : "#ca8a04",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {a.message}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: 10,
-                      fontSize: 11,
-                      padding: "3px 10px",
-                      border: "1px solid var(--gray-200)",
-                      borderRadius: 6,
-                      background: "none",
-                      color: "var(--gray-500)",
-                      cursor: "pointer",
-                    }}
-                    onClick={async () => {
-                      if (
-                        !window.confirm(`Delete spend cap for ${cap.org_id}?`)
-                      )
-                        return;
-                      try {
-                        await deleteBudget(cap.budget_id);
-                        const r = await getCostSpendCapStatus(
-                          selectedOrg || undefined,
-                          selectedProject || undefined,
-                        );
-                        setSpendCaps(r.data || []);
-                      } catch {}
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* ── Project Cost Summary (shown when a project is selected) ── */}
       {projectBreakdown && (
@@ -1542,28 +1174,58 @@ function Cost() {
         </section>
       )}
 
-      {/* ── Decorator Audit ── */}
+      {/* ── Decorator Audit (collapsible) ── */}
       {decoratorLogs.length > 0 && (
         <section className="panel">
-          <div className="section-head">
+          {/* Always-visible header: click to expand/collapse */}
+          <div
+            className="section-head"
+            style={{ cursor: "pointer", userSelect: "none" }}
+            onClick={() => setDecoratorAuditOpen((o) => !o)}
+          >
             <div>
-              <h3>Decorator Audit</h3>
+              <h3 style={{ margin: 0 }}>
+                Decorator Audit
+                <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: "var(--gray-500)" }}>
+                  ({decoratorLogs.length} entries)
+                </span>
+              </h3>
+              {/* per-project count chips */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {Object.entries(
+                  decoratorLogs.reduce((acc, r) => {
+                    const k = r.project_id || "(no project)";
+                    acc[k] = (acc[k] || 0) + 1;
+                    return acc;
+                  }, {})
+                ).map(([proj, cnt]) => (
+                  <span
+                    key={proj}
+                    style={{
+                      fontSize: 11,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background: "rgba(124,112,174,0.12)",
+                      color: "var(--brand-secondary)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {proj}: {cnt}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {["logs", "summary"].map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  className={`btn ${decoratorAuditTab === tab ? "btn-primary" : "btn-ghost"}`}
-                  style={{ fontSize: 12, padding: "5px 14px" }}
-                  onClick={() => setDecoratorAuditTab(tab)}
-                >
-                  {tab === "logs" ? "Decorator Audit Logs" : "Decorator Audit"}
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: "4px 14px", pointerEvents: "none" }}
+            >
+              {decoratorAuditOpen ? "Collapse ▲" : "Expand ▼"}
+            </button>
           </div>
 
+          {decoratorAuditOpen && (
+            <>
           {/* ── Tab: Decorator Audit Logs ── */}
           {decoratorAuditTab === "logs" &&
             (() => {
@@ -1608,6 +1270,7 @@ function Cost() {
                           <th>Input Preview</th>
                           <th>Output Preview</th>
                           <th>PII</th>
+                          <th>Token Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1641,7 +1304,11 @@ function Cost() {
                               <td>{fmtN(r.completion_tokens)}</td>
                               <td>{fmtN(r.total_tokens)}</td>
                               <td>{fmtMs(r.latency_ms)}</td>
-                              <td>{fmtUsd(r.estimated_cost_usd)}</td>
+                              <td>
+                                {Number(r.prompt_tokens || 0) === 0 && Number(r.completion_tokens || 0) === 0
+                                  ? "$0.000000"
+                                  : fmtUsd(r.estimated_cost_usd)}
+                              </td>
                               <td style={{ fontSize: 12 }}>
                                 {fmtBytes(r.input_size_bytes)}
                               </td>
@@ -1709,6 +1376,59 @@ function Cost() {
                                   </span>
                                 )}
                               </td>
+                              <td style={{ whiteSpace: "nowrap" }}>
+                                {r.token_capture_status === "missing" && r.model_name ? (
+                                  <span
+                                    title="Check decorator usage on this tool"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: 11,
+                                      padding: "2px 7px",
+                                      borderRadius: 10,
+                                      background: "#fff7ed",
+                                      color: "#ea580c",
+                                      fontWeight: 600,
+                                      cursor: "default",
+                                    }}
+                                  >
+                                    ⚠ Tokens not captured
+                                  </span>
+                                ) : r.model_in_catalogue === false ? (
+                                  <span
+                                    title="Add to pricing catalogue for cost tracking"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: 11,
+                                      padding: "2px 7px",
+                                      borderRadius: 10,
+                                      background: "#fef2f2",
+                                      color: "#dc2626",
+                                      fontWeight: 600,
+                                      cursor: "default",
+                                    }}
+                                  >
+                                    ⚑ Unknown model
+                                  </span>
+                                ) : r.token_capture_status === "captured" ? (
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: 11,
+                                      color: "#16a34a",
+                                    }}
+                                  >
+                                    ● OK
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 11, color: "var(--gray-400)" }}>—</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1761,7 +1481,7 @@ function Cost() {
                                 <td colSpan={2}>
                                   <strong>{fmtUsd(totCost)}</strong>
                                 </td>
-                                <td colSpan={5} />
+                                <td colSpan={6} />
                               </tr>
                             </tfoot>
                           );
@@ -1865,6 +1585,8 @@ function Cost() {
                 </div>
               );
             })()}
+            </>
+          )}
         </section>
       )}
 
@@ -2009,6 +1731,7 @@ function Cost() {
             }}
           >
             {breakdown.components.map((c, i) => {
+              if (c.amount === 0) return null;
               const colors = ["#9E2A97", "#3FB6D4", "#F2A33C"];
               return (
                 <div
@@ -2049,254 +1772,6 @@ function Cost() {
         money4={money4}
         num={num}
       />
-
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Cost by Project</h3>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Project</th>
-                <th>Org</th>
-                <th>Tools</th>
-                <th>Events</th>
-                <th>Tokens</th>
-                <th>LLM</th>
-                <th>Infra</th>
-                <th>External</th>
-                <th>Total Cost</th>
-                <th>Avg Latency</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byProject.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={10}
-                    style={{ textAlign: "center", color: "var(--gray-500)" }}
-                  >
-                    No project data yet.
-                  </td>
-                </tr>
-              )}
-              {byProject.map((r) => {
-                const isExpanded = expandedProjectRow === r.project_id;
-                const bd = rowBreakdown[r.project_id];
-                return (
-                  <React.Fragment key={`${r.project_id}-${r.org_id}`}>
-                    <tr
-                      style={{
-                        cursor: "pointer",
-                        background: isExpanded
-                          ? "rgba(158,42,151,0.06)"
-                          : undefined,
-                      }}
-                      onClick={() => toggleProjectRow(r.project_id, r.org_id)}
-                    >
-                      <td>
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: "var(--gray-500)",
-                              lineHeight: 1,
-                            }}
-                          >
-                            {isExpanded ? "▲" : "▶"}
-                          </span>
-                          <strong>{r.project_id}</strong>
-                        </span>
-                      </td>
-                      <td>{r.org_id}</td>
-                      <td>{r.tool_count}</td>
-                      <td>{num(r.total_events)}</td>
-                      <td>{num(r.total_tokens)}</td>
-                      <td>{money4(r.llm_cost)}</td>
-                      <td>{money4(r.infra_cost)}</td>
-                      <td>{money4(r.external_cost)}</td>
-                      <td>
-                        <strong>{money(r.total_cost)}</strong>
-                      </td>
-                      <td>{r.avg_latency_ms} ms</td>
-                    </tr>
-
-                    {isExpanded && (
-                      <tr>
-                        <td
-                          colSpan={10}
-                          style={{
-                            padding: 0,
-                            background: "rgba(158,42,151,0.03)",
-                          }}
-                        >
-                          {!bd ? (
-                            <div
-                              style={{
-                                padding: "12px 24px",
-                                color: "var(--gray-500)",
-                                fontSize: 13,
-                              }}
-                            >
-                              Loading breakdown…
-                            </div>
-                          ) : bd.tools.length === 0 ? (
-                            <div
-                              style={{
-                                padding: "12px 24px",
-                                color: "var(--gray-500)",
-                                fontSize: 13,
-                              }}
-                            >
-                              No tool data for this project.
-                            </div>
-                          ) : (
-                            <div style={{ padding: "12px 24px" }}>
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: "var(--gray-500)",
-                                  marginBottom: 8,
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.05em",
-                                }}
-                              >
-                                Tool-wise Cost Breakdown
-                              </div>
-                              <table style={{ width: "100%" }}>
-                                <thead>
-                                  <tr>
-                                    <th>Tool / Model</th>
-                                    <th>Vendor</th>
-                                    <th>Events</th>
-                                    <th>Tokens</th>
-                                    <th>LLM</th>
-                                    <th>Infra</th>
-                                    <th>External</th>
-                                    <th>Total</th>
-                                    <th>Share of Project</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {bd.tools.map((t) => (
-                                    <tr
-                                      key={t.tool_name}
-                                      style={{ cursor: "pointer" }}
-                                      onClick={() =>
-                                        openToolModal(t, r.project_id, r.org_id)
-                                      }
-                                    >
-                                      <td>
-                                        <strong
-                                          style={{
-                                            color: "var(--brand-primary)",
-                                          }}
-                                        >
-                                          {t.tool_name}
-                                        </strong>
-                                      </td>
-                                      <td>{t.vendor}</td>
-                                      <td>{num(t.total_events)}</td>
-                                      <td>{num(t.total_tokens)}</td>
-                                      <td>{money4(t.llm_cost)}</td>
-                                      <td>{money4(t.infra_cost)}</td>
-                                      <td>{money4(t.external_cost)}</td>
-                                      <td>
-                                        <strong>{money(t.total_cost)}</strong>
-                                      </td>
-                                      <td style={{ minWidth: 120 }}>
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 6,
-                                          }}
-                                        >
-                                          <div
-                                            style={{
-                                              flex: 1,
-                                              background:
-                                                "rgba(124,112,174,0.15)",
-                                              borderRadius: 4,
-                                              height: 6,
-                                              overflow: "hidden",
-                                            }}
-                                          >
-                                            <div
-                                              style={{
-                                                width: `${t.cost_share_pct}%`,
-                                                height: "100%",
-                                                background: "#9E2A97",
-                                                borderRadius: 4,
-                                              }}
-                                            />
-                                          </div>
-                                          <span
-                                            style={{
-                                              fontSize: 12,
-                                              color: "var(--gray-500)",
-                                              whiteSpace: "nowrap",
-                                            }}
-                                          >
-                                            {t.cost_share_pct}%
-                                          </span>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                <tfoot>
-                                  <tr
-                                    style={{
-                                      borderTop:
-                                        "1px solid rgba(124,112,174,0.2)",
-                                    }}
-                                  >
-                                    <td colSpan={3}>
-                                      <strong>Project Total</strong>
-                                    </td>
-                                    <td>{num(bd.total_tokens)}</td>
-                                    <td>{money4(bd.llm_cost)}</td>
-                                    <td>{money4(bd.infra_cost)}</td>
-                                    <td>{money4(bd.external_cost)}</td>
-                                    <td>
-                                      <strong>{money(bd.total_cost)}</strong>
-                                    </td>
-                                    <td>
-                                      <span
-                                        style={{
-                                          fontSize: 12,
-                                          color: "var(--gray-500)",
-                                        }}
-                                      >
-                                        100%
-                                      </span>
-                                    </td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <section className="two-column">
         <div className="panel">
@@ -3194,9 +2669,17 @@ function CostByToolModelSection({
     selectedProject || "",
   );
 
-  // Build tool → [project_id, ...] map from decorator inventory + usage
+  // Build tool → Set<project_id> map from byTool API response (authoritative)
+  // supplemented by decorator inventory + usage for decorator-tracked tools
   const toolProjectMap = React.useMemo(() => {
     const map = {};
+    // Primary: project_ids returned directly from /costs/by-tool
+    (byTool || []).forEach((r) => {
+      if (!r.tool_name) return;
+      if (!map[r.tool_name]) map[r.tool_name] = new Set();
+      (r.project_ids || []).forEach((p) => map[r.tool_name].add(p));
+    });
+    // Supplement: decorator inventory + usage for any additional linkage
     [...(decoratorInventory || []), ...(decoratorUsage || [])].forEach((r) => {
       const t = r.tool_name || r.function_name;
       if (!t) return;
@@ -3204,17 +2687,20 @@ function CostByToolModelSection({
       if (r.project_id) map[t].add(r.project_id);
     });
     return map;
-  }, [decoratorInventory, decoratorUsage]);
+  }, [byTool, decoratorInventory, decoratorUsage]);
 
-  // Unique project list from inventory (for the inline filter dropdown)
+  // Unique project list: from byTool project_ids + decorator data + projects prop
   const knownProjects = React.useMemo(() => {
     const s = new Set();
+    (byTool || []).forEach((r) =>
+      (r.project_ids || []).forEach((p) => s.add(p)),
+    );
     [...(decoratorInventory || []), ...(decoratorUsage || [])].forEach((r) => {
       if (r.project_id) s.add(r.project_id);
     });
     projects.forEach((p) => p.id && s.add(p.id));
     return [...s].sort();
-  }, [decoratorInventory, decoratorUsage, projects]);
+  }, [byTool, decoratorInventory, decoratorUsage, projects]);
 
   // Helper: project badge(s) for a tool
   const projectBadges = (toolName) => {

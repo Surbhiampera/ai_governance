@@ -2,7 +2,7 @@ import axios from "axios";
 
 const API = axios.create({
   baseURL: process.env.REACT_APP_API_URL || "https://aigovernance-backend-1.onrender.com",
-  timeout: 8000,
+  timeout: 60000,
 });
 
 // ─────────────────────── Summary / Dashboard ───────────────────────
