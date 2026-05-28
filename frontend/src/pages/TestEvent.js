@@ -727,12 +727,16 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
   const [deletingOrg, setDeletingOrg] = useState(null);
   const [deletingProject, setDeletingProject] = useState(null);
   const [deletingKey, setDeletingKey] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const doDelete = async (fn, setDeleting, id) => {
     setDeleting(id);
+    setDeleteError("");
     try {
       await fn(id);
       await onRefresh();
+    } catch (err) {
+      setDeleteError(err?.response?.data?.detail || "Delete failed. The resource may have dependent records.");
     } finally {
       setDeleting(null);
     }
@@ -776,6 +780,7 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
       <h3 style={{ margin: 0, color: "var(--gray-700)" }}>
         Registered Tenants
       </h3>
+      {deleteError && <div className="error-message">{deleteError}</div>}
       {sections.map(
         ({ label, items, deleting, setDeleting, deleteFn, empty }) => (
           <div key={label} className="table-wrap">
