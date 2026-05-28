@@ -135,7 +135,6 @@ function OrgStep({ onNext }) {
     id: "",
     org_name: "",
     plan_type: "",
-    budget_limit: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -156,8 +155,6 @@ function OrgStep({ onNext }) {
     try {
       const payload = { id: form.id.trim(), org_name: form.org_name.trim() };
       if (form.plan_type.trim()) payload.plan_type = form.plan_type.trim();
-      if (form.budget_limit.trim())
-        payload.budget_limit = parseFloat(form.budget_limit);
       const res = await createOrganization(payload);
       onNext(res.data);
     } catch (err) {
@@ -202,19 +199,6 @@ function OrgStep({ onNext }) {
               value={form.plan_type}
               onChange={(e) => set("plan_type", e.target.value)}
               placeholder="enterprise"
-            />
-          </div>
-          <div className="field">
-            <label>
-              Budget Limit <span style={{ opacity: 0.6 }}>(USD, optional)</span>
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.budget_limit}
-              onChange={(e) => set("budget_limit", e.target.value)}
-              placeholder="5000.00"
             />
           </div>
         </div>

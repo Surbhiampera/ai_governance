@@ -1105,110 +1105,19 @@ function Cost() {
         </section>
       ) : null}
 
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h3>Cost by Tool &amp; Model</h3>
-          </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {[{ key: "tool", label: "By Tool" }, { key: "model", label: "By Model" }].map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                className={`btn ${costBreakdownTab === key ? "btn-primary" : "btn-ghost"}`}
-                style={{ fontSize: 12, padding: "5px 14px" }}
-                onClick={() => setCostBreakdownTab(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {costBreakdownTab === "tool" && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tool</th>
-                  <th>Vendor</th>
-                  <th>Cost Model</th>
-                  <th>Events</th>
-                  <th>Tokens</th>
-                  <th>LLM</th>
-                  <th>Infra</th>
-                  <th>External</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byTool.length === 0 && (
-                  <tr>
-                    <td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)" }}>
-                      No tool data yet.
-                    </td>
-                  </tr>
-                )}
-                {byTool.map((r) => (
-                  <tr key={r.tool_name}>
-                    <td><strong>{r.tool_name}</strong></td>
-                    <td>{r.vendor}</td>
-                    <td>{r.cost_model}</td>
-                    <td>{num(r.total_events)}</td>
-                    <td>{num(r.total_tokens)}</td>
-                    <td>{money4(r.llm_cost)}</td>
-                    <td>{money4(r.infra_cost)}</td>
-                    <td>{money4(r.external_cost)}</td>
-                    <td><strong>{money(r.total_cost)}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {costBreakdownTab === "model" && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Provider</th>
-                  <th>Events</th>
-                  <th>Tokens In</th>
-                  <th>Tokens Out</th>
-                  <th>Total Tokens</th>
-                  <th>Total Cost</th>
-                  <th>Avg Latency</th>
-                  <th>Success %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byModel.length === 0 && (
-                  <tr>
-                    <td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)" }}>
-                      No model data yet.
-                    </td>
-                  </tr>
-                )}
-                {byModel.map((r) => (
-                  <tr key={`${r.model_name}-${r.provider}`}>
-                    <td><strong>{r.model_name}</strong></td>
-                    <td>{r.provider}</td>
-                    <td>{num(r.total_events)}</td>
-                    <td>{num(r.prompt_tokens)}</td>
-                    <td>{num(r.completion_tokens)}</td>
-                    <td>{num(r.total_tokens)}</td>
-                    <td>{money(r.total_cost)}</td>
-                    <td>{r.avg_latency_ms} ms</td>
-                    <td>{r.success_rate}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <CostByToolModelSection
+        byTool={byTool}
+        byModel={byModel}
+        decoratorInventory={decoratorInventory}
+        decoratorUsage={decoratorUsage}
+        costBreakdownTab={costBreakdownTab}
+        setCostBreakdownTab={setCostBreakdownTab}
+        projects={projects}
+        selectedProject={selectedProject}
+        money={money}
+        money4={money4}
+        num={num}
+      />
 
       <section className="panel">
         <div className="section-head">
@@ -1749,6 +1658,317 @@ function Cost() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Cost by Tool & Model ─────────────────────────────────────────────────────
+function CostByToolModelSection({
+  byTool, byModel, decoratorInventory, decoratorUsage,
+  costBreakdownTab, setCostBreakdownTab,
+  projects, selectedProject,
+  money, money4, num,
+}) {
+  const [toolProjectFilter, setToolProjectFilter] = useState(selectedProject || "");
+  const [modelProjectFilter, setModelProjectFilter] = useState(selectedProject || "");
+
+  // Build tool → [project_id, ...] map from decorator inventory + usage
+  const toolProjectMap = React.useMemo(() => {
+    const map = {};
+    [...(decoratorInventory || []), ...(decoratorUsage || [])].forEach((r) => {
+      const t = r.tool_name || r.function_name;
+      if (!t) return;
+      if (!map[t]) map[t] = new Set();
+      if (r.project_id) map[t].add(r.project_id);
+    });
+    return map;
+  }, [decoratorInventory, decoratorUsage]);
+
+  // Unique project list from inventory (for the inline filter dropdown)
+  const knownProjects = React.useMemo(() => {
+    const s = new Set();
+    [...(decoratorInventory || []), ...(decoratorUsage || [])].forEach((r) => {
+      if (r.project_id) s.add(r.project_id);
+    });
+    projects.forEach((p) => p.id && s.add(p.id));
+    return [...s].sort();
+  }, [decoratorInventory, decoratorUsage, projects]);
+
+  // Helper: project badge(s) for a tool
+  const projectBadges = (toolName) => {
+    const projs = [...(toolProjectMap[toolName] || [])];
+    if (projs.length === 0) return <span style={{ color: "var(--gray-300)" }}>—</span>;
+    return projs.map((p) => (
+      <span key={p} style={{
+        display: "inline-block", fontSize: 11, padding: "1px 7px", borderRadius: 10,
+        background: "rgba(124,112,174,0.12)", color: "var(--brand-secondary)",
+        fontWeight: 600, marginRight: 3,
+      }}>{p}</span>
+    ));
+  };
+
+  // Filter by-tool rows by the inline project filter
+  const filteredByTool = toolProjectFilter
+    ? byTool.filter((r) => {
+        const projs = toolProjectMap[r.tool_name] || new Set();
+        return projs.has(toolProjectFilter);
+      })
+    : byTool;
+
+  // Build model → [project_id, ...] map from usage
+  const modelProjectMap = React.useMemo(() => {
+    const map = {};
+    (decoratorUsage || []).forEach((r) => {
+      if (!r.model_name) return;
+      if (!map[r.model_name]) map[r.model_name] = new Set();
+      if (r.project_id) map[r.model_name].add(r.project_id);
+    });
+    return map;
+  }, [decoratorUsage]);
+
+  const filteredByModel = modelProjectFilter
+    ? byModel.filter((r) => {
+        const projs = modelProjectMap[r.model_name] || new Set();
+        return projs.has(modelProjectFilter);
+      })
+    : byModel;
+
+  // Totals for current tool view
+  const toolTotals = filteredByTool.reduce(
+    (s, r) => ({
+      events: s.events + Number(r.total_events || 0),
+      tokens: s.tokens + Number(r.total_tokens || 0),
+      llm:    s.llm    + Number(r.llm_cost    || 0),
+      infra:  s.infra  + Number(r.infra_cost  || 0),
+      ext:    s.ext    + Number(r.external_cost || 0),
+      total:  s.total  + Number(r.total_cost  || 0),
+    }),
+    { events: 0, tokens: 0, llm: 0, infra: 0, ext: 0, total: 0 }
+  );
+
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <div>
+          <h3>Cost by Tool &amp; Model</h3>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--gray-500)" }}>
+            Cost is calculated from the platform's <code>model_pricing</code> table.
+            Use the Project filter to see which tool belongs to which project.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 4 }}>
+          {[{ key: "tool", label: "By Tool" }, { key: "model", label: "By Model" }].map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              className={`btn ${costBreakdownTab === key ? "btn-primary" : "btn-ghost"}`}
+              style={{ fontSize: 12, padding: "5px 14px" }}
+              onClick={() => setCostBreakdownTab(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── By Tool ── */}
+      {costBreakdownTab === "tool" && (
+        <>
+          {/* inline project filter */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <div className="field" style={{ minWidth: 200, marginBottom: 0 }}>
+              <label style={{ fontSize: 12 }}>Filter by Project</label>
+              <select
+                value={toolProjectFilter}
+                onChange={(e) => setToolProjectFilter(e.target.value)}
+                style={{ fontSize: 13 }}
+              >
+                <option value="">All Projects</option>
+                {knownProjects.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            {toolProjectFilter && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12, alignSelf: "flex-end" }}
+                onClick={() => setToolProjectFilter("")}
+              >
+                Clear
+              </button>
+            )}
+            {filteredByTool.length > 0 && (
+              <div style={{ alignSelf: "flex-end", fontSize: 13, color: "var(--gray-500)" }}>
+                {filteredByTool.length} tool{filteredByTool.length !== 1 ? "s" : ""} ·
+                Total <strong>{money(toolTotals.total)}</strong>
+              </div>
+            )}
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tool</th>
+                  <th>Project</th>
+                  <th>Vendor</th>
+                  <th>Cost Model</th>
+                  <th>Events</th>
+                  <th>Tokens</th>
+                  <th>LLM</th>
+                  <th>Infra</th>
+                  <th>External</th>
+                  <th>Total</th>
+                  <th>Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredByTool.length === 0 && (
+                  <tr>
+                    <td colSpan={11} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                      {byTool.length === 0
+                        ? "No tool data yet."
+                        : `No tools found for project "${toolProjectFilter}".`}
+                    </td>
+                  </tr>
+                )}
+                {filteredByTool.map((r) => {
+                  const sharePct = toolTotals.total > 0
+                    ? ((Number(r.total_cost || 0) / toolTotals.total) * 100).toFixed(1)
+                    : "0.0";
+                  return (
+                    <tr key={r.tool_name}>
+                      <td><strong>{r.tool_name}</strong></td>
+                      <td style={{ minWidth: 120 }}>{projectBadges(r.tool_name)}</td>
+                      <td>{r.vendor || <span style={{ color: "var(--gray-300)" }}>—</span>}</td>
+                      <td style={{ fontSize: 12 }}>{r.cost_model || <span style={{ color: "var(--gray-300)" }}>—</span>}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.total_events)}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.total_tokens)}</td>
+                      <td style={{ textAlign: "right" }}>{money4(r.llm_cost)}</td>
+                      <td style={{ textAlign: "right" }}>{money4(r.infra_cost)}</td>
+                      <td style={{ textAlign: "right" }}>{money4(r.external_cost)}</td>
+                      <td style={{ textAlign: "right" }}><strong>{money(r.total_cost)}</strong></td>
+                      <td style={{ minWidth: 100 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ flex: 1, background: "rgba(124,112,174,0.12)", borderRadius: 4, height: 5, overflow: "hidden" }}>
+                            <div style={{ width: `${sharePct}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{sharePct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {filteredByTool.length > 1 && (
+                <tfoot>
+                  <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)", fontWeight: 700 }}>
+                    <td colSpan={2}>Total ({filteredByTool.length} tools)</td>
+                    <td colSpan={2} />
+                    <td style={{ textAlign: "right" }}>{num(toolTotals.events)}</td>
+                    <td style={{ textAlign: "right" }}>{num(toolTotals.tokens)}</td>
+                    <td style={{ textAlign: "right" }}>{money4(toolTotals.llm)}</td>
+                    <td style={{ textAlign: "right" }}>{money4(toolTotals.infra)}</td>
+                    <td style={{ textAlign: "right" }}>{money4(toolTotals.ext)}</td>
+                    <td style={{ textAlign: "right" }}>{money(toolTotals.total)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── By Model ── */}
+      {costBreakdownTab === "model" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <div className="field" style={{ minWidth: 200, marginBottom: 0 }}>
+              <label style={{ fontSize: 12 }}>Filter by Project</label>
+              <select
+                value={modelProjectFilter}
+                onChange={(e) => setModelProjectFilter(e.target.value)}
+                style={{ fontSize: 13 }}
+              >
+                <option value="">All Projects</option>
+                {knownProjects.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            {modelProjectFilter && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12, alignSelf: "flex-end" }}
+                onClick={() => setModelProjectFilter("")}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Project</th>
+                  <th>Provider</th>
+                  <th>Events</th>
+                  <th>Tokens In</th>
+                  <th>Tokens Out</th>
+                  <th>Total Tokens</th>
+                  <th>Total Cost</th>
+                  <th>Avg Latency</th>
+                  <th>Success %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredByModel.length === 0 && (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                      {byModel.length === 0
+                        ? "No model data yet."
+                        : `No models found for project "${modelProjectFilter}".`}
+                    </td>
+                  </tr>
+                )}
+                {filteredByModel.map((r) => {
+                  const projs = [...(modelProjectMap[r.model_name] || [])];
+                  return (
+                    <tr key={`${r.model_name}-${r.provider}`}>
+                      <td><strong>{r.model_name}</strong></td>
+                      <td style={{ minWidth: 120 }}>
+                        {projs.length === 0
+                          ? <span style={{ color: "var(--gray-300)" }}>—</span>
+                          : projs.map((p) => (
+                            <span key={p} style={{
+                              display: "inline-block", fontSize: 11, padding: "1px 7px", borderRadius: 10,
+                              background: "rgba(124,112,174,0.12)", color: "var(--brand-secondary)",
+                              fontWeight: 600, marginRight: 3,
+                            }}>{p}</span>
+                          ))}
+                      </td>
+                      <td>{r.provider || <span style={{ color: "var(--gray-300)" }}>—</span>}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.total_events)}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.prompt_tokens)}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.completion_tokens)}</td>
+                      <td style={{ textAlign: "right" }}>{num(r.total_tokens)}</td>
+                      <td style={{ textAlign: "right" }}><strong>{money(r.total_cost)}</strong></td>
+                      <td style={{ textAlign: "right" }}>{r.avg_latency_ms} ms</td>
+                      <td style={{ textAlign: "right" }}>{r.success_rate}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
