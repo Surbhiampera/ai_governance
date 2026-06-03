@@ -25,6 +25,7 @@ import {
   getDecoratorRegistrations,
   getDecoratorInventory,
   getDecoratorUsage,
+  assignToolProject,
 } from "../api";
 import { RANGE_OPTIONS, rangeToDays } from "../utils/filters";
 
@@ -82,6 +83,8 @@ function Cost() {
   const [decoratorInventory, setDecoratorInventory] = useState([]);
   const [decoratorUsage, setDecoratorUsage] = useState([]);
   const [decoratorAuditOpen, setDecoratorAuditOpen] = useState(false);
+  const [assigningProject, setAssigningProject] = useState(false);
+  const [assignProjectVal, setAssignProjectVal] = useState("");
 
   const load = async () => {
     try {
@@ -245,6 +248,9 @@ function Cost() {
     setToolModal({ tool, projectId, orgId });
     setToolModalTab("overview");
     setInjectMsg("");
+    setAssignProjectVal(
+      (tool.project_ids && tool.project_ids[0]) || projectId || ""
+    );
     setInjectForm({
       provider: "",
       model_name: tool.tool_name,
@@ -462,6 +468,19 @@ function Cost() {
   ];
 
   const activeMetricData = metricCards.find((card) => card.id === activeMetric);
+
+  const toolProjectsMap = byTool.reduce((acc, r) => {
+    if (r.tool_name) acc[r.tool_name] = r.project_ids || [];
+    return acc;
+  }, {});
+
+  // Flat project_id → resolved name map for the Per-Tool Daily table
+  const dailyProjectNameMap = byTool.reduce((acc, r) => {
+    Object.entries(r.project_names || {}).forEach(([id, name]) => {
+      acc[id] = name;
+    });
+    return acc;
+  }, {});
 
   return (
     <div className="page-shell">
@@ -1870,6 +1889,7 @@ function Cost() {
               <tr>
                 <th>Date</th>
                 <th>Tool</th>
+                <th>Project</th>
                 <th>Input Tokens</th>
                 <th>Output Tokens</th>
                 <th>Total Tokens</th>
@@ -1884,7 +1904,7 @@ function Cost() {
               ).length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={{ textAlign: "center", color: "var(--gray-500)" }}
                   >
                     No per-tool daily data yet.
@@ -1906,6 +1926,36 @@ function Cost() {
                         <td style={{ whiteSpace: "nowrap" }}>{r.date}</td>
                         <td>
                           <strong>{r.tool_name}</strong>
+                        </td>
+                        <td style={{ minWidth: 120 }}>
+                          {(r.project_id
+                            ? [r.project_id]
+                            : toolProjectsMap[r.tool_name] || []
+                          ).length === 0 ? (
+                            <span style={{ color: "var(--gray-300)", fontSize: 12 }}>—</span>
+                          ) : (
+                            (r.project_id
+                              ? [r.project_id]
+                              : toolProjectsMap[r.tool_name] || []
+                            ).map((p) => (
+                              <span
+                                key={p}
+                                title={p}
+                                style={{
+                                  display: "inline-block",
+                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  borderRadius: 10,
+                                  background: "rgba(124,112,174,0.12)",
+                                  color: "var(--brand-secondary)",
+                                  fontWeight: 600,
+                                  marginRight: 3,
+                                }}
+                              >
+                                {dailyProjectNameMap[p] || p}
+                              </span>
+                            ))
+                          )}
                         </td>
                         <td>
                           <div
@@ -2012,7 +2062,7 @@ function Cost() {
                     <tr
                       style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}
                     >
-                      <td colSpan={2}>
+                      <td colSpan={3}>
                         <strong>14-day Total</strong>
                       </td>
                       <td>
@@ -2613,6 +2663,71 @@ function Cost() {
                     </div>
                   ))}
                 </div>
+                {/* Project assignment */}
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "12px 14px",
+                    background: "var(--gray-50)",
+                    borderRadius: 8,
+                    border: "1px solid rgba(124,112,174,0.2)",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
+                    Assign Project
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select
+                      value={assignProjectVal}
+                      onChange={(e) => setAssignProjectVal(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(124,112,174,0.3)",
+                        fontSize: 13,
+                        background: "white",
+                      }}
+                    >
+                      <option value="">— No project —</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label || p.id}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={assigningProject}
+                      onClick={async () => {
+                        setAssigningProject(true);
+                        try {
+                          await assignToolProject(
+                            toolModal.tool.tool_name,
+                            assignProjectVal || null
+                          );
+                          // Refresh byTool data so badge updates immediately
+                          const scope = { org_id: selectedOrg || undefined };
+                          const res = await API.get("/costs/by-tool", { params: scope });
+                          setByTool(res.data || []);
+                        } catch {}
+                        setAssigningProject(false);
+                      }}
+                      style={{
+                        padding: "6px 16px",
+                        borderRadius: 6,
+                        background: "var(--brand-primary)",
+                        color: "white",
+                        border: "none",
+                        cursor: assigningProject ? "not-allowed" : "pointer",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {assigningProject ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+
                 <div
                   style={{
                     fontSize: 13,
@@ -2669,8 +2784,8 @@ function CostByToolModelSection({
     selectedProject || "",
   );
 
-  // Build tool → Set<project_id> map from byTool API response (authoritative)
-  // supplemented by decorator inventory + usage for decorator-tracked tools
+  // Build tool → Set<project_id> map and a global project_id → name lookup
+  // from byTool API response (authoritative), supplemented by decorator data
   const toolProjectMap = React.useMemo(() => {
     const map = {};
     // Primary: project_ids returned directly from /costs/by-tool
@@ -2689,6 +2804,21 @@ function CostByToolModelSection({
     return map;
   }, [byTool, decoratorInventory, decoratorUsage]);
 
+  // Global project_id → resolved display name (from backend project_names dict)
+  const projectNameMap = React.useMemo(() => {
+    const m = {};
+    (byTool || []).forEach((r) => {
+      Object.entries(r.project_names || {}).forEach(([id, name]) => {
+        m[id] = name;
+      });
+    });
+    // Supplement from projects prop (id → label)
+    (projects || []).forEach((p) => {
+      if (p.id && p.label) m[p.id] = p.label;
+    });
+    return m;
+  }, [byTool, projects]);
+
   // Unique project list: from byTool project_ids + decorator data + projects prop
   const knownProjects = React.useMemo(() => {
     const s = new Set();
@@ -2702,7 +2832,7 @@ function CostByToolModelSection({
     return [...s].sort();
   }, [byTool, decoratorInventory, decoratorUsage, projects]);
 
-  // Helper: project badge(s) for a tool
+  // Helper: project badge(s) for a tool — shows resolved project name
   const projectBadges = (toolName) => {
     const projs = [...(toolProjectMap[toolName] || [])];
     if (projs.length === 0)
@@ -2710,6 +2840,7 @@ function CostByToolModelSection({
     return projs.map((p) => (
       <span
         key={p}
+        title={p}
         style={{
           display: "inline-block",
           fontSize: 11,
@@ -2721,7 +2852,7 @@ function CostByToolModelSection({
           marginRight: 3,
         }}
       >
-        {p}
+        {projectNameMap[p] || p}
       </span>
     ));
   };

@@ -107,6 +107,8 @@ export const getNotificationStatus = () => API.get("/control/notifications/statu
 // ─────────────────────── Tools / Models ───────────────────────
 export const getTools = () => API.get("/tools/");
 export const registerTool = (data) => API.post("/tools/register", data);
+export const assignToolProject = (toolName, projectId) =>
+  API.patch(`/tools/${encodeURIComponent(toolName)}/project`, null, { params: { project_id: projectId || undefined } });
 export const getToolsUsage = () => API.get("/tools/usage");
 export const getConnectors = () => API.get("/tools/connectors");
 export const createConnector = (data) => API.post("/tools/connectors", data);
