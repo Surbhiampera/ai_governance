@@ -40,7 +40,7 @@ function App() {
         <aside className="sidebar">
           <div className="brand-block">
             <p className="brand-kicker">AI Governance</p>
-            <p className="brand-copy">Email Support Agent</p>
+            <p className="brand-copy">Cost Intelligence Hub</p>
           </div>
 
           <nav className="nav-stack">
