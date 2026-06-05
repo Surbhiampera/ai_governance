@@ -234,4 +234,32 @@ export const triggerAnomalyDetection = () =>
 export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
 export const triggerConnectorPoll = () => API.post("/workers/connector-poll/sync");
 
+// ─────────────────────── Proxy — Governance Keys ───────────────────────
+export const listGovernanceKeys = (orgId) => API.get(`/proxy/keys/${orgId}`);
+export const createGovernanceKey = (payload) => API.post("/proxy/keys", payload);
+export const revokeGovernanceKey = (keyId) => API.delete(`/proxy/keys/${keyId}`);
+
+// ─────────────────────── Proxy — Provider Configs ──────────────────────
+export const listProviderConfigs = (orgId) => API.get(`/proxy/provider-configs/${orgId}`);
+export const createProviderConfig = (payload) => API.post("/proxy/provider-configs", payload);
+export const deleteProviderConfig = (configId) => API.delete(`/proxy/provider-configs/${configId}`);
+
+// ─────────────────────── Proxy — PII Policies ──────────────────────────
+export const listPiiPolicies = (orgId) => API.get(`/proxy/pii-policies/${orgId}`);
+export const createPiiPolicy = (payload) => API.post("/proxy/pii-policies", payload);
+
+// ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
+export const getProxyOverview = (orgId, days = 30) =>
+  API.get("/proxy/stats/overview", { params: { org_id: orgId || undefined, days } });
+export const getProxyTrends = (orgId, days = 30) =>
+  API.get("/proxy/stats/trends", { params: { org_id: orgId || undefined, days } });
+export const getProxyByProject = (orgId, days = 90) =>
+  API.get("/proxy/stats/by-project", { params: { org_id: orgId || undefined, days } });
+export const getProxyByModel = (orgId, days = 30) =>
+  API.get("/proxy/stats/by-model", { params: { org_id: orgId || undefined, days } });
+export const getProxyRequests = (params) =>
+  API.get("/proxy/requests", { params });
+export const getProxyPiiSummary = (orgId, days = 30) =>
+  API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days } });
+
 export default API;
