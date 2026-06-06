@@ -15,6 +15,7 @@ venv/
 .claude
 # Environment
 .env
+.env\
 .env.local
 *.local
 

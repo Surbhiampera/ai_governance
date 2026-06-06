@@ -261,5 +261,7 @@ export const getProxyRequests = (params) =>
   API.get("/proxy/requests", { params });
 export const getProxyPiiSummary = (orgId, days = 30) =>
   API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days } });
+export const getProxyByProjectModel = (orgId, days = 30) =>
+  API.get("/proxy/stats/by-project-model", { params: { org_id: orgId || undefined, days } });
 
 export default API;

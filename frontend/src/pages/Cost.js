@@ -18,6 +18,7 @@ import {
   getProxyTrends,
   getProxyByProject,
   getProxyByModel,
+  getProxyByProjectModel,
   getProxyRequests,
   getTracingOrgs,
   getTracingProjects,
@@ -28,6 +29,26 @@ const money  = (v) => `$${Number(v || 0).toFixed(6)}`;
 const money2 = (v) => `$${Number(v || 0).toFixed(2)}`;
 const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
 const num    = (v) => Number(v || 0).toLocaleString();
+
+const MODEL_COLOR_MAP = {
+  "gpt-4o-mini":            "#6366f1",
+  "gpt-5-nano":             "#8b5cf6",
+  "text-embedding-3-small": "#3b82f6",
+  "gpt-4o":                 "#9E2A97",
+  "gpt-5":                  "#ec4899",
+};
+function modelBadgeColor(name = "") {
+  for (const [k, c] of Object.entries(MODEL_COLOR_MAP)) {
+    if (name.includes(k)) return c;
+  }
+  return "#7C70AE";
+}
+function fmtTokens(n) {
+  if (!n) return "0";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + "K";
+  return String(n);
+}
 
 const RANGE_OPTIONS = [
   { label: "7d",  value: 7 },
@@ -45,8 +66,9 @@ function Cost() {
 
   const [overview, setOverview]   = useState(null);
   const [trends, setTrends]       = useState([]);
-  const [byProject, setByProject] = useState([]);
-  const [byModel, setByModel]     = useState([]);
+  const [byProject, setByProject]           = useState([]);
+  const [byModel, setByModel]               = useState([]);
+  const [byProjectModel, setByProjectModel] = useState([]);
   const [requests, setRequests]   = useState([]);
   const [reqTotal, setReqTotal]   = useState(0);
   const [reqPage, setReqPage]     = useState(0);
@@ -73,11 +95,12 @@ function Cost() {
       const org  = selectedOrg || undefined;
       const proj = selectedProject || undefined;
 
-      const [ovRes, trRes, prjRes, modRes, reqRes] = await Promise.allSettled([
+      const [ovRes, trRes, prjRes, modRes, pmRes, reqRes] = await Promise.allSettled([
         getProxyOverview(org, days),
         getProxyTrends(org, days),
         getProxyByProject(org, days),
         getProxyByModel(org, days),
+        getProxyByProjectModel(org, days),
         getProxyRequests({ org_id: org, project_id: proj, limit: PAGE_SIZE, offset: reqPage * PAGE_SIZE }),
       ]);
 
@@ -86,6 +109,7 @@ function Cost() {
       setTrends(val(trRes, []));
       setByProject(val(prjRes, []));
       setByModel(val(modRes, []));
+      setByProjectModel(val(pmRes, []));
       const reqData = val(reqRes, { items: [], total: 0 });
       setRequests(reqData.items || []);
       setReqTotal(reqData.total || 0);
@@ -326,6 +350,120 @@ function Cost() {
           </div>
         </section>
       )}
+
+      {/* ── Usage by Project & Model ─────────────────────────────────────── */}
+      {byProjectModel.length > 0 && (() => {
+        const grouped = byProjectModel.reduce((acc, r) => {
+          const key = r.project_id || "unassigned";
+          if (!acc[key]) acc[key] = { project_name: r.project_name, rows: [] };
+          acc[key].rows.push(r);
+          return acc;
+        }, {});
+        const uniqueModels = [...new Set(byProjectModel.map(r => r.model_name).filter(Boolean))];
+
+        return (
+          <section className="panel">
+            <div className="section-head">
+              <div>
+                <h3>Usage by Project &amp; Model</h3>
+                <p style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                  Input / output tokens and cost for every model, broken down per project.
+                </p>
+              </div>
+            </div>
+
+            {/* Model legend */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {uniqueModels.map(m => (
+                <span key={m} style={{
+                  fontSize: 12, padding: "3px 12px", borderRadius: 20,
+                  background: `${modelBadgeColor(m)}15`,
+                  border: `1px solid ${modelBadgeColor(m)}40`,
+                  color: modelBadgeColor(m), fontWeight: 600, fontFamily: "monospace",
+                }}>{m}</span>
+              ))}
+            </div>
+
+            {Object.entries(grouped).map(([pid, pdata]) => {
+              const projCost   = pdata.rows.reduce((s, r) => s + (r.total_cost  || 0), 0);
+              const projTokens = pdata.rows.reduce((s, r) => s + (r.total_tokens || 0), 0);
+              return (
+                <div key={pid} style={{
+                  border: "1px solid var(--border)", borderRadius: 10,
+                  marginBottom: 16, overflow: "hidden",
+                }}>
+                  <div style={{
+                    padding: "10px 16px", background: "var(--gray-50,#f9fafb)",
+                    borderBottom: "1px solid var(--border)",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                  }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>
+                      {pdata.project_name || pid}
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                      {fmtTokens(projTokens)} tokens &nbsp;·&nbsp; {money(projCost)}
+                    </span>
+                  </div>
+                  <div className="table-wrap" style={{ margin: 0 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Model</th>
+                          <th style={{ textAlign: "right" }}>Requests</th>
+                          <th style={{ textAlign: "right" }}>Input Tokens</th>
+                          <th style={{ textAlign: "right" }}>Output Tokens</th>
+                          <th style={{ textAlign: "right" }}>Total Tokens</th>
+                          <th style={{ textAlign: "right" }}>Input Cost</th>
+                          <th style={{ textAlign: "right" }}>Output Cost</th>
+                          <th style={{ textAlign: "right" }}>Total Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pdata.rows.map((r, i) => (
+                          <tr key={i}>
+                            <td>
+                              <span style={{
+                                fontSize: 12, padding: "2px 10px", borderRadius: 20,
+                                background: `${modelBadgeColor(r.model_name)}15`,
+                                border: `1px solid ${modelBadgeColor(r.model_name)}40`,
+                                color: modelBadgeColor(r.model_name),
+                                fontWeight: 600, fontFamily: "monospace",
+                              }}>{r.model_name}</span>
+                            </td>
+                            <td style={{ textAlign: "right" }}>{num(r.total_requests)}</td>
+                            <td style={{ textAlign: "right" }}>{fmtTokens(r.input_tokens)}</td>
+                            <td style={{ textAlign: "right" }}>{fmtTokens(r.output_tokens)}</td>
+                            <td style={{ textAlign: "right", fontWeight: 600 }}>{fmtTokens(r.total_tokens)}</td>
+                            <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{money(r.input_cost)}</td>
+                            <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{money(r.output_cost)}</td>
+                            <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#9E2A97" }}>
+                              {money(r.total_cost)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)" }}>
+                          <td><strong>Total</strong></td>
+                          <td style={{ textAlign: "right" }}>{num(pdata.rows.reduce((s, r) => s + r.total_requests, 0))}</td>
+                          <td style={{ textAlign: "right" }}>{fmtTokens(pdata.rows.reduce((s, r) => s + r.input_tokens, 0))}</td>
+                          <td style={{ textAlign: "right" }}>{fmtTokens(pdata.rows.reduce((s, r) => s + r.output_tokens, 0))}</td>
+                          <td style={{ textAlign: "right", fontWeight: 600 }}>{fmtTokens(projTokens)}</td>
+                          <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{money(pdata.rows.reduce((s, r) => s + r.input_cost, 0))}</td>
+                          <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>{money(pdata.rows.reduce((s, r) => s + r.output_cost, 0))}</td>
+                          <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#9E2A97" }}>
+                            {money(projCost)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        );
+      })()}
 
       {/* ── Request Log ──────────────────────────────────────────────────── */}
       <section className="panel">

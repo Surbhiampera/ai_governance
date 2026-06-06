@@ -11,6 +11,141 @@ import {
   getProjects,
 } from "../api";
 
+const PROXY_BASE =
+  process.env.REACT_APP_API_URL || "https://aigovernance-backend-1.onrender.com";
+
+// ─── SDK Snippet (auto-filled with real key + server URL) ─────────────────────
+
+function SdkSnippet({ govKey }) {
+  const [tab, setTab] = useState("env");
+  const [copied, setCopied] = useState(false);
+
+  const TAB_STYLE = (active) => ({
+    padding: "6px 16px",
+    borderRadius: 6,
+    border: "none",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 600,
+    background: active ? "#9e2a97" : "transparent",
+    color: active ? "#fff" : "var(--gray-500)",
+    transition: "all 0.15s",
+  });
+
+  const snippets = {
+    env: {
+      label: "Env vars",
+      note: "Zero code change — set once in .env",
+      code:
+`# .env  (or CI/CD secrets)
+OPENAI_BASE_URL=${PROXY_BASE}/proxy/openai
+GOVERNANCE_KEY=${govKey}
+
+# In code — read from env, no hardcoded changes
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["OPENAI_API_KEY"],          # unchanged
+    base_url=os.environ["OPENAI_BASE_URL"],        # from .env
+    default_headers={"X-Governance-Key": os.environ["GOVERNANCE_KEY"]},
+)`,
+    },
+    python: {
+      label: "Python",
+      note: "2 lines added — nothing else changes",
+      code:
+`from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-...",                                      # unchanged
+    base_url="${PROXY_BASE}/proxy/openai",
+    default_headers={"X-Governance-Key": "${govKey}"},
+)
+
+# All existing code stays exactly the same ↓
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}],
+)`,
+    },
+    node: {
+      label: "Node.js",
+      note: "2 lines added — nothing else changes",
+      code:
+`import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "sk-...",                                          // unchanged
+  baseURL: "${PROXY_BASE}/proxy/openai",
+  defaultHeaders: { "X-Governance-Key": "${govKey}" },
+});
+
+// All existing code stays exactly the same ↓
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Hello!" }],
+});`,
+    },
+  };
+
+  const current = snippets[tab];
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(current.code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "var(--gray-700)" }}>
+        SDK Configuration — share this with the external team
+      </p>
+
+      {/* Tabs + code */}
+      <div style={{
+        background: "var(--gray-50)", borderRadius: 12,
+        border: "1px solid rgba(124,112,174,0.2)", overflow: "hidden",
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "10px 10px 0",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--gray-100,#f3f4f6)",
+        }}>
+          {Object.entries(snippets).map(([key, s]) => (
+            <button key={key} style={TAB_STYLE(tab === key)} onClick={() => setTab(key)}>
+              {s.label}
+            </button>
+          ))}
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#22c55e", fontWeight: 600,
+            alignSelf: "center", paddingRight: 4 }}>
+            ✓ {current.note}
+          </span>
+          <button
+            type="button"
+            onClick={copyAll}
+            style={{
+              padding: "4px 12px", fontSize: 11, borderRadius: 6, border: "1px solid rgba(158,42,151,0.3)",
+              background: "transparent", cursor: "pointer", color: "#9e2a97", fontWeight: 600, marginLeft: 6,
+            }}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+        <pre style={{
+          color: "var(--brand-primary,#9e2a97)", fontSize: 12, margin: 0,
+          padding: "16px", overflowX: "auto", lineHeight: 1.65,
+        }}>
+          {current.code}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
 const STEPS = ["Organization", "Project", "API Key", "Done"];
@@ -396,19 +531,6 @@ function DoneStep({ org, project, apiKey, onReset }) {
     { label: "Key Name",        hint: "display label only — not used in requests", value: apiKey.key_name || "—" },
   ];
 
-  const usageRows = [
-    {
-      where: "Telemetry events  (POST /telemetry/event)",
-      field: "api_key_id",
-      example: `{ "api_key_id": "${apiKey.id}", "org_id": "${org.id}", "project_id": "${project.id}", … }`,
-    },
-    {
-      where: "Decorator / SDK endpoints  (POST /decorator/ingest)",
-      field: "X-API-Key header",
-      example: `X-API-Key: ${apiKey.id}`,
-    },
-  ];
-
   return (
     <div className="stack">
       <p className="panel-muted" style={{ marginTop: 0 }}>
@@ -461,38 +583,8 @@ function DoneStep({ org, project, apiKey, onReset }) {
         </div>
       ))}
 
-      {/* ── How to use ── */}
-      <div style={{ marginTop: 8 }}>
-        <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "var(--gray-700)" }}>
-          How the external team uses the secret token:
-        </p>
-        <div className="stack">
-          {usageRows.map(({ where, field, example }) => (
-            <div
-              key={where}
-              style={{
-                padding: "14px 16px",
-                borderRadius: 14,
-                background: "var(--gray-50)",
-                border: "1px solid rgba(124,112,174,0.14)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <div>
-                  <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--gray-700)", marginBottom: 2 }}>{where}</span>
-                  <span style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                    Token goes in: <code style={{ padding: "1px 5px", background: "var(--gray-200)", borderRadius: 4 }}>{field}</code>
-                  </span>
-                </div>
-                <CopyBtn value={example} />
-              </div>
-              <code style={{ display: "block", fontSize: 11, color: "var(--brand-secondary)", wordBreak: "break-all", lineHeight: 1.7 }}>
-                {example}
-              </code>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* ── SDK snippet (auto-filled) ── */}
+      <SdkSnippet govKey={apiKey.id} />
 
       <div
         style={{

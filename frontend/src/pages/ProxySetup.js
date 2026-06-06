@@ -9,6 +9,7 @@ import {
   revokeGovernanceKey,
   getProxyPiiSummary,
   getProxyRequests,
+  getProxyByProjectModel,
 } from "../api";
 
 const INPUT_STYLE = {
@@ -306,37 +307,6 @@ client = OpenAI(
 
   return (
     <div style={{ marginTop: 20 }}>
-      {/* How it works banner */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 0,
-        background: "var(--gray-50)", border: "1px solid var(--border)",
-        borderRadius: 10, padding: "12px 16px", marginBottom: 14,
-        fontSize: 13, overflowX: "auto", whiteSpace: "nowrap",
-      }}>
-        {[
-          { icon: "💻", label: "External team code" },
-          { arrow: true },
-          { icon: "🔀", label: "Governance Proxy", highlight: true },
-          { arrow: true },
-          { icon: "🤖", label: "OpenAI API" },
-        ].map((item, i) =>
-          item.arrow ? (
-            <span key={i} style={{ color: "var(--gray-400)", margin: "0 10px", fontSize: 18 }}>→</span>
-          ) : (
-            <span key={i} style={{
-              padding: "5px 14px", borderRadius: 20,
-              background: item.highlight ? "var(--brand-primary,#6366f1)" : "var(--surface-1,#fff)",
-              color: item.highlight ? "#fff" : "var(--gray-700)",
-              border: item.highlight ? "none" : "1px solid var(--border)",
-              fontWeight: item.highlight ? 700 : 500,
-            }}>{item.icon} {item.label}</span>
-          )
-        )}
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--gray-400)", whiteSpace: "nowrap" }}>
-          Tokens · Cost · PII — logged automatically
-        </span>
-      </div>
-
       {/* Tabs */}
       <div style={{
         background: "var(--gray-50)", borderRadius: 12,
@@ -648,6 +618,213 @@ function PiiActivity({ orgId }) {
   );
 }
 
+// ─── Project × Model Usage ────────────────────────────────────────────────────
+const DAYS_OPTIONS = [7, 30, 90];
+
+function fmt(n) {
+  if (n === null || n === undefined) return "0";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(n);
+}
+
+function fmtCost(v) {
+  if (!v) return "$0.000000";
+  return "$" + Number(v).toFixed(6);
+}
+
+const MODEL_COLORS = {
+  "gpt-4o-mini":           "#6366f1",
+  "gpt-5-nano":            "#8b5cf6",
+  "text-embedding-3-small":"#3b82f6",
+  "gpt-4o":                "#f59e0b",
+  "gpt-5":                 "#ec4899",
+};
+function modelColor(name) {
+  if (!name) return "#6b7280";
+  for (const [k, c] of Object.entries(MODEL_COLORS)) {
+    if (name.includes(k)) return c;
+  }
+  return "#6b7280";
+}
+
+function ProjectModelUsageSection({ orgId }) {
+  const [rows, setRows]     = useState([]);
+  const [days, setDays]     = useState(30);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]   = useState("");
+
+  const load = useCallback(() => {
+    if (!orgId) return;
+    setLoading(true);
+    setError("");
+    getProxyByProjectModel(orgId, days)
+      .then((r) => setRows(r.data || []))
+      .catch(() => setError("Could not load usage data."))
+      .finally(() => setLoading(false));
+  }, [orgId, days]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Group rows by project for summary cards
+  const byProject = rows.reduce((acc, r) => {
+    const key = r.project_id || "unassigned";
+    if (!acc[key]) acc[key] = { project_name: r.project_name, models: [] };
+    acc[key].models.push(r);
+    return acc;
+  }, {});
+
+  const totalRequests = rows.reduce((s, r) => s + (r.total_requests || 0), 0);
+  const totalTokens   = rows.reduce((s, r) => s + (r.total_tokens || 0), 0);
+  const totalCost     = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
+  const uniqueModels  = [...new Set(rows.map((r) => r.model_name).filter(Boolean))];
+
+  return (
+    <section className="panel">
+      <div className="section-head" style={{ marginBottom: 16 }}>
+        <div>
+          <h3>Usage by Project &amp; Model</h3>
+          <p className="panel-muted">
+            Input tokens, output tokens, total tokens and cost tracked per project for every model.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {DAYS_OPTIONS.map((d) => (
+            <button
+              key={d}
+              className={`btn ${days === d ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "5px 12px", fontSize: 12 }}
+              onClick={() => setDays(d)}
+            >
+              {d}d
+            </button>
+          ))}
+          <button className="btn btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 12 }}>
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
+
+      {/* Summary stat chips */}
+      {rows.length > 0 && (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+          {[
+            { label: "Total Requests",   value: fmt(totalRequests), color: "#6366f1" },
+            { label: "Total Tokens",     value: fmt(totalTokens),   color: "#8b5cf6" },
+            { label: "Total Cost",       value: fmtCost(totalCost), color: "#f59e0b" },
+            { label: "Models Tracked",   value: uniqueModels.length, color: "#3b82f6" },
+          ].map((c) => (
+            <div key={c.label} style={{
+              background: "var(--surface-1,#fff)",
+              border: `1px solid ${c.color}30`,
+              borderLeft: `4px solid ${c.color}`,
+              borderRadius: 10, padding: "10px 16px", minWidth: 150,
+            }}>
+              <div style={{ fontSize: 11, color: "var(--gray-500)", marginBottom: 4,
+                textTransform: "uppercase", letterSpacing: "0.1em" }}>{c.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Model legend */}
+      {uniqueModels.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          {uniqueModels.map((m) => (
+            <span key={m} style={{
+              fontSize: 12, padding: "3px 12px", borderRadius: 20,
+              background: `${modelColor(m)}15`,
+              border: `1px solid ${modelColor(m)}40`,
+              color: modelColor(m), fontWeight: 600, fontFamily: "monospace",
+            }}>{m}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Per-project groups */}
+      {Object.entries(byProject).map(([pid, pdata]) => {
+        const projTotal = pdata.models.reduce((s, r) => s + (r.total_cost || 0), 0);
+        const projTokens = pdata.models.reduce((s, r) => s + (r.total_tokens || 0), 0);
+        return (
+          <div key={pid} style={{
+            border: "1px solid var(--border)", borderRadius: 10,
+            marginBottom: 16, overflow: "hidden",
+          }}>
+            <div style={{
+              padding: "10px 16px",
+              background: "var(--gray-50,#f9fafb)",
+              borderBottom: "1px solid var(--border)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--gray-700)" }}>
+                {pdata.project_name || pid}
+              </span>
+              <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                {fmt(projTokens)} tokens &nbsp;·&nbsp; {fmtCost(projTotal)}
+              </span>
+            </div>
+            <div className="table-wrap" style={{ margin: 0 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th style={{ textAlign: "right" }}>Requests</th>
+                    <th style={{ textAlign: "right" }}>Input Tokens</th>
+                    <th style={{ textAlign: "right" }}>Output Tokens</th>
+                    <th style={{ textAlign: "right" }}>Total Tokens</th>
+                    <th style={{ textAlign: "right" }}>Input Cost</th>
+                    <th style={{ textAlign: "right" }}>Output Cost</th>
+                    <th style={{ textAlign: "right" }}>Total Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pdata.models.map((r, i) => (
+                    <tr key={i}>
+                      <td>
+                        <span style={{
+                          fontSize: 12, padding: "2px 10px", borderRadius: 20,
+                          background: `${modelColor(r.model_name)}15`,
+                          border: `1px solid ${modelColor(r.model_name)}40`,
+                          color: modelColor(r.model_name),
+                          fontWeight: 600, fontFamily: "monospace",
+                        }}>{r.model_name}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>{r.total_requests}</td>
+                      <td style={{ textAlign: "right" }}>{fmt(r.input_tokens)}</td>
+                      <td style={{ textAlign: "right" }}>{fmt(r.output_tokens)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(r.total_tokens)}</td>
+                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>
+                        {fmtCost(r.input_cost)}
+                      </td>
+                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>
+                        {fmtCost(r.output_cost)}
+                      </td>
+                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12,
+                        fontWeight: 700, color: "#f59e0b" }}>
+                        {fmtCost(r.total_cost)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+
+      {rows.length === 0 && !loading && (
+        <p style={{ textAlign: "center", color: "var(--gray-500)", padding: "32px 0" }}>
+          No proxy requests recorded in the last {days} days.
+          Point your SDK at the proxy with an <code>X-Governance-Key</code> header to start tracking.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ProxySetup() {
   const [orgs, setOrgs]                   = useState([]);
@@ -693,6 +870,10 @@ export default function ProxySetup() {
           <KeyStep orgId={selectedOrg} projectId={selectedProject} />
           <PiiActivity orgId={selectedOrg} />
         </>
+      )}
+
+      {selectedOrg && (
+        <ProjectModelUsageSection orgId={selectedOrg} />
       )}
     </div>
   );
