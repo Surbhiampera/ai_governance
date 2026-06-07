@@ -235,9 +235,10 @@ export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
 export const triggerConnectorPoll = () => API.post("/workers/connector-poll/sync");
 
 // ─────────────────────── Proxy — Governance Keys ───────────────────────
-export const listGovernanceKeys = (orgId) => API.get(`/proxy/keys/${orgId}`);
-export const createGovernanceKey = (payload) => API.post("/proxy/keys", payload);
-export const revokeGovernanceKey = (keyId) => API.delete(`/proxy/keys/${keyId}`);
+export const listGovernanceKeys = (orgId) =>
+  API.get("/governance-keys/", { params: { org_id: orgId } });
+export const createGovernanceKey = (payload) => API.post("/governance-keys/", payload);
+export const revokeGovernanceKey = (keyId) => API.delete(`/governance-keys/${keyId}`);
 
 // ─────────────────────── Proxy — Provider Configs ──────────────────────
 export const listProviderConfigs = (orgId) => API.get(`/proxy/provider-configs/${orgId}`);
@@ -254,11 +255,11 @@ export const getProxyOverview = (orgId, days = 30) =>
 export const getProxyTrends = (orgId, days = 30) =>
   API.get("/proxy/stats/trends", { params: { org_id: orgId || undefined, days } });
 export const getProxyByProject = (orgId, days = 90) =>
-  API.get("/proxy/stats/by-project", { params: { org_id: orgId || undefined, days } });
+  API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
 export const getProxyByModel = (orgId, days = 30) =>
-  API.get("/proxy/stats/by-model", { params: { org_id: orgId || undefined, days } });
+  API.get("/costs/by-model", { params: { org_id: orgId || undefined } });
 export const getProxyRequests = (params) =>
-  API.get("/proxy/requests", { params });
+  API.get("/v1/requests", { params });
 export const getProxyPiiSummary = (orgId, days = 30) =>
   API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days } });
 export const getProxyByProjectModel = (orgId, days = 30) =>
