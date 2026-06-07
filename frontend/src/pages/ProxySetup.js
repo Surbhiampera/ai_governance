@@ -28,7 +28,7 @@ const PII_COLOR = {
 };
 const ACTION_COLOR = { mask: "#f59e0b", block: "#ef4444", alert: "#f97316", allow: "#22c55e" };
 
-const PROXY_BASE = process.env.REACT_APP_API_URL || "https://aigovernance-backend-1.onrender.com";
+const PROXY_BASE = import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com";
 
 // ─── Organization ────────────────────────────────────────────────────────────
 function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {

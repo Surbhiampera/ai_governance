@@ -12,7 +12,7 @@ import {
 } from "../api";
 
 const PROXY_BASE =
-  process.env.REACT_APP_API_URL || "https://aigovernance-backend-1.onrender.com";
+  import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com";
 
 // ─── SDK Snippet (auto-filled with real key + server URL) ─────────────────────
 
