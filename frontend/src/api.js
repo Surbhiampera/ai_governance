@@ -2,7 +2,7 @@ import axios from "axios";
 
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com",
-  timeout: 60000,
+  timeout: 120000,
 });
 
 // ─────────────────────── Summary / Dashboard ───────────────────────
@@ -118,8 +118,9 @@ export const getConnectorSyncLogs = (connectorId, limit = 50) =>
   API.get("/tools/connectors/sync-logs", { params: { connector_id: connectorId || undefined, limit } });
 export const triggerConnectorSync = (id) => API.post(`/tools/connectors/${id}/trigger-sync`);
 
+// Response fields: model_name, provider, input_cost_per_1k, output_cost_per_1k, currency
 export const getModels = () => API.get("/models/");
-export const registerModel = (data) => API.post("/models/register", data);
+// registerModel removed — POST /models/register returns 404; use POST /pricing instead
 
 // ─────────────────────── Governance rules ───────────────────────
 export const getRules = () => API.get("/governance/rules");

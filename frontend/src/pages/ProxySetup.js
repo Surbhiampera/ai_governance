@@ -37,22 +37,35 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
   const [msg, setMsg]           = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Sync input text when selectedOrg changes from parent (e.g. auto-select on load)
+  useEffect(() => {
+    if (selectedOrg && orgs.length > 0) {
+      const found = orgs.find((o) => o.id === selectedOrg);
+      if (found) setName(found.org_name || found.id);
+    }
+  }, [selectedOrg, orgs]);
+
   const filtered = orgs.filter((o) =>
-    (o.name || o.id).toLowerCase().includes(name.toLowerCase())
+    (o.org_name || o.id).toLowerCase().includes(name.toLowerCase())
   );
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     setSaving(true);
+    setMsg("");
     const orgName = name.trim();
     const orgId = orgName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") + "_" + Date.now();
     try {
       const r = await createOrganization({ id: orgId, org_name: orgName });
       const newOrg = r.data;
+      // Extract created ID — backend may return id, org_id, or use our provided orgId
+      const createdId = newOrg?.id || newOrg?.org_id || orgId;
       const refreshed = await getOrganizations();
       const list = refreshed.data?.organizations || refreshed.data || [];
       setOrgs(list);
-      setSelectedOrg(newOrg.id || newOrg.org_id);
+      // Find the org in refreshed list; fall back to whatever the backend returned
+      const found = list.find((o) => o.id === createdId) || list.find((o) => o.org_name === orgName);
+      setSelectedOrg(found?.id || createdId);
       setName(orgName);
       setMsg(`Organization "${orgName}" created.`);
     } catch (e) {
@@ -68,7 +81,7 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
 
   const handleSelect = (o) => {
     setSelectedOrg(o.id);
-    setName(o.name || o.id);
+    setName(o.org_name || o.id);
     setShowSuggestions(false);
   };
 
@@ -79,6 +92,11 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
           <h3>Organization</h3>
           <p className="panel-muted">Type a new organization name or select an existing one.</p>
         </div>
+        {selectedOrg && (
+          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>
+            ✓ Selected: {orgs.find(o => o.id === selectedOrg)?.org_name || selectedOrg}
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10, position: "relative" }}>
@@ -106,10 +124,14 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
                   style={{
                     padding: "8px 12px", fontSize: 13, cursor: "pointer",
                     borderBottom: "1px solid var(--border)",
-                    background: selectedOrg === o.id ? "var(--gray-50, #f9fafb)" : "transparent",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    background: selectedOrg === o.id ? "rgba(34,197,94,0.06)" : "transparent",
                   }}
                 >
-                  {o.name || o.id}
+                  <span>{o.org_name || o.id}</span>
+                  {selectedOrg === o.id && (
+                    <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>selected</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -145,6 +167,15 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
     }).catch(() => {});
   }, [orgId, setProjects]);
 
+  // Sync input text when selectedProject changes from parent
+  useEffect(() => {
+    if (selectedProject && projects.length > 0) {
+      const found = projects.find((p) => p.id === selectedProject);
+      if (found) setName(found.project_name || found.id);
+    }
+    if (!selectedProject) setName("");
+  }, [selectedProject, projects]);
+
   useEffect(() => { load(); }, [load]);
 
   const filtered = projects.filter((p) =>
@@ -154,13 +185,19 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
   const handleCreate = async () => {
     if (!name.trim()) return;
     setSaving(true);
+    setMsg("");
     const projName = name.trim();
     const projId = projName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") + "_" + Date.now();
     try {
       const r = await createProject({ id: projId, org_id: orgId, project_name: projName });
       const newProj = r.data;
-      load();
-      setSelectedProject(newProj.id);
+      // Extract created ID — backend may return id, project_id, or use our provided projId
+      const createdId = newProj?.id || newProj?.project_id || projId;
+      const refreshed = await getProjects(orgId);
+      const list = refreshed.data?.projects || refreshed.data || [];
+      setProjects(list);
+      const found = list.find((p) => p.id === createdId) || list.find((p) => p.project_name === projName);
+      setSelectedProject(found?.id || createdId);
       setName(projName);
       setMsg(`Project "${projName}" created.`);
     } catch (e) {
@@ -187,6 +224,11 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
           <h3>Project</h3>
           <p className="panel-muted">Type a new project name or select an existing one.</p>
         </div>
+        {selectedProject && (
+          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>
+            ✓ Selected: {projects.find(p => p.id === selectedProject)?.project_name || selectedProject}
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10, position: "relative" }}>
@@ -214,10 +256,14 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
                   style={{
                     padding: "8px 12px", fontSize: 13, cursor: "pointer",
                     borderBottom: "1px solid var(--border)",
-                    background: selectedProject === p.id ? "var(--gray-50, #f9fafb)" : "transparent",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    background: selectedProject === p.id ? "rgba(34,197,94,0.06)" : "transparent",
                   }}
                 >
-                  {p.project_name || p.id}
+                  <span>{p.project_name || p.id}</span>
+                  {selectedProject === p.id && (
+                    <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>selected</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -351,7 +397,7 @@ function KeyStep({ orgId, projectId }) {
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !orgId) return;
     setSaving(true);
     try {
       const r = await createGovernanceKey({
@@ -374,8 +420,16 @@ function KeyStep({ orgId, projectId }) {
   };
 
   const handleRevoke = async (keyId) => {
-    await revokeGovernanceKey(keyId);
-    load();
+    try {
+      await revokeGovernanceKey(keyId);
+      load();
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const errMsg = Array.isArray(detail)
+        ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+        : (detail || e.message);
+      setMsg("Error revoking key: " + errMsg);
+    }
   };
 
   return (
@@ -398,7 +452,7 @@ function KeyStep({ orgId, projectId }) {
           onKeyDown={(e) => e.key === "Enter" && handleCreate()}
         />
         <button className="btn btn-primary" onClick={handleCreate}
-          disabled={saving || !name.trim()} style={{ whiteSpace: "nowrap" }}>
+          disabled={saving || !name.trim() || !orgId} style={{ whiteSpace: "nowrap" }}>
           {saving ? "Creating…" : "Create Key"}
         </button>
       </div>
@@ -451,7 +505,7 @@ function KeyStep({ orgId, projectId }) {
                     {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "Never"}
                   </td>
                   <td>
-                    <span className={`status-pill ${k.is_active ? "success" : "low"}`}>
+                    <span className={`status-pill ${k.is_active ? "low" : "medium"}`}>
                       {k.is_active ? "active" : "revoked"}
                     </span>
                   </td>
@@ -595,7 +649,7 @@ function PiiActivity({ orgId }) {
                   ) : "—"}
                 </td>
                 <td>
-                  <span className={`status-pill ${r.request_status === "blocked" ? "critical" : r.request_status === "completed" ? "success" : "monitor"}`}>
+                  <span className={`status-pill ${r.request_status === "blocked" ? "critical" : r.request_status === "completed" ? "low" : "monitor"}`}>
                     {r.request_status}
                   </span>
                 </td>
@@ -831,13 +885,23 @@ export default function ProxySetup() {
   const [selectedOrg, setSelectedOrg]     = useState("");
   const [projects, setProjects]           = useState([]);
   const [selectedProject, setSelectedProject] = useState("");
+  const [orgsLoading, setOrgsLoading]     = useState(true);
+  const [orgsError, setOrgsError]         = useState("");
 
   useEffect(() => {
-    getOrganizations().then((r) => {
-      const list = r.data?.organizations || r.data || [];
-      setOrgs(list);
-      if (list.length > 0) setSelectedOrg(list[0].id);
-    }).catch(() => {});
+    setOrgsLoading(true);
+    setOrgsError("");
+    getOrganizations()
+      .then((r) => {
+        const list = r.data?.organizations || r.data || [];
+        setOrgs(list);
+        if (list.length > 0) setSelectedOrg(list[0].id);
+      })
+      .catch((e) => {
+        const detail = e.response?.data?.detail || e.message;
+        setOrgsError("Could not load organizations: " + detail);
+      })
+      .finally(() => setOrgsLoading(false));
   }, []);
 
   // Reset project selection when org changes
@@ -848,6 +912,14 @@ export default function ProxySetup() {
 
   return (
     <div className="page-shell">
+      {orgsLoading && (
+        <p style={{ color: "var(--gray-500)", fontSize: 13, marginBottom: 12 }}>
+          Connecting to backend… (first load may take up to 30 s)
+        </p>
+      )}
+      {orgsError && (
+        <p style={{ color: "#ef4444", fontSize: 13, marginBottom: 12 }}>{orgsError}</p>
+      )}
       <OrgStep
         orgs={orgs}
         setOrgs={setOrgs}
