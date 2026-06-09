@@ -4,7 +4,6 @@ import {
   getSecuritySummaryCombined,
   getAnomaliesCombined,
   getAdminPIIDetail,
-  getOrganizations,
   getProjects,
 } from "../api";
 import { RANGE_OPTIONS as RANGE_OPTIONS_S, rangeToStartDate as rangeToStartDateS } from "../utils/filters";
@@ -159,34 +158,22 @@ function Security() {
   const [anomalies, setAnomalies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [piiModalEventId, setPiiModalEventId] = useState(null);
-  const [orgs, setOrgs] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [selectedOrg, setSelectedOrg] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
   const [range, setRange] = useState("all");
 
   useEffect(() => {
-    getOrganizations().then((r) => setOrgs(r.data || [])).catch(() => {});
+    getProjects().then((r) => setProjects(r.data || [])).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (selectedOrg) {
-      getProjects(selectedOrg).then((r) => setProjects(r.data || [])).catch(() => setProjects([]));
-    } else {
-      setProjects([]);
-      setSelectedProject("");
-    }
-  }, [selectedOrg]);
 
   useEffect(() => {
     const load = async () => {
       const startDate = rangeToStartDateS(range);
-      const org = selectedOrg || undefined;
       const proj = selectedProject || undefined;
       const [summaryRes, logsRes, anomaliesRes] = await Promise.all([
-        getSecuritySummaryCombined(org, proj, startDate),
-        getSecurityLogsCombined(undefined, undefined, org, proj, startDate),
-        getAnomaliesCombined("open", org, proj, startDate),
+        getSecuritySummaryCombined(undefined, proj, startDate),
+        getSecurityLogsCombined(undefined, undefined, undefined, proj, startDate),
+        getAnomaliesCombined("open", undefined, proj, startDate),
       ]);
       setSummary(summaryRes.data);
       setLogs(logsRes.data || []);
@@ -195,7 +182,7 @@ function Security() {
     };
 
     load().catch(() => setLoading(false));
-  }, [range, selectedOrg, selectedProject]);
+  }, [range, selectedProject]);
 
   if (loading) {
     return <div className="loading">Loading security layer...</div>;
@@ -212,18 +199,9 @@ function Security() {
           </p>
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <select
-              value={selectedOrg}
-              onChange={(e) => { setSelectedOrg(e.target.value); setSelectedProject(""); }}
-              style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)", color: "#fff", minWidth: 160 }}
-            >
-              <option value="" style={{ color: "#333" }}>All Organizations</option>
-              {orgs.map((o) => <option key={o.id} value={o.id} style={{ color: "#333" }}>{o.org_name || o.id}</option>)}
-            </select>
-            <select
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}
-              disabled={!selectedOrg}
-              style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)", color: "#fff", minWidth: 160, opacity: selectedOrg ? 1 : 0.5 }}
+              style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)", color: "#fff", minWidth: 160 }}
             >
               <option value="" style={{ color: "#333" }}>All Projects</option>
               {projects.map((p) => <option key={p.id} value={p.id} style={{ color: "#333" }}>{p.project_name || p.id}</option>)}

@@ -13,6 +13,7 @@ import {
 import { RANGE_OPTIONS, rangeToStartDate } from "../utils/filters";
 
 const money = (v) => `$${Number(v || 0).toFixed(4)}`;
+const money2 = (v) => { const n = Number(v || 0); return n > 0 && n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`; };
 const num = (v) => Number(v || 0).toLocaleString();
 
 const SEV_CLASS = {
@@ -478,7 +479,7 @@ function OrgDetailModal({ orgId, notifications, aggregate, logs, onClose, onAppl
             ["Tools / Models", orgAggregate.length],
             ["Events", num(totalEvents)],
             ["Tokens", num(totalTokens)],
-            ["Total Cost", `$${totalCost.toFixed(2)}`],
+            ["Total Cost", money2(totalCost)],
           ].map(([label, value]) => (
             <div key={label} style={{ background: "var(--surface-2, #f8f9fa)", border: "1px solid var(--border, #e5e7eb)", borderRadius: 8, padding: "10px 14px" }}>
               <div style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
@@ -765,7 +766,7 @@ function SuperAdminLogs() {
             </div>
             <div className="hero-chip">
               <span>Total Cost</span>
-              <strong>${totalCost.toFixed(2)}</strong>
+              <strong>{money2(totalCost)}</strong>
             </div>
             <div className="hero-chip">
               <span>Total Tokens</span>

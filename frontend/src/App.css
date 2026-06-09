@@ -55,7 +55,7 @@ textarea {
   top: 0;
   height: 100vh;
   padding: 28px;
-  background: linear-gradient(180deg, #0d1b2a 0%, #0f2339 100%);
+  background: linear-gradient(180deg, #1a0a2e 0%, #2d1b4e 60%, #9E2A97 100%);
   color: var(--white);
   display: flex;
   flex-direction: column;

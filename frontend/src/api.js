@@ -260,7 +260,7 @@ export const getProxyByProject = (orgId, days = 90) =>
 export const getProxyByModel = (orgId, days = 30) =>
   API.get("/costs/by-model", { params: { org_id: orgId || undefined } });
 export const getProxyRequests = (params) =>
-  API.get("/v1/requests", { params });
+  API.get("/proxy/v1/requests", { params });
 export const getProxyPiiSummary = (orgId, days = 30) =>
   API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days } });
 export const getProxyByProjectModel = (orgId, days = 30) =>
