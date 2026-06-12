@@ -350,6 +350,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                   <tr>
                     <th>Request ID</th>
                     <th>Model</th>
+                    <th>Route</th>
                     <th style={{textAlign:"right"}}>Input Tokens</th>
                     <th style={{textAlign:"right"}}>Output Tokens</th>
                     <th style={{textAlign:"right"}}>Total Tokens</th>
@@ -379,6 +380,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                             {row.model_name || "—"}
                           </span>
                         </td>
+                        <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                         <td style={{textAlign:"right", color:"#7C70AE", fontWeight:500}}>{num(inTok)}</td>
                         <td style={{textAlign:"right", color:"#9E2A97", fontWeight:500}}>{num(outTok)}</td>
                         <td style={{textAlign:"right", fontWeight:600}}>{num(totTok)}</td>
@@ -400,6 +402,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                 <tfoot>
                   <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)", background: "rgba(158,42,151,0.03)" }}>
                     <td><strong>Total</strong></td>
+                    <td />
                     <td />
                     <td style={{textAlign:"right", color:"#7C70AE", fontWeight:700}}>{num(requests.reduce((s,r)=>s+(Number(r.prompt_tokens)||0),0))}</td>
                     <td style={{textAlign:"right", color:"#9E2A97", fontWeight:700}}>{num(requests.reduce((s,r)=>s+(Number(r.completion_tokens)||0),0))}</td>
@@ -433,19 +436,20 @@ function RequestTable({ requests }) {
       <table>
         <thead>
           <tr>
-            <th>Request ID</th><th>Project</th><th>Model</th><th>Status</th>
+            <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th>
             <th>Prompt Tokens</th><th>Completion Tokens</th>
             <th>LLM Cost</th><th>Total Cost</th><th>PII</th><th>Received</th>
           </tr>
         </thead>
         <tbody>
           {requests.length === 0
-            ? <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No requests yet.</td></tr>
+            ? <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No requests yet.</td></tr>
             : requests.map(row => (
               <tr key={row.request_id}>
                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
                 <td>{row.project_id || "—"}</td>
                 <td><strong>{row.model_name || "—"}</strong></td>
+                <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                 <td>
                   <span className={`status-pill ${row.request_status === "completed" ? "low" : row.request_status === "blocked" ? "critical" : row.request_status === "failed" ? "high" : "medium"}`}>
                     {row.request_status}
@@ -466,6 +470,237 @@ function RequestTable({ requests }) {
   );
 }
 
+// ── Cost KPI Modal ────────────────────────────────────────────────────────────
+function CRow({ label, value, accent, mono }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: accent || "var(--text)", fontFamily: mono ? "monospace" : undefined }}>{value}</span>
+    </div>
+  );
+}
+
+function CSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#9E2A97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function CostKpiModal({ cardKey, overview, byProject, byModel, grandTotal, onClose }) {
+  const totalCost      = Number(overview?.total_cost        || 0);
+  const llmCost        = Number(overview?.llm_cost          || 0);
+  const infraCost      = totalCost - llmCost;
+  const totalReqs      = Number(overview?.total_requests    || 0);
+  const completed      = Number(overview?.completed         || 0);
+  const totalToks      = Number(overview?.total_tokens      || 0);
+  const promptToks     = Number(overview?.prompt_tokens     || 0);
+  const completionToks = Number(overview?.completion_tokens || 0);
+  const avgLatency     = Number(overview?.avg_latency_ms    || 0);
+  const avgCostReq     = totalReqs > 0 ? totalCost / totalReqs : 0;
+
+  const ModelPill = ({ name }) => (
+    <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 20, background: `${modelColor(name)}15`, color: modelColor(name), fontWeight: 600, fontFamily: "monospace" }}>{name}</span>
+  );
+
+  let title = "";
+  let body  = null;
+
+  if (cardKey === "total_cost") {
+    title = "Total Cost Breakdown";
+    const top5 = [...byProject].sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0)).slice(0, 5);
+    body = (
+      <>
+        <CSection title="Cost Split">
+          <CRow label="LLM Cost"    value={money2(llmCost)}   accent="#9E2A97" mono />
+          <CRow label="Infra Cost"  value={money2(infraCost)} accent="#3FB6D4" mono />
+          <CRow label="Total Cost"  value={money2(totalCost)} accent="#9E2A97" mono />
+          <CRow label="LLM Share"   value={`${pct(llmCost, totalCost)}%`} />
+          <CRow label="Infra Share" value={`${pct(infraCost, totalCost)}%`} />
+        </CSection>
+        {top5.length > 0 && (
+          <CSection title="Top Projects by Cost">
+            {top5.map((r, i) => <CRow key={i} label={projLabel(r)} value={money2(r.total_cost)} accent="#9E2A97" mono />)}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "llm_cost") {
+    title = "LLM Cost Details";
+    const topModels = [...byModel].sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0)).slice(0, 6);
+    body = (
+      <>
+        <CSection title="LLM vs Total">
+          <CRow label="LLM Cost"    value={money2(llmCost)}                                         accent="#9E2A97" mono />
+          <CRow label="Total Cost"  value={money2(totalCost)}                                        mono />
+          <CRow label="LLM Share"   value={`${pct(llmCost, totalCost)}%`} />
+          <CRow label="Avg LLM/Req" value={money4(totalReqs > 0 ? llmCost / totalReqs : 0)}          mono />
+        </CSection>
+        {topModels.length > 0 && (
+          <CSection title="Top Models by Cost">
+            {topModels.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                <ModelPill name={r.model_name} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#9E2A97", fontFamily: "monospace" }}>{money(r.total_cost)}</span>
+              </div>
+            ))}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "total_requests") {
+    title = "Request Volume Details";
+    const blocked = Math.max(totalReqs - completed, 0);
+    const top5    = [...byProject].sort((a, b) => (b.total_requests || 0) - (a.total_requests || 0)).slice(0, 5);
+    body = (
+      <>
+        <CSection title="Request Summary">
+          <CRow label="Total Requests"  value={num(totalReqs)} />
+          <CRow label="Completed"       value={num(completed)}  accent="#10b981" />
+          <CRow label="Blocked / Other" value={num(blocked)}    accent="#ef4444" />
+          <CRow label="Success Rate"    value={`${totalReqs > 0 ? ((completed / totalReqs) * 100).toFixed(1) : 0}%`} accent="#10b981" />
+        </CSection>
+        {top5.length > 0 && (
+          <CSection title="Top Projects by Requests">
+            {top5.map((r, i) => <CRow key={i} label={projLabel(r)} value={num(r.total_requests)} />)}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "avg_costrequest") {
+    title = "Avg Cost per Request";
+    const perProj = [...byProject]
+      .filter(r => r.total_requests > 0)
+      .map(r => ({ ...r, avg: Number(r.total_cost || 0) / Number(r.total_requests) }))
+      .sort((a, b) => b.avg - a.avg)
+      .slice(0, 5);
+    body = (
+      <>
+        <CSection title="Cost Efficiency">
+          <CRow label="Avg Cost / Request" value={money4(avgCostReq)} accent="#9E2A97" mono />
+          <CRow label="Total Cost"         value={money2(totalCost)} mono />
+          <CRow label="Total Requests"     value={num(totalReqs)} />
+        </CSection>
+        {perProj.length > 0 && (
+          <CSection title="Per-Project Avg Cost">
+            {perProj.map((r, i) => <CRow key={i} label={projLabel(r)} value={money4(r.avg)} mono />)}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "total_tokens") {
+    title = "Total Token Consumption";
+    const topModels = [...byModel].sort((a, b) => (b.total_tokens || 0) - (a.total_tokens || 0)).slice(0, 6);
+    body = (
+      <>
+        <CSection title="Token Summary">
+          <CRow label="Total Tokens"      value={fmtTokens(totalToks)} />
+          <CRow label="Prompt Tokens"     value={fmtTokens(promptToks)}     accent="#7C70AE" />
+          <CRow label="Completion Tokens" value={fmtTokens(completionToks)} accent="#9E2A97" />
+          <CRow label="Input Share"       value={`${pct(promptToks, totalToks)}%`} />
+          <CRow label="Output Share"      value={`${pct(completionToks, totalToks)}%`} />
+        </CSection>
+        {topModels.length > 0 && (
+          <CSection title="Top Models by Tokens">
+            {topModels.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                <ModelPill name={r.model_name} />
+                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace" }}>{fmtTokens(r.total_tokens)}</span>
+              </div>
+            ))}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "prompt_tokens") {
+    title = "Input (Prompt) Tokens";
+    const topModels = [...byModel].sort((a, b) => (b.input_tokens || 0) - (a.input_tokens || 0)).slice(0, 6);
+    body = (
+      <>
+        <CSection title="Prompt Token Summary">
+          <CRow label="Prompt Tokens" value={fmtTokens(promptToks)} accent="#7C70AE" />
+          <CRow label="Total Tokens"  value={fmtTokens(totalToks)} />
+          <CRow label="Input Share"   value={`${pct(promptToks, totalToks)}%`} />
+          <CRow label="Avg Input/Req" value={fmtTokens(totalReqs > 0 ? Math.round(promptToks / totalReqs) : 0)} />
+        </CSection>
+        {topModels.length > 0 && (
+          <CSection title="Top Models by Input Tokens">
+            {topModels.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                <ModelPill name={r.model_name} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#7C70AE", fontFamily: "monospace" }}>{fmtTokens(r.input_tokens)}</span>
+              </div>
+            ))}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "completion_tokens") {
+    title = "Output (Completion) Tokens";
+    const topModels = [...byModel].sort((a, b) => (b.output_tokens || 0) - (a.output_tokens || 0)).slice(0, 6);
+    body = (
+      <>
+        <CSection title="Completion Token Summary">
+          <CRow label="Completion Tokens" value={fmtTokens(completionToks)} accent="#9E2A97" />
+          <CRow label="Total Tokens"      value={fmtTokens(totalToks)} />
+          <CRow label="Output Share"      value={`${pct(completionToks, totalToks)}%`} />
+          <CRow label="Avg Output/Req"    value={fmtTokens(totalReqs > 0 ? Math.round(completionToks / totalReqs) : 0)} />
+        </CSection>
+        {topModels.length > 0 && (
+          <CSection title="Top Models by Output Tokens">
+            {topModels.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                <ModelPill name={r.model_name} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#9E2A97", fontFamily: "monospace" }}>{fmtTokens(r.output_tokens)}</span>
+              </div>
+            ))}
+          </CSection>
+        )}
+      </>
+    );
+  } else if (cardKey === "avg_latency") {
+    title = "Avg Latency Details";
+    const latStatus = avgLatency < 500  ? { label: "Excellent", color: "#10b981" }
+                    : avgLatency < 1500 ? { label: "Good",      color: "#3FB6D4" }
+                    : avgLatency < 3000 ? { label: "Moderate",  color: "#f59e0b" }
+                    :                     { label: "High",       color: "#ef4444" };
+    const topModels = [...byModel].sort((a, b) => (b.total_requests || 0) - (a.total_requests || 0)).slice(0, 5);
+    body = (
+      <>
+        <CSection title="Latency Overview">
+          <CRow label="Avg Latency" value={`${num(avgLatency)} ms`} accent={latStatus.color} />
+          <CRow label="Status"      value={latStatus.label}          accent={latStatus.color} />
+          <CRow label="Requests"    value={num(totalReqs)} />
+        </CSection>
+        {topModels.length > 0 && (
+          <CSection title="Most-Used Models">
+            {topModels.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                <ModelPill name={r.model_name} />
+                <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{num(r.total_requests)} reqs</span>
+              </div>
+            ))}
+          </CSection>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2000 }}>
+      <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 500 }}>
+        <div className="modal-header">
+          <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
+        <div>{body}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 function Cost() {
   const [selectedProject, setSelectedProject]     = useState("");
@@ -482,6 +717,7 @@ function Cost() {
   const [loading, setLoading]                     = useState(true);
   const [error, setError]                         = useState("");
   const [expandedProjects, setExpandedProjects]   = useState(new Set());
+  const [activeCard, setActiveCard]               = useState(null);
   const PAGE_SIZE = 25;
 
   const load = useCallback(async () => {
@@ -555,40 +791,40 @@ function Cost() {
   }
 
   return (
-    <div className="page-shell">
+    <>
+      {/* ── Fixed filter bar ──────────────────────────────────────────────── */}
+      <div className="page-filter-bar">
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Cost</span>
 
-      {/* ── Filter bar ──────────────────────────────────────────────────── */}
-      <section className="panel" style={{ padding: "16px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Cost</span>
-
-          {/* Project dropdown — built from cost data */}
-          <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13 }}>
-            <option value="">All Projects</option>
-            {byProject.map(r => (
-              <option key={r.project_id || "unassigned"} value={r.project_id || "unassigned"}>
-                {r.project_name || r.project_id || "unassigned"}
-              </option>
-            ))}
-          </select>
-
-          {RANGE_OPTIONS.map(opt => (
-            <button key={opt.value} type="button"
-              className={`btn ${days === opt.value ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setDays(opt.value)}>
-              {opt.label}
-            </button>
+        {/* Project dropdown */}
+        <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
+          style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--gray-200)", fontSize: 13 }}>
+          <option value="">All Projects</option>
+          {byProject.map(r => (
+            <option key={r.project_id || "unassigned"} value={r.project_id || "unassigned"}>
+              {r.project_name || r.project_id || "unassigned"}
+            </option>
           ))}
+        </select>
 
-          {selectedProject && (
-            <button className="btn btn-ghost" style={{ fontSize: 12, color: "#9E2A97" }}
-              onClick={() => setSelectedProject("")}>
-              ✕ Clear project
-            </button>
-          )}
-        </div>
-      </section>
+        {RANGE_OPTIONS.map(opt => (
+          <button key={opt.value} type="button"
+            className={`btn ${days === opt.value ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setDays(opt.value)}>
+            {opt.label}
+          </button>
+        ))}
+
+        {selectedProject && (
+          <button className="btn btn-ghost" style={{ fontSize: 12, color: "#9E2A97" }}
+            onClick={() => setSelectedProject("")}>
+            ✕ Clear project
+          </button>
+        )}
+      </div>
+
+      {/* ── Scrollable page body ──────────────────────────────────────────── */}
+      <div className="page-body"><div className="page-shell">
 
       {error && <div className="error-message">{error}</div>}
 
@@ -603,13 +839,16 @@ function Cost() {
           { label: "Prompt Tokens",     value: num(effectiveOverview?.prompt_tokens),     sub: "input" },
           { label: "Completion Tokens", value: num(effectiveOverview?.completion_tokens), sub: "output" },
           { label: "Avg Latency",       value: `${num(effectiveOverview?.avg_latency_ms)} ms`, sub: "end-to-end" },
-        ].map(card => (
-          <div key={card.label} className="metric-card">
-            <div className="metric-eyebrow">{card.label}</div>
-            <div className="metric-value">{card.value}</div>
-            <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 4 }}>{card.sub}</div>
-          </div>
-        ))}
+        ].map(card => {
+          const cardKey = card.label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, "");
+          return (
+            <div key={card.label} className="metric-card metric-card-interactive" onClick={() => setActiveCard(cardKey)}>
+              <div className="metric-eyebrow">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+              <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 4 }}>{card.sub}</div>
+            </div>
+          );
+        })}
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -713,6 +952,7 @@ function Cost() {
                                 <thead>
                                   <tr style={{ background: "rgba(124,112,174,0.06)" }}>
                                     <th>Model</th>
+                                    <th>Route</th>
                                     <th style={{textAlign:"right"}}>Requests</th><th style={{textAlign:"right"}}>Input Tokens</th><th style={{textAlign:"right"}}>Output Tokens</th>
                                     <th style={{textAlign:"right"}}>Total Tokens</th><th style={{textAlign:"right"}}>Input Cost</th><th style={{textAlign:"right"}}>Output Cost</th>
                                     <th style={{textAlign:"right"}}>Total Cost</th><th style={{textAlign:"right"}}>Avg/Req</th>
@@ -724,6 +964,7 @@ function Cost() {
                                     return (
                                       <tr key={i}>
                                         <td><span style={{ fontSize: 12, padding: "2px 10px", borderRadius: 20, background: `${modelColor(mr.model_name)}15`, border: `1px solid ${modelColor(mr.model_name)}40`, color: modelColor(mr.model_name), fontWeight: 600, fontFamily: "monospace" }}>{mr.model_name}</span></td>
+                                        <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{mr.entry_point || "—"}</td>
                                         <td style={{textAlign:"right"}}>{num(mr.total_requests)}</td>
                                         <td style={{textAlign:"right", color:"#7C70AE", fontWeight:500}}>{fmtTokens(mr.input_tokens)}</td>
                                         <td style={{textAlign:"right", color:"#9E2A97", fontWeight:500}}>{fmtTokens(mr.output_tokens)}</td>
@@ -739,6 +980,7 @@ function Cost() {
                                 <tfoot>
                                   <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)", background: "rgba(158,42,151,0.03)" }}>
                                     <td><strong>Subtotal</strong></td>
+                                    <td />
                                     <td style={{textAlign:"right"}}>{num(pm.rows.reduce((s,x)=>s+(x.total_requests||0),0))}</td>
                                     <td style={{textAlign:"right", color:"#7C70AE", fontWeight:600}}>{fmtTokens(pm.input_tokens)}</td>
                                     <td style={{textAlign:"right", color:"#9E2A97", fontWeight:600}}>{fmtTokens(pm.output_tokens)}</td>
@@ -921,7 +1163,20 @@ function Cost() {
           </section>
         </>
       )}
-    </div>
+
+      </div></div>{/* close page-shell + page-body */}
+
+      {activeCard && (
+        <CostKpiModal
+          cardKey={activeCard}
+          overview={effectiveOverview}
+          byProject={byProject}
+          byModel={byModel}
+          grandTotal={grandTotal}
+          onClose={() => setActiveCard(null)}
+        />
+      )}
+    </>
   );
 }
 

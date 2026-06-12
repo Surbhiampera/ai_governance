@@ -7,9 +7,10 @@ import {
   createGovernanceKey,
   listGovernanceKeys,
   revokeGovernanceKey,
-  getProxyPiiSummary,
-  getProxyRequests,
-  getProxyByProjectModel,
+  rotateGovernanceKey,
+  getRules,
+  getBudgetUtilization,
+  getRateLimits,
 } from "../api";
 
 const INPUT_STYLE = {
@@ -21,12 +22,6 @@ const INPUT_STYLE = {
   boxSizing: "border-box",
 };
 
-const PII_COLOR = {
-  email: "#6366f1", phone: "#8b5cf6", ssn: "#ef4444", aadhar: "#ef4444",
-  national_id: "#ef4444", credit_card: "#ef4444", name: "#f59e0b",
-  ip_address: "#3b82f6", date_of_birth: "#f97316",
-};
-const ACTION_COLOR = { mask: "#f59e0b", block: "#ef4444", alert: "#f97316", allow: "#22c55e" };
 
 const PROXY_BASE = import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com";
 
@@ -383,11 +378,20 @@ client = OpenAI(
 
 // ─── Secret Key ──────────────────────────────────────────────────────────────
 function KeyStep({ orgId, projectId }) {
-  const [keys, setKeys]     = useState([]);
-  const [name, setName]     = useState("");
-  const [newKey, setNewKey] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg]       = useState("");
+  const [keys, setKeys]               = useState([]);
+  const [name, setName]               = useState("");
+  const [newKey, setNewKey]           = useState(null);
+  const [saving, setSaving]           = useState(false);
+  const [msg, setMsg]                 = useState("");
+  const [rotateConfirm, setRotateConfirm] = useState(null); // key object pending rotation
+  const [rotatedKey, setRotatedKey]   = useState(null);     // raw key from rotation reveal
+  const [rotating, setRotating]       = useState(false);
+  const [toast, setToast]             = useState("");
+
+  const showToast = (text) => {
+    setToast(text);
+    setTimeout(() => setToast(""), 4000);
+  };
 
   const load = useCallback(() => {
     if (!orgId) return;
@@ -432,6 +436,26 @@ function KeyStep({ orgId, projectId }) {
     }
   };
 
+  const confirmRotate = async () => {
+    if (!rotateConfirm) return;
+    setRotating(true);
+    try {
+      const r = await rotateGovernanceKey(rotateConfirm.key_id);
+      setRotateConfirm(null);
+      setRotatedKey(r.data);
+      load();
+      showToast("Key rotated. Share the new key with your team.");
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const errMsg = Array.isArray(detail)
+        ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+        : (detail || e.message);
+      setMsg("Error rotating key: " + errMsg);
+      setRotateConfirm(null);
+    }
+    setRotating(false);
+  };
+
   return (
     <section className="panel">
       <div className="section-head">
@@ -463,26 +487,13 @@ function KeyStep({ orgId, projectId }) {
         </p>
       )}
 
-      {/* New key reveal */}
+      {/* New key reveal (creation) */}
       {newKey && (
-        <div style={{
-          background: "rgba(34,197,94,0.07)", border: "1px solid #22c55e",
-          borderRadius: 10, padding: 16, marginBottom: 16,
-        }}>
-          <p style={{ fontWeight: 600, margin: "0 0 8px", color: "#166534" }}>
-            Key created — copy it now, it won't be shown again
-          </p>
-          <code style={{
-            display: "block", fontFamily: "monospace", fontSize: 13,
-            wordBreak: "break-all", background: "#f0fdf4",
-            padding: "8px 12px", borderRadius: 6, color: "#166534", marginBottom: 10,
-          }}>
-            {newKey.raw_key}
-          </code>
-          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setNewKey(null)}>
-            Dismiss
-          </button>
-        </div>
+        <KeyRevealBanner
+          title="Key created — copy it now, it won't be shown again"
+          rawKey={newKey.raw_key}
+          onDismiss={() => setNewKey(null)}
+        />
       )}
 
       {/* Existing keys table */}
@@ -510,10 +521,21 @@ function KeyStep({ orgId, projectId }) {
                     </span>
                   </td>
                   <td>
-                    {k.is_active && (
-                      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }}
-                        onClick={() => handleRevoke(k.key_id)}>Revoke</button>
-                    )}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {k.is_active && (
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: "4px 10px", fontSize: 12, color: "#7C70AE", border: "1px solid #7C70AE60" }}
+                          onClick={() => setRotateConfirm(k)}
+                        >
+                          Rotate Key
+                        </button>
+                      )}
+                      {k.is_active && (
+                        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }}
+                          onClick={() => handleRevoke(k.key_id)}>Revoke</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -524,356 +546,360 @@ function KeyStep({ orgId, projectId }) {
 
       {/* Integration guide */}
       <IntegrationGuide proxyBase={PROXY_BASE} />
+
+      {/* ── Rotate confirmation modal ── */}
+      {rotateConfirm && (
+        <div className="modal-backdrop" onClick={() => setRotateConfirm(null)}>
+          <div className="modal-dialog" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0 }}>Rotate Key?</h3>
+              <button className="btn-close" onClick={() => setRotateConfirm(null)}>×</button>
+            </div>
+            <div style={{ padding: "4px 0 20px" }}>
+              <p style={{ fontSize: 14, margin: "0 0 8px" }}>
+                You are about to rotate <strong>{rotateConfirm.key_name}</strong>.
+              </p>
+              <div style={{
+                background: "rgba(239,68,68,0.06)", border: "1px solid #fca5a5",
+                borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16,
+              }}>
+                The old key stops working <strong>immediately</strong>. Any integration currently using it will break until updated.
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost" onClick={() => setRotateConfirm(null)}>Cancel</button>
+                <button
+                  className="btn btn-primary"
+                  style={{ background: "#7C70AE", borderColor: "#7C70AE" }}
+                  disabled={rotating}
+                  onClick={confirmRotate}
+                >
+                  {rotating ? "Rotating…" : "Yes, Rotate Key"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rotated key reveal modal ── */}
+      {rotatedKey && (
+        <div className="modal-backdrop" onClick={() => setRotatedKey(null)}>
+          <div className="modal-dialog" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0 }}>New Key — Copy Now</h3>
+              <button className="btn-close" onClick={() => setRotatedKey(null)}>×</button>
+            </div>
+            <KeyRevealBanner
+              title="Store this now — it won't be shown again"
+              rawKey={rotatedKey.raw_key}
+              onDismiss={() => setRotatedKey(null)}
+              inline
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
+          background: "#166534", color: "#fff", padding: "10px 20px",
+          borderRadius: 10, fontSize: 13, fontWeight: 600,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.18)", zIndex: 9999,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span style={{ fontSize: 15 }}>✓</span> {toast}
+        </div>
+      )}
     </section>
   );
 }
 
-// ─── Automated: PII Activity ─────────────────────────────────────────────────
-function PiiActivity({ orgId }) {
-  const [summary, setSummary] = useState(null);
-  const [recent, setRecent]   = useState([]);
+// ─── Key reveal banner (shared by creation + rotation) ───────────────────────
+function KeyRevealBanner({ title, rawKey, onDismiss, inline = false }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(rawKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const inner = (
+    <div style={{
+      background: inline ? "transparent" : "rgba(34,197,94,0.07)",
+      border: inline ? "none" : "1px solid #22c55e",
+      borderRadius: inline ? 0 : 10,
+      padding: inline ? "4px 0 0" : 16,
+      marginBottom: inline ? 0 : 16,
+    }}>
+      <p style={{ fontWeight: 600, margin: "0 0 8px", color: "#166534", fontSize: 13 }}>{title}</p>
+      <code style={{
+        display: "block", fontFamily: "monospace", fontSize: 13,
+        wordBreak: "break-all", background: "#f0fdf4",
+        padding: "8px 12px", borderRadius: 6, color: "#166534", marginBottom: 10,
+      }}>
+        {rawKey}
+      </code>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          className="btn btn-primary"
+          style={{ fontSize: 12, background: "#166534", borderColor: "#166534" }}
+          onClick={handleCopy}
+        >
+          {copied ? "Copied!" : "Copy Key"}
+        </button>
+        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onDismiss}>
+          {inline ? "Done" : "Dismiss"}
+        </button>
+      </div>
+    </div>
+  );
+
+  return inner;
+}
+
+
+// ─── Policy Enforcement ───────────────────────────────────────────────────────
+function PolicyEnforcementSection({ orgId }) {
+  const [rules, setRules]     = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(() => {
+  useEffect(() => {
     if (!orgId) return;
     setLoading(true);
-    Promise.all([
-      getProxyPiiSummary(orgId, 30),
-      getProxyRequests({ org_id: orgId, pii_only: true, limit: 20 }),
-    ])
-      .then(([s, r]) => {
-        setSummary(s.data || null);
-        setRecent(r.data?.items || []);
-      })
-      .catch(() => {})
+    getRules(orgId)
+      .then(r => setRules(r.data || []))
+      .catch(() => setRules([]))
       .finally(() => setLoading(false));
   }, [orgId]);
 
-  useEffect(() => { load(); }, [load]);
+  const active = rules.filter(r => r.is_active !== false);
 
-  const total   = summary?.total_pii_requests || 0;
-  const blocked = summary?.blocked_requests || 0;
-  const masked  = (summary?.action_breakdown || []).find((a) => a.action === "mask")?.count || 0;
-  const types   = summary?.pii_type_breakdown || [];
+  const parseModels = (rule) => {
+    const t = rule.threshold;
+    if (Array.isArray(t)) return t;
+    if (typeof t === "string") return t.split(",").map(s => s.trim()).filter(Boolean);
+    return t != null ? [String(t)] : [];
+  };
+
+  const allowedNames = active.filter(r => /allowed.model/i.test(r.metric)).flatMap(parseModels);
+  const blockedNames = active.filter(r => /blocked.model/i.test(r.metric)).flatMap(parseModels);
+  const maxInput     = active.find(r => /max.input.token/i.test(r.metric));
+  const maxOutput    = active.find(r => /max.output.token/i.test(r.metric));
+
+  const BadgeList = ({ values, color = "#7C70AE" }) =>
+    values.length > 0 ? (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {values.map((v, i) => (
+          <span key={i} style={{
+            fontSize: 11, padding: "2px 10px", borderRadius: 20,
+            background: `${color}15`, color, fontWeight: 600, fontFamily: "monospace",
+          }}>{v}</span>
+        ))}
+      </div>
+    ) : <span style={{ color: "var(--gray-400)" }}>—</span>;
+
+  const SubBox = ({ title, color, children }) => (
+    <div style={{
+      border: `1px solid ${color}30`, borderLeft: `3px solid ${color}`,
+      borderRadius: 8, padding: "12px 14px",
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
 
   return (
     <section className="panel">
       <div className="section-head">
         <div>
-          <h3>PII Detection  <span style={{ fontSize: 12, fontWeight: 400, color: "var(--gray-500)" }}>— automated</span></h3>
-          <p className="panel-muted">
-            Every request is scanned automatically. Nothing to configure.
-          </p>
+          <h3>Policy Enforcement</h3>
+          <p className="panel-muted">Active governance rules for this organization.</p>
         </div>
-        <button className="btn btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 12 }}>
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+        {!loading && active.length > 0 && (
+          <span style={{ fontSize: 12, color: "#7C70AE", fontWeight: 600 }}>
+            {active.length} active rule{active.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        {[
-          { label: "PII Detected (30d)", value: total,   color: "#f59e0b" },
-          { label: "Requests Blocked",   value: blocked, color: "#ef4444" },
-          { label: "Fields Masked",      value: masked,  color: "#6366f1" },
-        ].map((c) => (
-          <div key={c.label} style={{
-            background: "var(--surface-1,#fff)",
-            border: `1px solid ${c.color}30`,
-            borderLeft: `4px solid ${c.color}`,
-            borderRadius: 10, padding: "12px 18px", minWidth: 160,
-          }}>
-            <div style={{ fontSize: 11, color: "var(--gray-500)", marginBottom: 4,
-              textTransform: "uppercase", letterSpacing: "0.1em" }}>{c.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: c.color }}>{c.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {types.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-500)", marginBottom: 8,
-            textTransform: "uppercase", letterSpacing: "0.1em" }}>Detected PII Types</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {types.map((t) => (
-              <div key={t.pii_type} style={{
-                background: `${PII_COLOR[t.pii_type] || "#6366f1"}15`,
-                border: `1px solid ${PII_COLOR[t.pii_type] || "#6366f1"}40`,
-                borderRadius: 20, padding: "5px 14px",
-                display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: "monospace",
-                  color: PII_COLOR[t.pii_type] || "#6366f1" }}>{t.pii_type}</span>
-                <span style={{ fontSize: 13, fontWeight: 700,
-                  color: PII_COLOR[t.pii_type] || "#6366f1" }}>{t.count}</span>
-              </div>
-            ))}
-          </div>
+      {loading ? (
+        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
+      ) : active.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--gray-500)", padding: "12px 0" }}>No active governance rules.</p>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <SubBox title="Allowed Models" color="#22c55e">
+            <BadgeList values={allowedNames} color="#22c55e" />
+          </SubBox>
+          <SubBox title="Blocked Models" color="#ef4444">
+            <BadgeList values={blockedNames} color="#ef4444" />
+          </SubBox>
+          <SubBox title="Max Input Tokens" color="#7C70AE">
+            {maxInput
+              ? <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 15 }}>{Number(maxInput.threshold).toLocaleString()}</span>
+              : <span style={{ color: "var(--gray-400)" }}>—</span>}
+          </SubBox>
+          <SubBox title="Max Output Tokens" color="#9E2A97">
+            {maxOutput
+              ? <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 15 }}>{Number(maxOutput.threshold).toLocaleString()}</span>
+              : <span style={{ color: "var(--gray-400)" }}>—</span>}
+          </SubBox>
         </div>
       )}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Request ID</th><th>Project</th><th>Model</th>
-              <th>PII Found</th><th>Action</th><th>Status</th><th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recent.map((r) => (
-              <tr key={r.request_id}>
-                <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.request_id}</td>
-                <td>{r.project_id || <span style={{ color: "var(--gray-400)" }}>—</span>}</td>
-                <td>{r.model_name || "—"}</td>
-                <td>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {(r.pii_types || []).map((pt) => (
-                      <span key={pt} style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 10,
-                        fontFamily: "monospace",
-                        background: `${PII_COLOR[pt] || "#6366f1"}18`,
-                        color: PII_COLOR[pt] || "#6366f1",
-                        border: `1px solid ${PII_COLOR[pt] || "#6366f1"}40`,
-                      }}>{pt}</span>
-                    ))}
-                  </div>
-                </td>
-                <td>
-                  {r.pii_action_taken ? (
-                    <span style={{
-                      fontSize: 11, padding: "2px 10px", borderRadius: 10, fontWeight: 600,
-                      background: `${ACTION_COLOR[r.pii_action_taken] || "#6b7280"}18`,
-                      color: ACTION_COLOR[r.pii_action_taken] || "#6b7280",
-                      border: `1px solid ${ACTION_COLOR[r.pii_action_taken] || "#6b7280"}40`,
-                    }}>{r.pii_action_taken}</span>
-                  ) : "—"}
-                </td>
-                <td>
-                  <span className={`status-pill ${r.request_status === "blocked" ? "critical" : r.request_status === "completed" ? "low" : "monitor"}`}>
-                    {r.request_status}
-                  </span>
-                </td>
-                <td style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>
-                  {r.received_at ? new Date(r.received_at).toLocaleString() : "—"}
-                </td>
-              </tr>
-            ))}
-            {recent.length === 0 && !loading && (
-              <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>
-                  No PII detected in the last 30 days.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </section>
   );
 }
 
-// ─── Project × Model Usage ────────────────────────────────────────────────────
-const DAYS_OPTIONS = [7, 30, 90];
-
-function fmt(n) {
-  if (n === null || n === undefined) return "0";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-  return String(n);
-}
-
-function fmtCost(v) {
-  if (!v) return "$0.000000";
-  return "$" + Number(v).toFixed(6);
-}
-
-const MODEL_COLORS = {
-  "gpt-4o-mini":           "#6366f1",
-  "gpt-5-nano":            "#8b5cf6",
-  "text-embedding-3-small":"#3b82f6",
-  "gpt-4o":                "#f59e0b",
-  "gpt-5":                 "#ec4899",
-};
-function modelColor(name) {
-  if (!name) return "#6b7280";
-  for (const [k, c] of Object.entries(MODEL_COLORS)) {
-    if (name.includes(k)) return c;
-  }
-  return "#6b7280";
-}
-
-function ProjectModelUsageSection({ orgId }) {
-  const [rows, setRows]     = useState([]);
-  const [days, setDays]     = useState(30);
+// ─── Budget Status ────────────────────────────────────────────────────────────
+function BudgetStatusSection({ orgId }) {
+  const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState("");
 
-  const load = useCallback(() => {
+  useEffect(() => {
     if (!orgId) return;
     setLoading(true);
-    setError("");
-    getProxyByProjectModel(orgId, days)
-      .then((r) => setRows(r.data || []))
-      .catch(() => setError("Could not load usage data."))
+    getBudgetUtilization(orgId)
+      .then(r => setBudgets(r.data || []))
+      .catch(() => setBudgets([]))
       .finally(() => setLoading(false));
-  }, [orgId, days]);
+  }, [orgId]);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Group rows by project for summary cards
-  const byProject = rows.reduce((acc, r) => {
-    const key = r.project_id || "unassigned";
-    if (!acc[key]) acc[key] = { project_name: r.project_name, models: [] };
-    acc[key].models.push(r);
-    return acc;
-  }, {});
-
-  const totalRequests = rows.reduce((s, r) => s + (r.total_requests || 0), 0);
-  const totalTokens   = rows.reduce((s, r) => s + (r.total_tokens || 0), 0);
-  const totalCost     = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
-  const uniqueModels  = [...new Set(rows.map((r) => r.model_name).filter(Boolean))];
+  const statusColor = (status, rawPct) => {
+    if (status === "exceeded" || rawPct > 100) return "#ef4444";
+    if (status === "warning"  || rawPct >= 80) return "#f59e0b";
+    return "#22c55e";
+  };
 
   return (
     <section className="panel">
-      <div className="section-head" style={{ marginBottom: 16 }}>
+      <div className="section-head">
         <div>
-          <h3>Usage by Project &amp; Model</h3>
-          <p className="panel-muted">
-            Input tokens, output tokens, total tokens and cost tracked per project for every model.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {DAYS_OPTIONS.map((d) => (
-            <button
-              key={d}
-              className={`btn ${days === d ? "btn-primary" : "btn-ghost"}`}
-              style={{ padding: "5px 12px", fontSize: 12 }}
-              onClick={() => setDays(d)}
-            >
-              {d}d
-            </button>
-          ))}
-          <button className="btn btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 12 }}>
-            {loading ? "Loading…" : "Refresh"}
-          </button>
+          <h3>Budget Status</h3>
+          <p className="panel-muted">Spend vs limit for this organization.</p>
         </div>
       </div>
 
-      {error && <p style={{ color: "#ef4444", fontSize: 13 }}>{error}</p>}
+      {loading ? (
+        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
+      ) : budgets.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--gray-500)", padding: "12px 0" }}>No budget configured for this organization.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {budgets.map((b, i) => {
+            const spent  = Number(b.spent_amount || b.spent  || 0);
+            const limit  = Number(b.limit_amount || b.limit  || 0);
+            const rawPct = limit > 0 ? (spent / limit) * 100 : 0;
+            const barPct = Math.min(rawPct, 100);
+            const color  = statusColor(b.status, rawPct);
+            const label  = b.project_id ? `Project: ${b.project_name || b.project_id}` : "Org-level";
 
-      {/* Summary stat chips */}
-      {rows.length > 0 && (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-          {[
-            { label: "Total Requests",   value: fmt(totalRequests), color: "#6366f1" },
-            { label: "Total Tokens",     value: fmt(totalTokens),   color: "#8b5cf6" },
-            { label: "Total Cost",       value: fmtCost(totalCost), color: "#f59e0b" },
-            { label: "Models Tracked",   value: uniqueModels.length, color: "#3b82f6" },
-          ].map((c) => (
-            <div key={c.label} style={{
-              background: "var(--surface-1,#fff)",
-              border: `1px solid ${c.color}30`,
-              borderLeft: `4px solid ${c.color}`,
-              borderRadius: 10, padding: "10px 16px", minWidth: 150,
-            }}>
-              <div style={{ fontSize: 11, color: "var(--gray-500)", marginBottom: 4,
-                textTransform: "uppercase", letterSpacing: "0.1em" }}>{c.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
-            </div>
-          ))}
+            return (
+              <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "14px 18px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{label}</span>
+                    {b.period && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-400)", textTransform: "capitalize" }}>{b.period}</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color, padding: "2px 10px", borderRadius: 20, background: `${color}15` }}>
+                    {rawPct.toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: "rgba(124,112,174,0.12)", overflow: "hidden", marginBottom: 8 }}>
+                  <div style={{ width: `${barPct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
+                </div>
+                <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                  ${spent.toFixed(2)} spent of ${limit.toFixed(2)} limit ({rawPct.toFixed(1)}%)
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+    </section>
+  );
+}
 
-      {/* Model legend */}
-      {uniqueModels.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          {uniqueModels.map((m) => (
-            <span key={m} style={{
-              fontSize: 12, padding: "3px 12px", borderRadius: 20,
-              background: `${modelColor(m)}15`,
-              border: `1px solid ${modelColor(m)}40`,
-              color: modelColor(m), fontWeight: 600, fontFamily: "monospace",
-            }}>{m}</span>
-          ))}
+// ─── Rate Limits ──────────────────────────────────────────────────────────────
+function RateLimitsSection({ orgId }) {
+  const [limits, setLimits]   = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!orgId) return;
+    setLoading(true);
+    getRateLimits(orgId)
+      .then(r => setLimits(r.data || []))
+      .catch(() => setLimits([]))
+      .finally(() => setLoading(false));
+  }, [orgId]);
+
+  const scopeLabel = (scope) => {
+    if (!scope) return "—";
+    if (scope === "api_key") return "key";
+    return scope;
+  };
+
+  const scopePill = (scope) => {
+    if (scope === "org")     return "low";
+    if (scope === "project") return "medium";
+    return "high";
+  };
+
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <div>
+          <h3>Rate Limits</h3>
+          <p className="panel-muted">Request and token rate limits for this organization.</p>
         </div>
-      )}
+      </div>
 
-      {/* Per-project groups */}
-      {Object.entries(byProject).map(([pid, pdata]) => {
-        const projTotal = pdata.models.reduce((s, r) => s + (r.total_cost || 0), 0);
-        const projTokens = pdata.models.reduce((s, r) => s + (r.total_tokens || 0), 0);
-        return (
-          <div key={pid} style={{
-            border: "1px solid var(--border)", borderRadius: 10,
-            marginBottom: 16, overflow: "hidden",
-          }}>
-            <div style={{
-              padding: "10px 16px",
-              background: "var(--gray-50,#f9fafb)",
-              borderBottom: "1px solid var(--border)",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--gray-700)" }}>
-                {pdata.project_name || pid}
-              </span>
-              <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                {fmt(projTokens)} tokens &nbsp;·&nbsp; {fmtCost(projTotal)}
-              </span>
-            </div>
-            <div className="table-wrap" style={{ margin: 0 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th style={{ textAlign: "right" }}>Requests</th>
-                    <th style={{ textAlign: "right" }}>Input Tokens</th>
-                    <th style={{ textAlign: "right" }}>Output Tokens</th>
-                    <th style={{ textAlign: "right" }}>Total Tokens</th>
-                    <th style={{ textAlign: "right" }}>Input Cost</th>
-                    <th style={{ textAlign: "right" }}>Output Cost</th>
-                    <th style={{ textAlign: "right" }}>Total Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pdata.models.map((r, i) => (
-                    <tr key={i}>
-                      <td>
-                        <span style={{
-                          fontSize: 12, padding: "2px 10px", borderRadius: 20,
-                          background: `${modelColor(r.model_name)}15`,
-                          border: `1px solid ${modelColor(r.model_name)}40`,
-                          color: modelColor(r.model_name),
-                          fontWeight: 600, fontFamily: "monospace",
-                        }}>{r.model_name}</span>
-                      </td>
-                      <td style={{ textAlign: "right" }}>{r.total_requests}</td>
-                      <td style={{ textAlign: "right" }}>{fmt(r.input_tokens)}</td>
-                      <td style={{ textAlign: "right" }}>{fmt(r.output_tokens)}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(r.total_tokens)}</td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>
-                        {fmtCost(r.input_cost)}
-                      </td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>
-                        {fmtCost(r.output_cost)}
-                      </td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", fontSize: 12,
-                        fontWeight: 700, color: "#f59e0b" }}>
-                        {fmtCost(r.total_cost)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })}
-
-      {rows.length === 0 && !loading && (
-        <p style={{ textAlign: "center", color: "var(--gray-500)", padding: "32px 0" }}>
-          No proxy requests recorded in the last {days} days.
-          Point your SDK at the proxy with an <code>X-Governance-Key</code> header to start tracking.
-        </p>
+      {loading ? (
+        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
+      ) : limits.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--gray-500)", padding: "12px 0" }}>No rate limits configured.</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Max Requests/min</th>
+                <th>Max Tokens/day</th>
+                <th>Model</th>
+              </tr>
+            </thead>
+            <tbody>
+              {limits.map((l, i) => (
+                <tr key={i}>
+                  <td>
+                    <span className={`status-pill ${scopePill(l.scope)}`}>{scopeLabel(l.scope)}</span>
+                  </td>
+                  <td>
+                    {l.max_requests_per_minute != null
+                      ? Number(l.max_requests_per_minute).toLocaleString()
+                      : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                  </td>
+                  <td>
+                    {l.max_tokens_per_day != null
+                      ? Number(l.max_tokens_per_day).toLocaleString()
+                      : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                  </td>
+                  <td>
+                    {l.model
+                      ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{l.model}</span>
+                      : <span style={{ color: "var(--gray-400)" }}>all models</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -911,6 +937,7 @@ export default function ProxySetup() {
   }, [selectedOrg]);
 
   return (
+    <div className="page-body">
     <div className="page-shell">
       {orgsLoading && (
         <p style={{ color: "var(--gray-500)", fontSize: 13, marginBottom: 12 }}>
@@ -938,15 +965,17 @@ export default function ProxySetup() {
       )}
 
       {selectedOrg && selectedProject && (
-        <>
-          <KeyStep orgId={selectedOrg} projectId={selectedProject} />
-          <PiiActivity orgId={selectedOrg} />
-        </>
+        <KeyStep orgId={selectedOrg} projectId={selectedProject} />
       )}
 
       {selectedOrg && (
-        <ProjectModelUsageSection orgId={selectedOrg} />
+        <>
+          <PolicyEnforcementSection orgId={selectedOrg} />
+          <BudgetStatusSection orgId={selectedOrg} />
+          <RateLimitsSection orgId={selectedOrg} />
+        </>
       )}
+    </div>
     </div>
   );
 }

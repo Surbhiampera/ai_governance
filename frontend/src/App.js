@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   BrowserRouter as Router,
   NavLink,
   Route,
   Routes,
+  useLocation,
 } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
@@ -41,7 +42,18 @@ const NAV_ICONS = {
   ),
 };
 
+function ScrollReset({ contentRef }) {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const body = contentRef.current.querySelector(".page-body");
+    (body || contentRef.current).scrollTo(0, 0);
+  }, [pathname, contentRef]);
+  return null;
+}
+
 function App() {
+  const contentRef = useRef(null);
   return (
     <Router>
       <div className="shell">
@@ -77,7 +89,8 @@ function App() {
           </div>
         </aside>
 
-        <main className="content">
+        <main className="content" ref={contentRef}>
+          <ScrollReset contentRef={contentRef} />
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />

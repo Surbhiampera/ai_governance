@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
   getProxyRequests, getProxyPiiSummary, getProxyOverview,
   getSecurityLogsCombined, getSecuritySummaryCombined,
-  getAnomaliesCombined, getAdminPIIDetail, getProjects,
+  getAnomaliesCombined, resolveAnomaly, getAdminPIIDetail, getProjects,
+  getProxyRequestPiiDetail,
 } from "../api";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const num   = (v) => Number(v || 0).toLocaleString();
 const money = (v) => `$${Number(v || 0).toFixed(6)}`;
+
+const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4", "#3FB6D4", "#f59e0b", "#10b981"];
 
 const RANGE_OPTIONS = [
   { label: "7d",  value: 7  },
@@ -35,6 +38,197 @@ function daysToStartDate(d) {
   const dt = new Date();
   dt.setDate(dt.getDate() - d + 1);
   return dt.toISOString().split("T")[0];
+}
+
+// ── Severity chip ─────────────────────────────────────────────────────────────
+const SEV_COLOR = { high: "#ef4444", medium: "#f59e0b", low: "#22c55e" };
+function SeverityChip({ value }) {
+  if (!value) return <span style={{ color: "var(--gray-400)" }}>—</span>;
+  const v = value.toLowerCase();
+  return (
+    <span style={{
+      display: "inline-block", padding: "2px 10px", borderRadius: 20,
+      fontSize: 11, fontWeight: 700, textTransform: "capitalize",
+      background: `${SEV_COLOR[v] || "#6b7280"}18`,
+      color: SEV_COLOR[v] || "#6b7280",
+      border: `1px solid ${SEV_COLOR[v] || "#6b7280"}40`,
+    }}>{value}</span>
+  );
+}
+
+// ── Proxy PII Detail Modal ────────────────────────────────────────────────────
+function ProxyPiiDetailModal({ requestId, onClose }) {
+  const [detail, setDetail]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+
+  useEffect(() => {
+    if (!requestId) return;
+    setLoading(true);
+    setError("");
+    getProxyRequestPiiDetail(requestId)
+      .then((res) => setDetail(res.data))
+      .catch(() => setError("Failed to load PII detail."))
+      .finally(() => setLoading(false));
+  }, [requestId]);
+
+  if (!requestId) return null;
+
+  // Build original and sanitized text from request_payload messages
+  const originalMessages = detail?.pii_detail?.length
+    ? null  // entity_details has the originals
+    : null;
+  const payloadMessages = detail?.request_payload?.messages || [];
+  const sanitizedText   = payloadMessages.map((m) => (m.content || "")).join("\n\n");
+
+  // Re-construct original text by restoring masked values
+  function buildOriginalText() {
+    if (!sanitizedText || !detail?.pii_detail?.length) return sanitizedText || "";
+    let text = sanitizedText;
+    // Replace masked placeholders back with original values (best-effort)
+    for (const e of (detail.pii_detail || [])) {
+      if (e.masked_value && e.original_value) {
+        text = text.replace(e.masked_value, e.original_value);
+      }
+    }
+    return text;
+  }
+
+  // Highlight [PLACEHOLDER] tokens in the sanitized text
+  function highlightMasked(text) {
+    if (!text) return text;
+    const parts = text.split(/(\[[A-Z_]+\])/g);
+    return parts.map((part, i) =>
+      /^\[[A-Z_]+\]$/.test(part)
+        ? <mark key={i} style={{ background: "#fef3c7", color: "#92400e", borderRadius: 3, padding: "0 2px" }}>{part}</mark>
+        : part
+    );
+  }
+
+  return (
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2100 }}>
+      <div onClick={(e) => e.stopPropagation()} className="modal-dialog"
+        style={{ maxWidth: 860, padding: "24px 28px", maxHeight: "90vh", overflowY: "auto" }}>
+
+        <div className="modal-header" style={{ marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Request Detail</h3>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)", fontFamily: "monospace" }}>{requestId}</p>
+          </div>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
+
+        {loading && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--gray-400)" }}>Loading…</div>}
+        {error   && <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>}
+
+        {detail && (
+          <>
+            {/* ── Section A: Summary ────────────────────────────────── */}
+            <div style={{
+              display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap",
+              padding: "12px 16px", borderRadius: 10, marginBottom: 20,
+              background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+            }}>
+              <div>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Severity</span>
+                <div style={{ marginTop: 4 }}><SeverityChip value={detail.pii_severity} /></div>
+              </div>
+              <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24 }}>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Entities Detected</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#f59e0b", marginTop: 2 }}>{detail.pii_entities_detected || 0}</div>
+              </div>
+              <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24 }}>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Entities Masked</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#9E2A97", marginTop: 2 }}>{detail.pii_entities_masked || 0}</div>
+              </div>
+              <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24 }}>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Action</span>
+                <div style={{ marginTop: 4 }}>
+                  <span className={`status-pill ${detail.pii_action_taken === "block" ? "critical" : detail.pii_action_taken === "mask" ? "high" : "medium"}`}>
+                    {detail.pii_action_taken || "—"}
+                  </span>
+                </div>
+              </div>
+              <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24, flex: 1, minWidth: 120 }}>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>PII Types</span>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                  {(detail.pii_types || []).map((t) => (
+                    <span key={t} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "rgba(158,42,151,0.1)", color: "#9E2A97", fontFamily: "monospace", fontWeight: 600 }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Section B: Before/After table ────────────────────── */}
+            {(detail.pii_detail || []).length > 0 && (
+              <section style={{ marginBottom: 20 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97" }}>
+                  Entity Detail — Before &amp; After
+                </h4>
+                <div className="table-wrap" style={{ margin: 0 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>PII Type</th>
+                        <th>Original Value</th>
+                        <th>Masked As</th>
+                        <th>Risk Level</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.pii_detail.map((e, i) => (
+                        <tr key={i}>
+                          <td>
+                            <span style={{ fontSize: 11, fontFamily: "monospace", padding: "2px 8px", borderRadius: 20, background: "rgba(158,42,151,0.1)", color: "#9E2A97", fontWeight: 600 }}>
+                              {(e.pii_type || "").toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 12, color: "#b91c1c", wordBreak: "break-all" }}>
+                            {e.original_value || "—"}
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 12, color: "#9E2A97" }}>
+                            {e.masked_value || "—"}
+                          </td>
+                          <td><SeverityChip value={e.risk_level} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* ── Section C: Diff view ─────────────────────────────── */}
+            {sanitizedText && (
+              <section>
+                <h4 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97" }}>
+                  Prompt Diff
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--gray-500)", marginBottom: 6, textTransform: "uppercase" }}>Original</div>
+                    <pre style={{
+                      margin: 0, padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                      background: "#fef2f2", border: "1px solid #fca5a5",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 300, overflowY: "auto",
+                    }}>{buildOriginalText()}</pre>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--gray-500)", marginBottom: 6, textTransform: "uppercase" }}>Sanitized</div>
+                    <pre style={{
+                      margin: 0, padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                      background: "#f0fdf4", border: "1px solid #86efac",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 300, overflowY: "auto",
+                    }}>{highlightMasked(sanitizedText)}</pre>
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── PII Detail Modal ──────────────────────────────────────────────────────────
@@ -82,11 +276,15 @@ function PIIDetailModal({ eventId, onClose }) {
     detail?.usage_pct >= 75  ? "medium"   : "";
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 740, width: "100%", maxHeight: "88vh", overflowY: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 14, right: 16, background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--gray-500)" }}>×</button>
-        <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Detection — Event Detail</h3>
-        <p style={{ margin: "0 0 18px", fontSize: 12, color: "var(--gray-500)" }}>{eventId}</p>
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2000 }}>
+      <div onClick={(e) => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 740, padding: "24px 28px" }}>
+        <div className="modal-header" style={{ marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Detection — Event Detail</h3>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>{eventId}</p>
+          </div>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
 
         {loading && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--gray-400)" }}>Loading…</div>}
         {error   && <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>}
@@ -94,7 +292,7 @@ function PIIDetailModal({ eventId, onClose }) {
         {detail && (
           <>
             <section style={{ marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Context</h4>
+              <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>Context</h4>
               <DetailRow label="Organization" value={`${detail.org_name}${detail.org_id !== detail.org_name ? ` (${detail.org_id})` : ""}`} />
               <DetailRow label="Project" value={detail.project_name ? `${detail.project_name}${detail.project_id !== detail.project_name ? ` (${detail.project_id})` : ""}` : detail.project_id} />
               {detail.project_environment && <DetailRow label="Environment" value={detail.project_environment} />}
@@ -106,23 +304,23 @@ function PIIDetailModal({ eventId, onClose }) {
             </section>
 
             <section style={{ marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>PII Detection</h4>
-              <DetailRow label="PII Detected"       value={detail.pii_detected ? "Yes" : "No"} valueStyle={{ color: detail.pii_detected ? "#ef4444" : "#22c55e" }} />
-              {detail.pii_type && <DetailRow label="PII Type" value={detail.pii_type} valueStyle={{ fontFamily: "monospace", background: "#fef9c3", padding: "1px 6px", borderRadius: 4 }} />}
+              <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>PII Detection</h4>
+              <DetailRow label="PII Detected"       value={detail.pii_detected ? "Yes" : "No"} valueStyle={{ color: detail.pii_detected ? "#b91c1c" : "#15803d" }} />
+              {detail.pii_type && <DetailRow label="PII Type" value={detail.pii_type} valueStyle={{ fontFamily: "monospace", background: "rgba(158,42,151,0.08)", padding: "1px 8px", borderRadius: 6, color: "#9E2A97" }} />}
               <DetailRow label="Risk Score" value={
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: riskColor(detail.risk_score), flexShrink: 0 }} />
                   {detail.risk_score?.toFixed(1)} — {detail.risk_label}
                 </span>
               } />
-              <DetailRow label="Misuse Pattern"     value={detail.misuse_pattern_detected ? "Detected" : "None"} valueStyle={{ color: detail.misuse_pattern_detected ? "#ef4444" : undefined }} />
-              <DetailRow label="Data Out Violation" value={detail.data_out_violation ? "Yes" : "No"}             valueStyle={{ color: detail.data_out_violation ? "#ef4444" : undefined }} />
-              <DetailRow label="Abnormal Spike"     value={detail.abnormal_usage_spike ? "Yes" : "No"}           valueStyle={{ color: detail.abnormal_usage_spike ? "#f97316" : undefined }} />
-              <DetailRow label="Masking Applied"    value={detail.masking_applied ? "Yes" : "No"}                valueStyle={{ color: detail.masking_applied ? "#22c55e" : "var(--gray-500)" }} />
+              <DetailRow label="Misuse Pattern"     value={detail.misuse_pattern_detected ? "Detected" : "None"} valueStyle={{ color: detail.misuse_pattern_detected ? "#b91c1c" : undefined }} />
+              <DetailRow label="Data Out Violation" value={detail.data_out_violation ? "Yes" : "No"}             valueStyle={{ color: detail.data_out_violation ? "#b91c1c" : undefined }} />
+              <DetailRow label="Abnormal Spike"     value={detail.abnormal_usage_spike ? "Yes" : "No"}           valueStyle={{ color: detail.abnormal_usage_spike ? "#92400e" : undefined }} />
+              <DetailRow label="Masking Applied"    value={detail.masking_applied ? "Yes" : "No"}                valueStyle={{ color: detail.masking_applied ? "#15803d" : "var(--gray-500)" }} />
             </section>
 
             <section style={{ marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Usage Metrics</h4>
+              <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>Usage Metrics</h4>
               <DetailRow label="Prompt Tokens"      value={Number(detail.prompt_tokens     || 0).toLocaleString()} />
               <DetailRow label="Completion Tokens"  value={Number(detail.completion_tokens || 0).toLocaleString()} />
               <DetailRow label="Total Tokens"       value={Number(detail.total_tokens      || 0).toLocaleString()} />
@@ -139,7 +337,7 @@ function PIIDetailModal({ eventId, onClose }) {
                 } />
               )}
               {detail.usage_pct !== null && (
-                <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border,#f0f0f0)" }}>
+                <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--gray-200)" }}>
                   <span style={{ fontSize: 12, color: "var(--gray-500)", minWidth: 160, flexShrink: 0 }}>Token Usage</span>
                   <div style={{ flex: 1 }}><UsageBar pct={detail.usage_pct} /></div>
                 </div>
@@ -147,7 +345,7 @@ function PIIDetailModal({ eventId, onClose }) {
             </section>
 
             <section style={{ marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Root Cause Analysis</h4>
+              <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>Root Cause Analysis</h4>
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {(detail.root_causes || []).map((rc, i) => (
                   <li key={i} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--gray-700)" }}>{rc}</li>
@@ -157,20 +355,297 @@ function PIIDetailModal({ eventId, onClose }) {
 
             {detail.related_anomalies?.length > 0 && (
               <section>
-                <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Related Anomalies</h4>
+                <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>Related Anomalies</h4>
                 {detail.related_anomalies.map((a, i) => (
-                  <div key={i} style={{ padding: "10px 14px", borderRadius: 8, background: "var(--surface-2,#f8f9fa)", border: "1px solid var(--border,#e5e7eb)", marginBottom: 8 }}>
+                  <div key={i} style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--gray-50)", border: "1px solid var(--gray-200)", marginBottom: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <span className={`status-pill ${a.severity || ""}`}>{a.severity}</span>
                       <span style={{ fontSize: 12, fontWeight: 600 }}>{a.anomaly_type}</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: 12, color: "var(--gray-600)" }}>{a.message}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>{a.message}</p>
                   </div>
                 ))}
               </section>
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Card Detail Modal ─────────────────────────────────────────────────────────
+function ARow({ label, value, accent }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--gray-200)" }}>
+      <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: accent || "var(--gray-700)" }}>{value}</span>
+    </div>
+  );
+}
+function ASection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function CardDetailModal({ cardKey, overview, piiSummary, secSummary, secLogs, anomalies, piiRequests = [], onActionClick, onClose }) {
+  const TITLES = {
+    total_requests:             "Total Requests",
+    blocked:                    "Blocked Requests",
+    pii_detections:             "PII Detections",
+    success_rate:               "Success Rate",
+    completed:                  "Completed Requests",
+    avg_latency:                "Average Latency",
+    sec_total_security_events:  "Security Events",
+    sec_pii_detections:         "PII in Security Logs",
+    sec_misuse_patterns:        "Misuse Patterns",
+    sec_data_out_violations:    "Data Out Violations",
+    sec_avg_risk_score:         "Risk Score Overview",
+    sec_highest_risk_score:     "Highest Risk Events",
+  };
+
+  function renderContent() {
+    if (cardKey === "total_requests") {
+      return (
+        <ASection title="Request Overview">
+          <ARow label="Total Requests"  value={num(overview?.total_requests)} />
+          <ARow label="Completed"       value={num(overview?.completed)}       accent="#22c55e" />
+          <ARow label="Blocked"         value={num(overview?.blocked)}         accent="#ef4444" />
+          <ARow label="PII Detections"  value={num(overview?.pii_detections)} accent="#f97316" />
+          <ARow label="Success Rate"    value={`${overview?.success_rate ?? 0}%`} accent="#7C70AE" />
+        </ASection>
+      );
+    }
+    if (cardKey === "blocked") {
+      const blockedPct = Number(overview?.total_requests || 0) > 0
+        ? ((Number(overview?.blocked || 0) / Number(overview?.total_requests)) * 100).toFixed(1) : "0.0";
+      return (
+        <ASection title="Blocked Requests Detail">
+          <ARow label="Blocked Count"  value={num(overview?.blocked)}         accent="#ef4444" />
+          <ARow label="Total Requests" value={num(overview?.total_requests)} />
+          <ARow label="Block Rate"     value={`${blockedPct}%`}              accent="#ef4444" />
+          <ARow label="PII-Related"    value={num(overview?.pii_detections)} accent="#f97316" />
+        </ASection>
+      );
+    }
+    if (cardKey === "pii_detections") {
+      return (
+        <>
+          <ASection title="PII Overview">
+            <ARow label="PII Incidents" value={num(overview?.pii_detections)} accent="#ef4444" />
+            <ARow label="Blocked"       value={num(overview?.blocked)}        accent="#ef4444" />
+            <ARow label="Success Rate"  value={`${overview?.success_rate ?? 0}%`} />
+          </ASection>
+          {piiSummary?.pii_type_breakdown?.length > 0 && (
+            <ASection title="By PII Type">
+              <div style={{ display: "grid", gap: 6 }}>
+                {piiSummary.pii_type_breakdown.map((item, i) => (
+                  <div key={item.pii_type} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${CHART_COLORS[i % CHART_COLORS.length]}10`, border: `1px solid ${CHART_COLORS[i % CHART_COLORS.length]}30`, borderRadius: "var(--radius-sm)" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${CHART_COLORS[i % CHART_COLORS.length]}18`, color: CHART_COLORS[i % CHART_COLORS.length], fontFamily: "monospace" }}>{item.pii_type}</span>
+                    <span style={{ fontSize: 13, color: CHART_COLORS[i % CHART_COLORS.length], fontWeight: 700 }}>{item.count} hit{item.count !== 1 ? "s" : ""}</span>
+                  </div>
+                ))}
+              </div>
+            </ASection>
+          )}
+          {piiSummary?.action_breakdown?.length > 0 && (
+            <ASection title="Actions Taken">
+              <div style={{ display: "grid", gap: 6 }}>
+                {piiSummary.action_breakdown.map(item => {
+                  return (
+                    <div
+                      key={item.action}
+                      onClick={() => onActionClick && onActionClick(item.action)}
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--gray-50)", border: "1px solid var(--gray-200)", borderRadius: "var(--radius-sm)", cursor: "pointer", transition: "background 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(158,42,151,0.06)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "var(--gray-50)"}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize", color: "var(--gray-700)" }}>{item.action}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#9E2A97", background: "rgba(158,42,151,0.1)", padding: "2px 10px", borderRadius: 20 }}>{item.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </ASection>
+          )}
+        </>
+      );
+    }
+    if (cardKey === "success_rate") {
+      const sr        = Number(overview?.success_rate || 0);
+      const total     = Number(overview?.total_requests || 0);
+      const completed = Number(overview?.completed || 0);
+      const blocked   = Number(overview?.blocked || 0);
+      const srColor   = sr >= 95 ? "#22c55e" : sr >= 80 ? "#f97316" : "#ef4444";
+      return (
+        <ASection title="Request Outcomes">
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 13, color: "var(--gray-500)" }}>Success Rate</span>
+              <span style={{ fontWeight: 800, fontSize: 16, color: srColor }}>{sr}%</span>
+            </div>
+            <div style={{ height: 10, borderRadius: 5, background: "#f1f5f9", overflow: "hidden" }}>
+              <div style={{ width: `${sr}%`, height: "100%", background: srColor, borderRadius: 5 }} />
+            </div>
+          </div>
+          <ARow label="Completed"      value={`${num(completed)} (${total > 0 ? Math.round((completed / total) * 100) : 0}%)`} accent="#22c55e" />
+          <ARow label="Blocked"        value={`${num(blocked)} (${total > 0 ? Math.round((blocked / total) * 100) : 0}%)`}     accent="#ef4444" />
+          <ARow label="Total Requests" value={num(total)} />
+        </ASection>
+      );
+    }
+    if (cardKey === "completed") {
+      const total     = Number(overview?.total_requests || 0);
+      const completed = Number(overview?.completed || 0);
+      const compPct   = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return (
+        <ASection title="Completed Requests">
+          <ARow label="Completed"       value={num(completed)}     accent="#22c55e" />
+          <ARow label="Total Requests"  value={num(total)} />
+          <ARow label="Completion Rate" value={`${compPct}%`}      accent="#22c55e" />
+          <ARow label="Avg Latency"     value={`${num(overview?.avg_latency_ms)} ms`} />
+        </ASection>
+      );
+    }
+    if (cardKey === "avg_latency") {
+      const latency = Number(overview?.avg_latency_ms || 0);
+      const status  = latency > 2000 ? { color: "#ef4444", label: "High — investigate slow models" }
+                    : latency > 1000 ? { color: "#f97316", label: "Moderate" }
+                    : { color: "#22c55e", label: "Good" };
+      return (
+        <ASection title="Latency & Performance">
+          <ARow label="Average Latency" value={`${num(latency)} ms`} accent={status.color} />
+          <ARow label="Status"          value={status.label}         accent={status.color} />
+          <ARow label="Total Requests"  value={num(overview?.total_requests)} />
+          <ARow label="Success Rate"    value={`${overview?.success_rate ?? 0}%`} />
+        </ASection>
+      );
+    }
+    if (cardKey === "sec_total_security_events") {
+      return (
+        <ASection title="Security Event Breakdown">
+          <ARow label="Total Events"         value={secSummary?.total_events      || 0} />
+          <ARow label="PII Detections"       value={secSummary?.total_with_pii    || 0} accent="#ef4444" />
+          <ARow label="Misuse Patterns"      value={secSummary?.misuse_events     || 0} accent="#f97316" />
+          <ARow label="Data Out Violations"  value={secSummary?.data_out_events   || 0} accent="#f97316" />
+          <ARow label="Avg Risk Score"       value={Number(secSummary?.average_risk_score || 0).toFixed(1)} />
+          <ARow label="Highest Risk Score"   value={Number(secSummary?.highest_risk_score || 0).toFixed(1)} accent="#ef4444" />
+        </ASection>
+      );
+    }
+    if (cardKey === "sec_pii_detections") {
+      const piiLogs = secLogs.filter(l => l.pii_detected);
+      return (
+        <>
+          <ASection title="PII in Security Logs">
+            <ARow label="PII Events"           value={secSummary?.total_with_pii || 0} accent="#ef4444" />
+            <ARow label="Total Security Events" value={secSummary?.total_events   || 0} />
+          </ASection>
+          {piiLogs.length > 0 && (
+            <ASection title="Recent PII Events">
+              <div style={{ display: "grid", gap: 6 }}>
+                {piiLogs.slice(0, 5).map((l, i) => (
+                  <div key={i} style={{ padding: "8px 12px", background: "rgba(158,42,151,0.05)", border: "1px solid rgba(158,42,151,0.15)", borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-500)", marginBottom: 4 }}>{l.event_id}</div>
+                    <div style={{ display: "flex", gap: 8, fontSize: 12, flexWrap: "wrap" }}>
+                      {l.pii_type && <span style={{ fontWeight: 600, color: "#9E2A97", padding: "1px 6px", background: "rgba(158,42,151,0.1)", borderRadius: 4 }}>{l.pii_type}</span>}
+                      <span style={{ color: riskColor(l.risk_score || 0), fontWeight: 600 }}>Risk: {Number(l.risk_score || 0).toFixed(1)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ASection>
+          )}
+        </>
+      );
+    }
+    if (cardKey === "sec_misuse_patterns") {
+      const misuseLogs = secLogs.filter(l => l.misuse_pattern_detected);
+      return (
+        <>
+          <ASection title="Misuse Pattern Summary">
+            <ARow label="Misuse Events"          value={secSummary?.misuse_events || 0} accent="#f97316" />
+            <ARow label="Total Security Events"   value={secSummary?.total_events  || 0} />
+          </ASection>
+          {misuseLogs.length > 0 ? (
+            <ASection title="Recent Misuse Events">
+              <div style={{ display: "grid", gap: 6 }}>
+                {misuseLogs.slice(0, 5).map((l, i) => (
+                  <div key={i} style={{ padding: "8px 12px", background: "var(--gray-50)", border: "1px solid var(--gray-200)", borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-500)", marginBottom: 4 }}>{l.event_id}</div>
+                    <span style={{ fontSize: 12, color: riskColor(l.risk_score || 0), fontWeight: 600 }}>Risk: {Number(l.risk_score || 0).toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            </ASection>
+          ) : <p style={{ fontSize: 13, color: "#15803d", margin: 0 }}>No misuse events in recent logs.</p>}
+        </>
+      );
+    }
+    if (cardKey === "sec_data_out_violations") {
+      const dataOutLogs = secLogs.filter(l => l.data_out_violation);
+      return (
+        <>
+          <ASection title="Data Out Violation Summary">
+            <ARow label="Violation Events"      value={secSummary?.data_out_events || 0} accent="#f97316" />
+            <ARow label="Total Security Events"  value={secSummary?.total_events    || 0} />
+          </ASection>
+          {dataOutLogs.length > 0 ? (
+            <ASection title="Recent Violations">
+              <div style={{ display: "grid", gap: 6 }}>
+                {dataOutLogs.slice(0, 5).map((l, i) => (
+                  <div key={i} style={{ padding: "8px 12px", background: "var(--gray-50)", border: "1px solid var(--gray-200)", borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-500)" }}>{l.event_id}</div>
+                  </div>
+                ))}
+              </div>
+            </ASection>
+          ) : <p style={{ fontSize: 13, color: "#15803d", margin: 0 }}>No data out violations in recent logs.</p>}
+        </>
+      );
+    }
+    if (cardKey === "sec_avg_risk_score" || cardKey === "sec_highest_risk_score") {
+      const sorted = [...secLogs].sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0));
+      return (
+        <>
+          <ASection title="Risk Score Overview">
+            <ARow label="Average Risk Score" value={Number(secSummary?.average_risk_score || 0).toFixed(1)} accent={Number(secSummary?.average_risk_score || 0) >= 60 ? "#ef4444" : "#f97316"} />
+            <ARow label="Highest Risk Score" value={Number(secSummary?.highest_risk_score || 0).toFixed(1)} accent="#ef4444" />
+            <ARow label="Total Events"       value={secSummary?.total_events || 0} />
+          </ASection>
+          {sorted.length > 0 && (
+            <ASection title="Top Risk Events">
+              <div style={{ display: "grid", gap: 6 }}>
+                {sorted.slice(0, 5).map((l, i) => (
+                  <div key={i} style={{ padding: "8px 12px", background: Number(l.risk_score || 0) >= 60 ? "rgba(158,42,151,0.05)" : "var(--gray-50)", border: "1px solid var(--gray-200)", borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--gray-500)" }}>{l.event_id}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: riskColor(l.risk_score || 0) }}>{Number(l.risk_score || 0).toFixed(1)}</span>
+                    </div>
+                    {l.pii_type && <span style={{ fontSize: 12, color: "#9E2A97", display: "block", marginTop: 3, fontWeight: 600 }}>{l.pii_type}</span>}
+                  </div>
+                ))}
+              </div>
+            </ASection>
+          )}
+        </>
+      );
+    }
+    return <p style={{ fontSize: 13, color: "var(--gray-500)" }}>No detail available.</p>;
+  }
+
+  return (
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2000 }}>
+      <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3 style={{ margin: 0 }}>{TITLES[cardKey] || cardKey}</h3>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
+        {renderContent()}
       </div>
     </div>
   );
@@ -196,9 +671,14 @@ function AlertsSecurity() {
   const [anomalies, setAnomalies]               = useState([]);
   const [piiModalEventId, setPiiModalEventId]   = useState(null);
 
+  const [activeKpi, setActiveKpi]               = useState(null);
+  const [piiTypesModal, setPiiTypesModal]       = useState(null);
+  const [actionModal, setActionModal]           = useState(null);
   const [activeTab, setActiveTab]               = useState("pii");
   const [piiPage, setPiiPage]                   = useState(0);
   const [blockedPage, setBlockedPage]           = useState(0);
+  const [piiSeverityFilter, setPiiSeverityFilter] = useState([]);
+  const [proxyPiiModalId, setProxyPiiModalId]   = useState(null);
   const PAGE_SIZE = 25;
 
   const [loading, setLoading] = useState(true);
@@ -218,7 +698,7 @@ function AlertsSecurity() {
         await Promise.allSettled([
           getProxyOverview(undefined, days),
           getProxyPiiSummary(undefined, days),
-          getProxyRequests({ project_id: proj, pii_only: true,    limit: PAGE_SIZE, offset: piiPage     * PAGE_SIZE }),
+          getProxyRequests({ project_id: proj, pii_only: true, pii_severity: piiSeverityFilter.length ? piiSeverityFilter.join(",") : undefined, limit: PAGE_SIZE, offset: piiPage * PAGE_SIZE }),
           getProxyRequests({ project_id: proj, status: "blocked", limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
           getSecuritySummaryCombined(undefined, proj, startDate),
           getSecurityLogsCombined(undefined, undefined, undefined, proj, startDate),
@@ -247,7 +727,7 @@ function AlertsSecurity() {
     } finally {
       setLoading(false);
     }
-  }, [days, selectedProject, piiPage, blockedPage]);
+  }, [days, selectedProject, piiPage, blockedPage, piiSeverityFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -257,333 +737,516 @@ function AlertsSecurity() {
   const blockedPages = Math.ceil(blockedTotal / PAGE_SIZE);
 
   return (
-    <div className="page-shell">
+    <>
+      {/* ── Fixed filter bar ─────────────────────────────────────────────── */}
+      <div className="page-filter-bar">
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Alerts &amp; Security</span>
 
-      {/* ── Filter bar ───────────────────────────────────────────────────── */}
-      <section className="panel" style={{ padding: "16px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Alerts &amp; Security</span>
-
-          <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13 }}
-          >
-            <option value="">All Projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.project_name || p.id}</option>
-            ))}
-          </select>
-
-          {RANGE_OPTIONS.map(opt => (
-            <button key={opt.value} type="button"
-              className={`btn ${days === opt.value ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setDays(opt.value)}>
-              {opt.label}
-            </button>
+        <select
+          value={selectedProject}
+          onChange={(e) => setSelectedProject(e.target.value)}
+          style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--gray-200)", fontSize: 13 }}
+        >
+          <option value="">All Projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.project_name || p.id}</option>
           ))}
+        </select>
 
-          {selectedProject && (
-            <button className="btn btn-ghost" style={{ fontSize: 12, color: "#9E2A97" }}
-              onClick={() => setSelectedProject("")}>
-              ✕ Clear project
-            </button>
-          )}
-
-          <button type="button" className="btn btn-ghost" onClick={load}>Refresh</button>
-        </div>
-      </section>
-
-      {error && <div className="error-message">{error}</div>}
-
-      {/* ── KPI Row ──────────────────────────────────────────────────────── */}
-      <section className="stats-grid stats-grid-overview">
-        {[
-          { label: "Total Requests", value: num(overview?.total_requests),         color: undefined },
-          { label: "Blocked",        value: num(overview?.blocked),                 color: "#ef4444" },
-          { label: "PII Detections", value: num(overview?.pii_detections),         color: "#f97316" },
-          { label: "Success Rate",   value: `${overview?.success_rate ?? 0}%`,     color: undefined },
-          { label: "Completed",      value: num(overview?.completed),               color: "#22c55e" },
-          { label: "Avg Latency",    value: `${num(overview?.avg_latency_ms)} ms`, color: undefined },
-        ].map(card => (
-          <div key={card.label} className="metric-card">
-            <div className="metric-eyebrow">{card.label}</div>
-            <div className="metric-value" style={card.color ? { color: card.color } : {}}>{card.value}</div>
-          </div>
+        {RANGE_OPTIONS.map(opt => (
+          <button key={opt.value} type="button"
+            className={`btn ${days === opt.value ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setDays(opt.value)}>
+            {opt.label}
+          </button>
         ))}
-      </section>
 
-      {/* ── Security Snapshot ────────────────────────────────────────────── */}
-      {secSummary && (
-        <section className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Security Snapshot</h3>
-              <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Risk scores, violations, and abnormal activity.</p>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+        {/* Severity filter */}
+        <select
+          value={piiSeverityFilter[0] || ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPiiSeverityFilter(val ? [val] : []);
+            setPiiPage(0);
+          }}
+          style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--gray-200)", fontSize: 13 }}
+        >
+          <option value="">All Severities</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+
+        {selectedProject && (
+          <button className="btn btn-ghost" style={{ fontSize: 12, color: "#9E2A97" }}
+            onClick={() => setSelectedProject("")}>
+            ✕ Clear project
+          </button>
+        )}
+
+        <button type="button" className="btn btn-ghost" onClick={load}>Refresh</button>
+      </div>
+
+      {/* ── Fixed-height dashboard body (no page scroll) ─────────────────── */}
+      <div className="page-body" style={{ padding: "12px 16px", overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%", overflow: "hidden" }}>
+
+          {error && <div className="error-message" style={{ flexShrink: 0 }}>{error}</div>}
+
+          {/* ── Row 1: Compact KPI strip ─────────────────────────────────── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 8, flexShrink: 0 }}>
             {[
-              { label: "Total Security Events", value: secSummary.total_events      || 0 },
-              { label: "PII Detections",         value: secSummary.total_with_pii   || 0, color: "#ef4444" },
-              { label: "Misuse Patterns",         value: secSummary.misuse_events    || 0, color: "#f97316" },
-              { label: "Data Out Violations",     value: secSummary.data_out_events  || 0, color: "#f97316" },
-              { label: "Avg Risk Score",          value: Number(secSummary.average_risk_score || 0).toFixed(1) },
-              { label: "Highest Risk Score",      value: Number(secSummary.highest_risk_score || 0).toFixed(1), color: "#ef4444" },
-            ].map(item => (
-              <div key={item.label} className="metric-card">
-                <div className="metric-eyebrow">{item.label}</div>
-                <div className="metric-value" style={item.color ? { color: item.color } : {}}>{item.value}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── PII Breakdown charts ─────────────────────────────────────────── */}
-      {piiSummary && (piiSummary.pii_type_breakdown?.length > 0 || piiSummary.action_breakdown?.length > 0) && (
-        <section className="two-column">
-          <div className="panel">
-            <div className="section-head"><div><h3>PII Type Breakdown</h3></div></div>
-            {piiSummary.pii_type_breakdown?.length > 0 ? (
-              <div className="chart-box" style={{ height: 200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={piiSummary.pii_type_breakdown}>
-                    <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                    <XAxis dataKey="pii_type" tick={{ fill: "#6d6782", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#6d6782", fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="empty-state">No PII detections in this period.</div>
-            )}
-          </div>
-
-          <div className="panel">
-            <div className="section-head"><div><h3>Actions Taken on PII</h3></div></div>
-            <div className="list-grid" style={{ marginTop: 8 }}>
-              {piiSummary.action_breakdown?.map(item => (
-                <div key={item.action} className="list-item">
-                  <strong style={{ textTransform: "capitalize" }}>{item.action}</strong>
-                  <div className="list-meta">
-                    <span className={`status-pill ${ACTION_COLOR[item.action] || "medium"}`}>
-                      {item.count} request{item.count !== 1 ? "s" : ""}
-                    </span>
-                  </div>
+              { label: "Total Requests", value: num(overview?.total_requests),         sub: `${days}d` },
+              { label: "Blocked",        value: num(overview?.blocked),                 sub: "violations" },
+              { label: "PII Detections", value: num(overview?.pii_detections),         sub: "flagged" },
+              { label: "Success Rate",   value: `${overview?.success_rate ?? 0}%`,     sub: "completion" },
+              { label: "Completed",      value: num(overview?.completed),               sub: "passed" },
+              { label: "Avg Latency",    value: `${num(overview?.avg_latency_ms)} ms`, sub: "end-to-end" },
+            ].map(card => {
+              const cardKey = card.label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, "");
+              return (
+                <div key={card.label} className="metric-card metric-card-interactive"
+                  onClick={() => setActiveKpi(cardKey)}
+                  style={{ padding: "12px 14px", minHeight: 0 }}>
+                  <div className="metric-eyebrow" style={{ fontSize: 10 }}>{card.label}</div>
+                  <div className="metric-value" style={{ fontSize: 22, marginTop: 6 }}>{card.value}</div>
+                  <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 2 }}>{card.sub}</div>
                 </div>
-              ))}
-              {!piiSummary.action_breakdown?.length && (
-                <div className="empty-state">No PII actions in this period.</div>
+              );
+            })}
+          </div>
+
+          {/* ── Row 2: 4 panels side by side ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, flex: 1, minHeight: 0, overflow: "hidden" }}>
+
+            {/* Panel 1 — PII Type Breakdown */}
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
+                PII Type Breakdown
+              </div>
+              {piiSummary?.pii_type_breakdown?.length > 0 ? (
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={piiSummary.pii_type_breakdown} margin={{ top: 2, right: 6, left: -20, bottom: 2 }}>
+                      <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
+                      <XAxis dataKey="pii_type" tick={{ fill: "#6d6782", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "#6d6782", fontSize: 10 }} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ background: "var(--white)", border: "1px solid var(--gray-200)", borderRadius: 8, fontSize: 11 }}
+                        formatter={(v) => [v, "Count"]}
+                      />
+                      <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                        {piiSummary.pii_type_breakdown.map((_, i) => (
+                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--gray-400)", padding: "12px 0" }}>No PII detections in this period.</div>
               )}
             </div>
-          </div>
-        </section>
-      )}
 
-      {/* ── Anomalies + Security Logs ────────────────────────────────────── */}
-      <section className="two-column">
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Open Anomalies</h3>
-              <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Usage spikes and suspicious changes.</p>
-            </div>
-          </div>
-          <div className="list-grid">
-            {anomalies.length ? anomalies.map((item) => (
-              <div key={item.id} className="list-item">
-                <strong>{item.anomaly_type}</strong>
-                <div className="list-meta">
-                  <span className={`status-pill ${item.severity}`}>{item.severity}</span>
-                  {"  "}{item.message}
-                </div>
-                <div className="list-meta" style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
-                  Project: <strong>{item.project_name || item.project_id || "—"}</strong>
-                  {" · "}Tool: <strong>{item.tool_name || "—"}</strong>
-                </div>
+            {/* Panel 2 — Actions Taken on PII */}
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
+                Actions Taken on PII
               </div>
-            )) : <div className="empty-state">No open anomalies.</div>}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="section-head">
-            <div>
-              <h3>Security Logs</h3>
-              <p style={{ fontSize: 13, color: "var(--gray-500)" }}>PII, data out, misuse, and masking events. Click a PII row for detail.</p>
+              <div style={{ overflow: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                {piiSummary?.action_breakdown?.length ? piiSummary.action_breakdown.map(item => (
+                  <div
+                    key={item.action}
+                    onClick={async () => {
+                      try {
+                        const res = await getProxyRequests({ pii_only: true, pii_action_taken: item.action, limit: 100 });
+                        setActionModal({ action: item.action, rows: res.data?.items || [] });
+                      } catch {
+                        setActionModal({ action: item.action, rows: [] });
+                      }
+                    }}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "8px 12px", borderRadius: 10, cursor: "pointer", flexShrink: 0,
+                      background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(158,42,151,0.05)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "var(--gray-50)"}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{item.action}</span>
+                    <span className={`status-pill ${ACTION_COLOR[item.action] || "medium"}`} style={{ fontSize: 11 }}>
+                      {item.count} req{item.count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )) : (
+                  <div style={{ fontSize: 12, color: "var(--gray-400)" }}>No PII actions in this period.</div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Event</th><th>PII</th><th>Type</th>
-                  <th>Data Out</th><th>Misuse</th><th>Spike</th><th>Risk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {secLogs.length === 0
-                  ? <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No security events in this period.</td></tr>
-                  : secLogs.map((item) => {
-                    const isPII = !!item.pii_detected;
-                    return (
-                      <tr
-                        key={item.id}
-                        onClick={isPII ? () => setPiiModalEventId(item.event_id) : undefined}
-                        style={isPII ? { cursor: "pointer", background: "rgba(239,68,68,0.04)" } : undefined}
-                        title={isPII ? "Click to view PII detail" : undefined}
-                      >
-                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
-                        <td>
-                          {isPII
-                            ? <span style={{ color: "#ef4444", fontWeight: 600, textDecoration: "underline dotted", cursor: "pointer" }}>yes</span>
-                            : "no"}
-                        </td>
-                        <td>{item.pii_type || "—"}</td>
-                        <td>{item.data_out_violation      ? "yes" : "no"}</td>
-                        <td>{item.misuse_pattern_detected ? "yes" : "no"}</td>
-                        <td>{item.abnormal_usage_spike    ? "yes" : "no"}</td>
-                        <td style={{ color: riskColor(item.risk_score || 0), fontWeight: 600 }}>
-                          {Number(item.risk_score || 0).toFixed(1)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
-      {/* ── Tabs: PII Detections | Blocked Requests ──────────────────────── */}
-      <section className="panel">
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
-          {[
-            { key: "pii",     label: `PII Detections (${num(piiTotal)})` },
-            { key: "blocked", label: `Blocked Requests (${num(blockedTotal)})` },
-          ].map(tab => (
-            <button key={tab.key} type="button"
-              className={`btn ${activeTab === tab.key ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setActiveTab(tab.key)}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* PII Detections table */}
-        {activeTab === "pii" && (
-          <>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Request ID</th><th>Org</th><th>Project</th><th>Model</th>
-                    <th>PII Types</th><th>Action Taken</th><th>Status</th>
-                    <th>Tokens</th><th>Cost</th><th>Client IP</th><th>Received</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {piiRequests.length === 0
-                    ? <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No PII detections in this period.</td></tr>
-                    : piiRequests.map(row => (
-                      <tr key={row.request_id}>
-                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
-                        <td>{row.org_id || "—"}</td>
-                        <td>{row.project_id || "—"}</td>
-                        <td><strong>{row.model_name || "—"}</strong></td>
-                        <td>
-                          {(row.pii_types || []).map(t => (
-                            <span key={t} className="status-pill critical" style={{ marginRight: 4 }}>{t}</span>
-                          ))}
-                        </td>
-                        <td>
-                          <span className={`status-pill ${ACTION_COLOR[row.pii_action_taken] || "medium"}`}>
-                            {row.pii_action_taken || "—"}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`status-pill ${
-                            row.request_status === "blocked"   ? "critical" :
-                            row.request_status === "completed" ? "low"      : "medium"
-                          }`}>{row.request_status}</span>
-                        </td>
-                        <td>{num(row.total_tokens)}</td>
-                        <td>{money(row.total_cost)}</td>
-                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{row.client_ip || "—"}</td>
-                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                          {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+            {/* Panel 3 — Security Snapshot */}
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 10, flexShrink: 0 }}>
+                Security Snapshot
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8, overflow: "auto", flex: 1 }}>
+                {secSummary ? [
+                  { label: "Security Events", value: secSummary.total_events || 0,                                    key: "sec_total_security_events" },
+                  { label: "PII Detections",   value: secSummary.total_with_pii || 0,                                 key: "sec_pii_detections" },
+                  { label: "Misuse",           value: secSummary.misuse_events || 0,                                  key: "sec_misuse_patterns" },
+                  { label: "Data Out",          value: secSummary.data_out_events || 0,                               key: "sec_data_out_violations" },
+                  { label: "Avg Risk",          value: Number(secSummary.average_risk_score || 0).toFixed(1),         key: "sec_avg_risk_score" },
+                  { label: "Peak Risk",         value: Number(secSummary.highest_risk_score || 0).toFixed(1),         key: "sec_highest_risk_score" },
+                ].map(item => (
+                  <div key={item.key}
+                    className="metric-card-interactive"
+                    onClick={() => setActiveKpi(item.key)}
+                    style={{
+                      padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+                      background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+                    }}>
+                    <div style={{ fontSize: 10, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{item.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--gray-700)", marginTop: 4 }}>{item.value}</div>
+                  </div>
+                )) : (
+                  <div style={{ gridColumn: "1/-1", fontSize: 12, color: "var(--gray-400)" }}>No security data.</div>
+                )}
+              </div>
             </div>
-            {piiPages > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
-                <button className="btn btn-ghost" disabled={piiPage === 0} onClick={() => setPiiPage(p => p - 1)}>← Prev</button>
-                <span style={{ padding: "6px 12px", fontSize: 13 }}>Page {piiPage + 1} of {piiPages}</span>
-                <button className="btn btn-ghost" disabled={piiPage >= piiPages - 1} onClick={() => setPiiPage(p => p + 1)}>Next →</button>
+
+            {/* Panel 4 — Open Anomalies */}
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
+                Open Anomalies <span style={{ fontSize: 11, fontWeight: 400, color: "var(--gray-500)", textTransform: "none" }}>({anomalies.length})</span>
+              </div>
+              <div style={{ overflow: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                {anomalies.length ? anomalies.map((item) => (
+                  <div key={item.id} style={{ padding: "8px 12px", borderRadius: 10, background: "var(--gray-50)", border: "1px solid var(--gray-200)", flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, textTransform: "capitalize" }}>
+                        {item.anomaly_type.replace(/_/g, " ")}
+                      </span>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ fontSize: 10, padding: "1px 8px", color: "#9E2A97", border: "1px solid rgba(158,42,151,0.3)" }}
+                        onClick={async () => {
+                          try { await resolveAnomaly(item.id); setAnomalies(prev => prev.filter(a => a.id !== item.id)); } catch {/* ignore */}
+                        }}
+                      >Resolve</button>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 3 }}>
+                      <span className={`status-pill ${item.severity}`} style={{ fontSize: 10, padding: "1px 7px" }}>{item.severity}</span>
+                      {" "}{Number(item.anomaly_score || 0).toFixed(2)}× spike · {item.project_name || item.project_id || "—"}
+                    </div>
+                  </div>
+                )) : <div style={{ fontSize: 12, color: "var(--gray-400)" }}>No open anomalies.</div>}
+              </div>
+            </div>
+
+          </div>
+
+          {/* ── Row 3: Tabs — PII Detections | Blocked | Security Logs ──────── */}
+          <div className="panel" style={{ flexShrink: 0, padding: "12px 16px", display: "flex", flexDirection: "column", height: 340, overflow: "hidden" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, borderBottom: "1px solid var(--gray-200)", paddingBottom: 8, flexShrink: 0 }}>
+              {[
+                { key: "pii",     label: `PII Detections (${num(piiTotal)})` },
+                { key: "blocked", label: `Blocked (${num(blockedTotal)})` },
+                { key: "logs",    label: `Security Logs (${secLogs.length})` },
+              ].map(tab => (
+                <button key={tab.key} type="button"
+                  className={`btn ${activeTab === tab.key ? "btn-primary" : "btn-ghost"}`}
+                  style={{ fontSize: 12, padding: "6px 12px" }}
+                  onClick={() => setActiveTab(tab.key)}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* PII Detections table */}
+            {activeTab === "pii" && (
+              <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div className="table-wrap table-wrap--fill">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th>
+                        <th>PII Types</th><th>Action</th><th>Status</th>
+                        <th>Detected</th><th>Masked</th><th>Severity</th>
+                        <th>Tokens</th><th>Cost</th><th>Received</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {piiRequests.length === 0
+                        ? <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No PII detections in this period.</td></tr>
+                        : piiRequests.map(row => (
+                          <tr
+                            key={row.request_id}
+                            onClick={() => row.pii_detected && setProxyPiiModalId(row.request_id)}
+                            style={row.pii_detected ? { cursor: "pointer" } : undefined}
+                            title={row.pii_detected ? "Click to view PII detail" : undefined}
+                          >
+                            <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
+                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
+                            <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                            <td>
+                              {(row.pii_types || []).length > 0 ? (
+                                <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                  <span className="status-pill critical" style={{ fontSize: 10, padding: "1px 6px" }}>{row.pii_types[0]}</span>
+                                  {row.pii_types.length > 1 && (
+                                    <span
+                                      onClick={(e) => { e.stopPropagation(); setPiiTypesModal(row.pii_types); }}
+                                      style={{ fontSize: 10, fontWeight: 600, color: "#9E2A97", background: "rgba(158,42,151,0.1)", padding: "1px 6px", borderRadius: 8, cursor: "pointer", border: "1px solid rgba(158,42,151,0.25)" }}
+                                    >+{row.pii_types.length - 1}</span>
+                                  )}
+                                </span>
+                              ) : "—"}
+                            </td>
+                            <td>
+                              <span className={`status-pill ${ACTION_COLOR[row.pii_action_taken] || "medium"}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                                {row.pii_action_taken || "—"}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`status-pill ${row.request_status === "blocked" ? "critical" : row.request_status === "completed" ? "low" : "medium"}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                                {row.request_status}
+                              </span>
+                            </td>
+                            <td>
+                              {row.pii_detected
+                                ? <span style={{ display: "inline-block", minWidth: 20, padding: "1px 6px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "#fef3c718", color: "#92400e", border: "1px solid #fde68a" }}>{row.pii_entities_detected ?? 0}</span>
+                                : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                            </td>
+                            <td>
+                              {row.pii_detected
+                                ? <span style={{ display: "inline-block", minWidth: 20, padding: "1px 6px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "rgba(158,42,151,0.1)", color: "#9E2A97", border: "1px solid rgba(158,42,151,0.25)" }}>{row.pii_entities_masked ?? 0}</span>
+                                : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                            </td>
+                            <td>{row.pii_detected ? <SeverityChip value={row.pii_severity} /> : <span style={{ color: "var(--gray-400)" }}>—</span>}</td>
+                            <td style={{ fontSize: 12 }}>{num(row.total_tokens)}</td>
+                            <td style={{ fontSize: 12 }}>{money(row.total_cost)}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                {piiPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 6, paddingTop: 6, flexShrink: 0 }}>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={piiPage === 0} onClick={() => setPiiPage(p => p - 1)}>← Prev</button>
+                    <span style={{ padding: "4px 10px", fontSize: 12 }}>Page {piiPage + 1} of {piiPages}</span>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={piiPage >= piiPages - 1} onClick={() => setPiiPage(p => p + 1)}>Next →</button>
+                  </div>
+                )}
               </div>
             )}
-          </>
-        )}
 
-        {/* Blocked Requests table */}
-        {activeTab === "blocked" && (
-          <>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Request ID</th><th>Org</th><th>Project</th><th>Model</th>
-                    <th>PII Types Detected</th><th>Provider</th><th>Source</th>
-                    <th>Client IP</th><th>Received</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {blockedRequests.length === 0
-                    ? <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No blocked requests in this period.</td></tr>
-                    : blockedRequests.map(row => (
-                      <tr key={row.request_id}>
-                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
-                        <td>{row.org_id || "—"}</td>
-                        <td>{row.project_id || "—"}</td>
-                        <td><strong>{row.model_name || "—"}</strong></td>
-                        <td>
-                          {(row.pii_types || []).map(t => (
-                            <span key={t} className="status-pill critical" style={{ marginRight: 4 }}>{t}</span>
-                          ))}
-                          {!row.pii_types?.length && <span style={{ color: "var(--gray-400)" }}>—</span>}
-                        </td>
-                        <td>{row.provider || "—"}</td>
-                        <td style={{ fontSize: 12 }}>{row.source_system || "—"}</td>
-                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{row.client_ip || "—"}</td>
-                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                          {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
-                        </td>
+            {/* Blocked Requests table */}
+            {activeTab === "blocked" && (
+              <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div className="table-wrap table-wrap--fill">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Request ID</th><th>Org</th><th>Project</th><th>Model</th>
+                        <th>PII Types</th><th>Provider</th><th>Route</th><th>Client IP</th><th>Received</th>
                       </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {blockedPages > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
-                <button className="btn btn-ghost" disabled={blockedPage === 0} onClick={() => setBlockedPage(p => p - 1)}>← Prev</button>
-                <span style={{ padding: "6px 12px", fontSize: 13 }}>Page {blockedPage + 1} of {blockedPages}</span>
-                <button className="btn btn-ghost" disabled={blockedPage >= blockedPages - 1} onClick={() => setBlockedPage(p => p + 1)}>Next →</button>
+                    </thead>
+                    <tbody>
+                      {blockedRequests.length === 0
+                        ? <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No blocked requests in this period.</td></tr>
+                        : blockedRequests.map(row => (
+                          <tr key={row.request_id}>
+                            <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
+                            <td style={{ fontSize: 12 }}>{row.org_id || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
+                            <td>
+                              {(row.pii_types || []).map(t => (
+                                <span key={t} className="status-pill critical" style={{ marginRight: 3, fontSize: 10, padding: "1px 6px" }}>{t}</span>
+                              ))}
+                              {!row.pii_types?.length && <span style={{ color: "var(--gray-400)" }}>—</span>}
+                            </td>
+                            <td style={{ fontSize: 12 }}>{row.provider || "—"}</td>
+                            <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || row.source_system || "—"}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.client_ip || "—"}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                {blockedPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 6, paddingTop: 6, flexShrink: 0 }}>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={blockedPage === 0} onClick={() => setBlockedPage(p => p - 1)}>← Prev</button>
+                    <span style={{ padding: "4px 10px", fontSize: 12 }}>Page {blockedPage + 1} of {blockedPages}</span>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={blockedPage >= blockedPages - 1} onClick={() => setBlockedPage(p => p + 1)}>Next →</button>
+                  </div>
+                )}
               </div>
             )}
-          </>
-        )}
-      </section>
+
+            {/* Security Logs table */}
+            {activeTab === "logs" && (
+              <div className="table-wrap table-wrap--fill">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Event</th><th>PII</th><th>Type</th>
+                      <th>Data Out</th><th>Misuse</th><th>Spike</th><th>Risk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {secLogs.length === 0
+                      ? <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No security events in this period.</td></tr>
+                      : secLogs.map((item) => {
+                        const isPII = !!item.pii_detected;
+                        return (
+                          <tr
+                            key={item.id}
+                            onClick={isPII ? () => setPiiModalEventId(item.event_id) : undefined}
+                            style={isPII ? { cursor: "pointer", background: "rgba(158,42,151,0.04)" } : undefined}
+                            title={isPII ? "Click to view PII detail" : undefined}
+                          >
+                            <td style={{ fontFamily: "monospace", fontSize: 10 }}>{item.event_id}</td>
+                            <td>
+                              {isPII
+                                ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
+                                : <span className="badge-no">no</span>}
+                            </td>
+                            <td>
+                              {item.pii_type
+                                ? <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 20, background: "rgba(158,42,151,0.1)", color: "#9E2A97", fontWeight: 600, fontFamily: "monospace" }}>{item.pii_type}</span>
+                                : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                            </td>
+                            <td>{item.data_out_violation      ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                            <td>{item.misuse_pattern_detected ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                            <td>{item.abnormal_usage_spike    ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                            <td>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: riskColor(item.risk_score || 0), display: "inline-block" }} />
+                                <span style={{ color: riskColor(item.risk_score || 0), fontWeight: 700, fontSize: 12 }}>{Number(item.risk_score || 0).toFixed(1)}</span>
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>{/* close page-body */}
 
       {piiModalEventId && (
         <PIIDetailModal eventId={piiModalEventId} onClose={() => setPiiModalEventId(null)} />
       )}
-    </div>
+
+      {proxyPiiModalId && (
+        <ProxyPiiDetailModal requestId={proxyPiiModalId} onClose={() => setProxyPiiModalId(null)} />
+      )}
+
+      {activeKpi && (
+        <CardDetailModal
+          cardKey={activeKpi}
+          overview={overview}
+          piiSummary={piiSummary}
+          secSummary={secSummary}
+          secLogs={secLogs}
+          anomalies={anomalies}
+          piiRequests={piiRequests}
+          onActionClick={async (action) => {
+            try {
+              const res = await getProxyRequests({ pii_only: true, pii_action_taken: action, limit: 100 });
+              setActionModal({ action, rows: res.data?.items || [] });
+            } catch {
+              setActionModal({ action, rows: [] });
+            }
+          }}
+          onClose={() => setActiveKpi(null)}
+        />
+      )}
+
+      {actionModal && (
+        <div onClick={() => setActionModal(null)} className="modal-backdrop" style={{ zIndex: 2100 }}>
+          <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 860 }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: "0 0 2px", textTransform: "capitalize" }}>{actionModal.action} — Requests</h3>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>
+                  {actionModal.rows.length} request{actionModal.rows.length !== 1 ? "s" : ""} in current page
+                </p>
+              </div>
+              <button onClick={() => setActionModal(null)} className="btn-close">×</button>
+            </div>
+            {actionModal.rows.length === 0 ? (
+              <p style={{ color: "var(--gray-400)", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No matching requests in the current page.</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th>
+                      <th>PII Types</th><th>Tokens</th><th>Cost</th><th>Received</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actionModal.rows.map(row => (
+                      <tr key={row.request_id}>
+                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
+                        <td>{row.project_id || "—"}</td>
+                        <td><strong>{row.model_name || "—"}</strong></td>
+                        <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                        <td>
+                          {(row.pii_types || []).length > 0 ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <span className="status-pill critical" style={{ fontSize: 11 }}>{row.pii_types[0]}</span>
+                              {row.pii_types.length > 1 && (
+                                <span style={{ fontSize: 10, fontWeight: 700, color: "#9E2A97", background: "rgba(158,42,151,0.1)", padding: "1px 6px", borderRadius: 8, border: "1px solid rgba(158,42,151,0.25)", cursor: "default" }}
+                                  title={row.pii_types.slice(1).join(", ")}>
+                                  +{row.pii_types.length - 1}
+                                </span>
+                              )}
+                            </span>
+                          ) : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                        </td>
+                        <td>{num(row.total_tokens)}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{money(row.total_cost)}</td>
+                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                          {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {piiTypesModal && (
+        <div onClick={() => setPiiTypesModal(null)} className="modal-backdrop" style={{ zIndex: 2100 }}>
+          <div onClick={(e) => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0 }}>All PII Types Detected</h3>
+              <button onClick={() => setPiiTypesModal(null)} className="btn-close">×</button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
+              {piiTypesModal.map((t, i) => (
+                <span key={i} className="status-pill critical" style={{ fontSize: 13, padding: "4px 12px" }}>{t}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

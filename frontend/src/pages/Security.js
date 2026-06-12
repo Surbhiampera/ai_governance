@@ -60,11 +60,15 @@ function SecurityPIIModal({ eventId, onClose }) {
     : "";
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", maxWidth: 740, width: "100%", maxHeight: "88vh", overflowY: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 14, right: 16, background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--gray-500)" }}>×</button>
-        <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Detection — Event Detail</h3>
-        <p style={{ margin: "0 0 18px", fontSize: 12, color: "var(--gray-500)" }}>{eventId}</p>
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2000 }}>
+      <div onClick={(e) => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 740, padding: "24px 28px" }}>
+        <div className="modal-header" style={{ marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Detection — Event Detail</h3>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>{eventId}</p>
+          </div>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
 
         {loading && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--gray-400)" }}>Loading…</div>}
         {error && <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>}
