@@ -9,8 +9,9 @@ import {
   revokeGovernanceKey,
   rotateGovernanceKey,
   getRules,
-  getBudgetUtilization,
   getRateLimits,
+  createRateLimit,
+  deleteRateLimit,
 } from "../api";
 
 const INPUT_STYLE = {
@@ -753,81 +754,23 @@ function PolicyEnforcementSection({ orgId }) {
   );
 }
 
-// ─── Budget Status ────────────────────────────────────────────────────────────
-function BudgetStatusSection({ orgId }) {
-  const [budgets, setBudgets] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!orgId) return;
-    setLoading(true);
-    getBudgetUtilization(orgId)
-      .then(r => setBudgets(r.data || []))
-      .catch(() => setBudgets([]))
-      .finally(() => setLoading(false));
-  }, [orgId]);
-
-  const statusColor = (status, rawPct) => {
-    if (status === "exceeded" || rawPct > 100) return "#ef4444";
-    if (status === "warning"  || rawPct >= 80) return "#f59e0b";
-    return "#22c55e";
-  };
-
-  return (
-    <section className="panel">
-      <div className="section-head">
-        <div>
-          <h3>Budget Status</h3>
-          <p className="panel-muted">Spend vs limit for this organization.</p>
-        </div>
-      </div>
-
-      {loading ? (
-        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
-      ) : budgets.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--gray-500)", padding: "12px 0" }}>No budget configured for this organization.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {budgets.map((b, i) => {
-            const spent  = Number(b.spent_amount || b.spent  || 0);
-            const limit  = Number(b.limit_amount || b.limit  || 0);
-            const rawPct = limit > 0 ? (spent / limit) * 100 : 0;
-            const barPct = Math.min(rawPct, 100);
-            const color  = statusColor(b.status, rawPct);
-            const label  = b.project_id ? `Project: ${b.project_name || b.project_id}` : "Org-level";
-
-            return (
-              <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "14px 18px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div>
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{label}</span>
-                    {b.period && (
-                      <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-400)", textTransform: "capitalize" }}>{b.period}</span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color, padding: "2px 10px", borderRadius: 20, background: `${color}15` }}>
-                    {rawPct.toFixed(1)}%
-                  </span>
-                </div>
-                <div style={{ height: 8, borderRadius: 4, background: "rgba(124,112,174,0.12)", overflow: "hidden", marginBottom: 8 }}>
-                  <div style={{ width: `${barPct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
-                </div>
-                <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                  ${spent.toFixed(2)} spent of ${limit.toFixed(2)} limit ({rawPct.toFixed(1)}%)
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ─── Rate Limits ──────────────────────────────────────────────────────────────
-function RateLimitsSection({ orgId }) {
-  const [limits, setLimits]   = useState([]);
-  const [loading, setLoading] = useState(false);
+const EMPTY_RL_FORM = { project_id: "", max_requests_per_min: "", max_tokens_per_day: "" };
+
+function RateLimitsSection({ orgId, projects }) {
+  const [limits, setLimits]     = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm]         = useState(EMPTY_RL_FORM);
+  const [saving, setSaving]     = useState(false);
+  const [msg, setMsg]           = useState("");
+
+  const refresh = () => {
+    if (!orgId) return;
+    getRateLimits(orgId)
+      .then(r => setLimits(r.data || []))
+      .catch(() => setLimits([]));
+  };
 
   useEffect(() => {
     if (!orgId) return;
@@ -838,17 +781,34 @@ function RateLimitsSection({ orgId }) {
       .finally(() => setLoading(false));
   }, [orgId]);
 
-  const scopeLabel = (scope) => {
-    if (!scope) return "—";
-    if (scope === "api_key") return "key";
-    return scope;
+  const handleSave = async () => {
+    if (!form.max_requests_per_min && !form.max_tokens_per_day) {
+      setMsg("Enter at least one limit value."); return;
+    }
+    setSaving(true); setMsg("");
+    const payload = {
+      org_id: orgId,
+      project_id: form.project_id || null,
+      max_requests_per_min: form.max_requests_per_min ? Number(form.max_requests_per_min) : null,
+      max_tokens_per_day: form.max_tokens_per_day ? Number(form.max_tokens_per_day) : null,
+    };
+    try {
+      await createRateLimit(payload);
+      setShowForm(false); setForm(EMPTY_RL_FORM); setMsg("");
+      refresh();
+    } catch (e) {
+      setMsg(e.response?.data?.detail || "Save failed.");
+    } finally { setSaving(false); }
   };
 
-  const scopePill = (scope) => {
-    if (scope === "org")     return "low";
-    if (scope === "project") return "medium";
-    return "high";
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this rate limit?")) return;
+    try { await deleteRateLimit(id); refresh(); }
+    catch (e) { alert(e.response?.data?.detail || "Delete failed."); }
   };
+
+  const SEL = { padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13, width: "100%" };
+  const INP = { ...SEL };
 
   return (
     <section className="panel">
@@ -857,7 +817,42 @@ function RateLimitsSection({ orgId }) {
           <h3>Rate Limits</h3>
           <p className="panel-muted">Request and token rate limits for this organization.</p>
         </div>
+        {orgId && (
+          <button onClick={() => { setShowForm(v => !v); setMsg(""); }} style={{ padding: "6px 14px", borderRadius: 6, background: "#9E2A97", color: "#fff", border: "none", fontSize: 13, cursor: "pointer" }}>
+            + Add Limit
+          </button>
+        )}
       </div>
+
+      {showForm && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 18, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>New Rate Limit</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project (optional)</div>
+              <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={SEL}>
+                <option value="">— Org-level —</option>
+                {(projects || []).map(p => <option key={p.id} value={p.id}>{p.project_name || p.id}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Max Requests / min</div>
+              <input type="number" min="0" value={form.max_requests_per_min} onChange={e => setForm(f => ({ ...f, max_requests_per_min: e.target.value }))} style={INP} placeholder="e.g. 60" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Max Tokens / day</div>
+              <input type="number" min="0" value={form.max_tokens_per_day} onChange={e => setForm(f => ({ ...f, max_tokens_per_day: e.target.value }))} style={INP} placeholder="e.g. 1000000" />
+            </div>
+          </div>
+          {msg && <div style={{ fontSize: 12, color: "#ef4444" }}>{msg}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: "7px 18px", borderRadius: 6, background: "#9E2A97", color: "#fff", border: "none", fontSize: 13, cursor: "pointer" }}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => { setShowForm(false); setMsg(""); }} style={{ padding: "7px 14px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
@@ -871,18 +866,18 @@ function RateLimitsSection({ orgId }) {
                 <th>Scope</th>
                 <th>Max Requests/min</th>
                 <th>Max Tokens/day</th>
-                <th>Model</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {limits.map((l, i) => (
                 <tr key={i}>
                   <td>
-                    <span className={`status-pill ${scopePill(l.scope)}`}>{scopeLabel(l.scope)}</span>
+                    <span className="status-pill low">{l.project_id ? "project" : "org"}</span>
                   </td>
                   <td>
-                    {l.max_requests_per_minute != null
-                      ? Number(l.max_requests_per_minute).toLocaleString()
+                    {l.max_requests_per_min != null
+                      ? Number(l.max_requests_per_min).toLocaleString()
                       : <span style={{ color: "var(--gray-400)" }}>—</span>}
                   </td>
                   <td>
@@ -891,9 +886,7 @@ function RateLimitsSection({ orgId }) {
                       : <span style={{ color: "var(--gray-400)" }}>—</span>}
                   </td>
                   <td>
-                    {l.model
-                      ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{l.model}</span>
-                      : <span style={{ color: "var(--gray-400)" }}>all models</span>}
+                    <button onClick={() => handleDelete(l.id)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, border: "1px solid #fca5a5", background: "transparent", cursor: "pointer", color: "#ef4444" }}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -971,8 +964,7 @@ export default function ProxySetup() {
       {selectedOrg && (
         <>
           <PolicyEnforcementSection orgId={selectedOrg} />
-          <BudgetStatusSection orgId={selectedOrg} />
-          <RateLimitsSection orgId={selectedOrg} />
+          <RateLimitsSection orgId={selectedOrg} projects={projects} />
         </>
       )}
     </div>

@@ -6,6 +6,8 @@ import {
 import {
   getProxyOverview, getProxyTrends, getProxyByProject,
   getProxyByModel, getProxyByProjectModel, getProxyRequests,
+  getOrganizations, getBudgetUtilization, getProjects,
+  createBudget, updateBudget, deleteBudget,
 } from "../api";
 
 // ── Formatters ──────────────────────────────────────────────────────────────
@@ -701,6 +703,230 @@ function CostKpiModal({ cardKey, overview, byProject, byModel, grandTotal, onClo
   );
 }
 
+// ── Budget Status ─────────────────────────────────────────────────────────────
+const EMPTY_BUDGET_FORM = { project_id: "", budget_type: "monthly", limit_amount: "", alert_threshold_percent: 80 };
+
+function BudgetStatusSection() {
+  const [orgs, setOrgs]               = useState([]);
+  const [selectedOrg, setSelectedOrg] = useState("");
+  const [projects, setProjects]       = useState([]);
+  const [budgets, setBudgets]         = useState([]);
+  const [loading, setLoading]         = useState(false);
+  const [showForm, setShowForm]       = useState(false);
+  const [editId, setEditId]           = useState(null);
+  const [form, setForm]               = useState(EMPTY_BUDGET_FORM);
+  const [saving, setSaving]           = useState(false);
+  const [msg, setMsg]                 = useState("");
+
+  useEffect(() => {
+    getOrganizations()
+      .then(r => {
+        const list = r.data?.organizations || r.data || [];
+        setOrgs(list);
+        if (list.length > 0) setSelectedOrg(list[0].id);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedOrg) return;
+    setLoading(true);
+    getBudgetUtilization(selectedOrg)
+      .then(r => setBudgets(r.data || []))
+      .catch(() => setBudgets([]))
+      .finally(() => setLoading(false));
+    getProjects(selectedOrg)
+      .then(r => setProjects(r.data || []))
+      .catch(() => setProjects([]));
+  }, [selectedOrg]);
+
+  const refresh = () => {
+    if (!selectedOrg) return;
+    getBudgetUtilization(selectedOrg)
+      .then(r => setBudgets(r.data || []))
+      .catch(() => setBudgets([]));
+  };
+
+  const statusColor = (status, rawPct) => {
+    if (status === "exceeded" || rawPct > 100) return "#ef4444";
+    if (status === "warning"  || rawPct >= 80) return "#f59e0b";
+    return "#22c55e";
+  };
+
+  const openCreate = () => { setEditId(null); setForm(EMPTY_BUDGET_FORM); setMsg(""); setShowForm(true); };
+  const openEdit   = (b) => {
+    setEditId(b.id);
+    setForm({
+      project_id: b.project_id || "",
+      budget_type: b.budget_type || "monthly",
+      limit_amount: b.limit_amount != null ? String(b.limit_amount) : "",
+      alert_threshold_percent: b.alert_threshold_percent ?? 80,
+    });
+    setMsg("");
+    setShowForm(true);
+  };
+  const closeForm  = () => { setShowForm(false); setEditId(null); setMsg(""); };
+
+  const handleSave = async () => {
+    if (!form.limit_amount || isNaN(Number(form.limit_amount))) { setMsg("Enter a valid limit amount."); return; }
+    setSaving(true); setMsg("");
+    const payload = {
+      org_id: selectedOrg,
+      project_id: form.project_id || null,
+      budget_type: form.budget_type,
+      limit_amount: Number(form.limit_amount),
+      alert_threshold_percent: Number(form.alert_threshold_percent) || 80,
+    };
+    try {
+      if (editId) await updateBudget(editId, payload);
+      else        await createBudget(payload);
+      closeForm();
+      refresh();
+    } catch (e) {
+      setMsg(e.response?.data?.detail || "Save failed.");
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this budget?")) return;
+    try { await deleteBudget(id); refresh(); }
+    catch (e) { alert(e.response?.data?.detail || "Delete failed."); }
+  };
+
+  const orgBudgets  = budgets.filter(b => !b.project_id);
+  const projBudgets = budgets.filter(b =>  b.project_id);
+
+  const BudgetCard = ({ b }) => {
+    const spent  = Number(b.current_spend || 0);
+    const limit  = Number(b.limit_amount || 0);
+    const rawPct = limit > 0 ? (spent / limit) * 100 : 0;
+    const barPct = Math.min(rawPct, 100);
+    const color  = statusColor(b.status, rawPct);
+    const label  = b.project_id ? (b.project_name || b.project_id) : "Org-level";
+
+    return (
+      <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "14px 18px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{label}</span>
+            {b.budget_type && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: "var(--gray-400)", textTransform: "capitalize" }}>{b.budget_type}</span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color, padding: "2px 10px", borderRadius: 20, background: `${color}15` }}>
+              {rawPct.toFixed(1)}%
+            </span>
+            {b.id && (
+              <>
+                <button onClick={() => openEdit(b)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, border: "1px solid var(--border)", background: "transparent", cursor: "pointer", color: "var(--gray-500)" }}>Edit</button>
+                <button onClick={() => handleDelete(b.id)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, border: "1px solid #fca5a5", background: "transparent", cursor: "pointer", color: "#ef4444" }}>Delete</button>
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{ height: 8, borderRadius: 4, background: "rgba(124,112,174,0.12)", overflow: "hidden", marginBottom: 8 }}>
+          <div style={{ width: `${barPct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
+        </div>
+        <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+          ${spent.toFixed(2)} spent of ${limit.toFixed(2)} limit ({rawPct.toFixed(1)}%)
+        </div>
+      </div>
+    );
+  };
+
+  const SEL = { padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: 13, width: "100%" };
+  const INP = { ...SEL };
+
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <div>
+          <h3>Budget Status</h3>
+          <p style={{ color: "var(--gray-500)", fontSize: 13 }}>Spend vs limit by organization.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {orgs.length > 0 && (
+            <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} style={{ ...SEL, width: "auto" }}>
+              {orgs.map(o => <option key={o.id} value={o.id}>{o.org_name || o.id}</option>)}
+            </select>
+          )}
+          {selectedOrg && (
+            <button onClick={openCreate} style={{ padding: "6px 14px", borderRadius: 6, background: "#9E2A97", color: "#fff", border: "none", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+              + Set Budget
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showForm && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 18, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{editId ? "Edit Budget" : "New Budget"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project (leave blank for org-level)</div>
+              <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={SEL}>
+                <option value="">— Org-level —</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.project_name || p.id}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Budget Type</div>
+              <select value={form.budget_type} onChange={e => setForm(f => ({ ...f, budget_type: e.target.value }))} style={SEL}>
+                <option value="monthly">Monthly</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Limit Amount ($)</div>
+              <input type="number" min="0" step="0.01" value={form.limit_amount} onChange={e => setForm(f => ({ ...f, limit_amount: e.target.value }))} style={INP} placeholder="e.g. 500" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Alert Threshold (%)</div>
+              <input type="number" min="1" max="100" value={form.alert_threshold_percent} onChange={e => setForm(f => ({ ...f, alert_threshold_percent: e.target.value }))} style={INP} placeholder="80" />
+            </div>
+          </div>
+          {msg && <div style={{ fontSize: 12, color: "#ef4444" }}>{msg}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} disabled={saving} style={{ padding: "7px 18px", borderRadius: 6, background: "#9E2A97", color: "#fff", border: "none", fontSize: 13, cursor: "pointer" }}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={closeForm} style={{ padding: "7px 14px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {!selectedOrg ? (
+        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Select an organization above.</p>
+      ) : loading ? (
+        <p style={{ fontSize: 13, color: "var(--gray-400)" }}>Loading…</p>
+      ) : budgets.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--gray-500)", padding: "12px 0" }}>No budget configured for this organization.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {orgBudgets.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9E2A97", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Org-level</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {orgBudgets.map((b, i) => <BudgetCard key={i} b={b} />)}
+              </div>
+            </div>
+          )}
+          {projBudgets.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#7C70AE", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Project-level</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {projBudgets.map((b, i) => <BudgetCard key={i} b={b} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 function Cost() {
   const [selectedProject, setSelectedProject]     = useState("");
@@ -1161,6 +1387,9 @@ function Cost() {
               </div>
             )}
           </section>
+
+          {/* 7 ── Budget Status */}
+          <BudgetStatusSection />
         </>
       )}
 

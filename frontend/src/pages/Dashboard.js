@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Area, AreaChart, CartesianGrid,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -449,9 +448,94 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
   );
 }
 
+// ── PII Summary Modal ─────────────────────────────────────────────────────────
+function PiiSummaryModal({ piiSummary, overview, onClose }) {
+  const total   = piiSummary?.total_pii_requests || overview?.pii_detections || 0;
+  const blocked = piiSummary?.blocked_requests   || overview?.blocked        || 0;
+
+  return (
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2000 }}>
+      <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 540, padding: "24px 28px" }}>
+        <div className="modal-header" style={{ marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17 }}>PII Security Summary</h3>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>
+              {total} detection{total !== 1 ? "s" : ""} in current period
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+          {[
+            { label: "PII Detected",    value: num(total),   color: "#ef4444" },
+            { label: "Blocked",         value: num(blocked), color: "#f97316" },
+            { label: "Total Requests",  value: num(overview?.total_requests), color: "#7C70AE" },
+          ].map(s => (
+            <div key={s.label} style={{ flex: 1, padding: "12px 14px", borderRadius: 10, background: "var(--gray-50)", border: "1px solid var(--gray-200)" }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-500)", marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* PII type breakdown */}
+        {piiSummary?.pii_type_breakdown?.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>
+              By PII Type
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {piiSummary.pii_type_breakdown.map((item, i) => {
+                const maxCount = Math.max(...piiSummary.pii_type_breakdown.map(x => x.count));
+                const barPct   = maxCount > 0 ? Math.round((item.count / maxCount) * 100) : 0;
+                return (
+                  <div key={item.pii_type} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, minWidth: 110, fontFamily: "monospace", color: "#9E2A97" }}>{item.pii_type}</span>
+                    <div style={{ flex: 1, height: 7, borderRadius: 4, background: "var(--gray-100)", overflow: "hidden" }}>
+                      <div style={{ width: `${barPct}%`, height: "100%", background: `rgba(158,42,151,${0.4 + 0.6 * (barPct / 100)})`, borderRadius: 4 }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, minWidth: 50, textAlign: "right", color: "#9E2A97" }}>{item.count} hit{item.count !== 1 ? "s" : ""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Actions breakdown */}
+        {piiSummary?.action_breakdown?.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>
+              Actions Taken
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {piiSummary.action_breakdown.map(item => {
+                const color = item.action === "block" ? "#ef4444" : item.action === "mask" ? "#f97316" : "#22c55e";
+                return (
+                  <div key={item.action} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "10px 16px", borderRadius: 10, flex: 1, minWidth: 120,
+                    background: `${color}0d`, border: `1px solid ${color}30`,
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color, fontWeight: 700 }}>{item.action}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 2 }}>{item.count}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 function Dashboard() {
-  const navigate = useNavigate();
   const [selProject, setSelProject]   = useState("");
   const [selProvider, setSelProvider] = useState("");
   const [selModel, setSelModel]       = useState("");
@@ -467,17 +551,19 @@ function Dashboard() {
   const [refreshing, setRefreshing]   = useState(false);
   const [error, setError]             = useState("");
   const [activeCard, setActiveCard]   = useState(null);
+  const [piiSummaryModal, setPiiSummaryModal] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     try {
       isRefresh ? setRefreshing(true) : setLoading(true);
+      const proj = selProject || undefined;
       const [ovRes, trRes, prjRes, modRes, reqRes, piiRes, anomalyRes] = await Promise.allSettled([
-        getProxyOverview(undefined, days),
-        getProxyTrends(undefined, days),
-        getProxyByProject(undefined, days),
-        getProxyByModel(undefined, days),
-        getProxyRequests({ limit: 10 }),
-        getProxyPiiSummary(undefined, days),
+        getProxyOverview(undefined, days, proj),
+        getProxyTrends(undefined, days, proj),
+        getProxyByProject(undefined, days, proj),
+        getProxyByModel(undefined, days, proj, selProvider || undefined, selModel || undefined),
+        getProxyRequests({ limit: 10, project_id: proj, provider: selProvider || undefined, model_name: selModel || undefined }),
+        getProxyPiiSummary(undefined, days, proj),
         getOpenAnomalyCount(),
       ]);
       const val = (r, fb) => r.status === "fulfilled" ? (r.value?.data ?? fb) : fb;
@@ -494,9 +580,13 @@ function Dashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [days]);
+  }, [days, selProject, selProvider, selModel]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (overview !== null) load(true);
+    else load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
 
   if (loading) return <div className="loading">Loading AI Governance Dashboard…</div>;
 
@@ -801,11 +891,11 @@ function Dashboard() {
       {piiSummary && (piiSummary.total_pii_requests > 0) && (
         <section
           className="panel"
-          onClick={() => navigate("/alerts-security")}
+          onClick={() => setPiiSummaryModal(true)}
           style={{ cursor: "pointer", transition: "box-shadow 0.15s" }}
           onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 0 2px rgba(158,42,151,0.25)"}
           onMouseLeave={e => e.currentTarget.style.boxShadow = ""}
-          title="View full details in Alerts & Security"
+          title="Click to view PII security details"
         >
           <div className="section-head">
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -859,6 +949,14 @@ function Dashboard() {
           piiSummary={piiSummary}
           days={days}
           onClose={() => setActiveCard(null)}
+        />
+      )}
+
+      {piiSummaryModal && (
+        <PiiSummaryModal
+          piiSummary={piiSummary}
+          overview={overview}
+          onClose={() => setPiiSummaryModal(false)}
         />
       )}
     </>

@@ -5,6 +5,21 @@ const API = axios.create({
   timeout: 120000,
 });
 
+// Retry up to 3 times on 503 (backend restarting / proxy not yet connected)
+API.interceptors.response.use(null, async (error) => {
+  const config = error.config;
+  if (!config) return Promise.reject(error);
+
+  const status = error.response?.status;
+  if (status !== 503) return Promise.reject(error);
+
+  config._retryCount = (config._retryCount || 0) + 1;
+  if (config._retryCount > 3) return Promise.reject(error);
+
+  await new Promise((res) => setTimeout(res, config._retryCount * 1000));
+  return API(config);
+});
+
 // ─────────────────────── Summary / Dashboard ───────────────────────
 export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
   API.get("/summary/overview", {
@@ -153,6 +168,9 @@ export const getBudgetUtilization = (orgId) =>
 
 export const getRateLimits = (orgId) =>
   API.get("/rate-limits/", { params: { org_id: orgId || undefined } });
+export const createRateLimit = (data) => API.post("/rate-limits/", data);
+export const updateRateLimit = (id, data) => API.put(`/rate-limits/${id}`, data);
+export const deleteRateLimit = (id) => API.delete(`/rate-limits/${id}`);
 export const createBudget = (data) => API.post("/budgets/", data);
 export const updateBudget = (id, data) => API.put(`/budgets/${id}`, data);
 export const deleteBudget = (id) => API.delete(`/budgets/${id}`);
@@ -262,20 +280,20 @@ export const listPiiPolicies = (orgId) => API.get(`/proxy/pii-policies/${orgId}`
 export const createPiiPolicy = (payload) => API.post("/proxy/pii-policies", payload);
 
 // ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
-export const getProxyOverview = (orgId, days = 30) =>
-  API.get("/proxy/stats/overview", { params: { org_id: orgId || undefined, days } });
-export const getProxyTrends = (orgId, days = 30) =>
-  API.get("/proxy/stats/trends", { params: { org_id: orgId || undefined, days } });
-export const getProxyByProject = (orgId, days = 90) =>
-  API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
-export const getProxyByModel = (orgId, days = 30) =>
-  API.get("/costs/by-model", { params: { org_id: orgId || undefined } });
+export const getProxyOverview = (orgId, days = 30, projectId) =>
+  API.get("/proxy/stats/overview", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+export const getProxyTrends = (orgId, days = 30, projectId) =>
+  API.get("/proxy/stats/trends", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+export const getProxyByProject = (orgId, days = 30, projectId) =>
+  API.get("/costs/by-project", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+export const getProxyByModel = (orgId, days = 30, projectId, provider, modelName) =>
+  API.get("/costs/by-model", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined, provider: provider || undefined, model_name: modelName || undefined } });
 export const getProxyRequests = (params) =>
   API.get("/proxy/v1/requests", { params });
 export const getProxyRequestPiiDetail = (requestId) =>
   API.get(`/proxy/v1/requests/${requestId}/pii-detail`);
-export const getProxyPiiSummary = (orgId, days = 30) =>
-  API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days } });
+export const getProxyPiiSummary = (orgId, days = 30, projectId) =>
+  API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
 export const getProxyByProjectModel = (orgId, days = 30) =>
   API.get("/proxy/stats/by-project-model", { params: { org_id: orgId || undefined, days } });
 

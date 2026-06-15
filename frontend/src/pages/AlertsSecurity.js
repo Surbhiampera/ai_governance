@@ -787,9 +787,9 @@ function AlertsSecurity() {
         <button type="button" className="btn btn-ghost" onClick={load}>Refresh</button>
       </div>
 
-      {/* ── Fixed-height dashboard body (no page scroll) ─────────────────── */}
-      <div className="page-body" style={{ padding: "12px 16px", overflow: "hidden" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%", overflow: "hidden" }}>
+      {/* ── Scrollable dashboard body ────────────────────────────────────── */}
+      <div className="page-body" style={{ padding: "12px 16px", overflow: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
           {error && <div className="error-message" style={{ flexShrink: 0 }}>{error}</div>}
 
@@ -807,26 +807,26 @@ function AlertsSecurity() {
               return (
                 <div key={card.label} className="metric-card metric-card-interactive"
                   onClick={() => setActiveKpi(cardKey)}
-                  style={{ padding: "12px 14px", minHeight: 0 }}>
-                  <div className="metric-eyebrow" style={{ fontSize: 10 }}>{card.label}</div>
-                  <div className="metric-value" style={{ fontSize: 22, marginTop: 6 }}>{card.value}</div>
-                  <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 2 }}>{card.sub}</div>
+                  style={{ padding: "18px 20px", minHeight: 90 }}>
+                  <div className="metric-eyebrow" style={{ fontSize: 11 }}>{card.label}</div>
+                  <div className="metric-value" style={{ fontSize: 28, marginTop: 8 }}>{card.value}</div>
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 4 }}>{card.sub}</div>
                 </div>
               );
             })}
           </div>
 
-          {/* ── Row 2: 4 panels side by side ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, flex: 1, minHeight: 0, overflow: "hidden" }}>
+          {/* ── Row 2: 2×2 panel grid ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gridTemplateRows: "repeat(2, minmax(220px, auto))", gap: 10 }}>
 
             {/* Panel 1 — PII Type Breakdown */}
-            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
                 PII Type Breakdown
               </div>
               {piiSummary?.pii_type_breakdown?.length > 0 ? (
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                <div style={{ flex: 1, minHeight: 180 }}>
+                  <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={piiSummary.pii_type_breakdown} margin={{ top: 2, right: 6, left: -20, bottom: 2 }}>
                       <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
                       <XAxis dataKey="pii_type" tick={{ fill: "#6d6782", fontSize: 9 }} />
@@ -849,7 +849,7 @@ function AlertsSecurity() {
             </div>
 
             {/* Panel 2 — Actions Taken on PII */}
-            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
                 Actions Taken on PII
               </div>
@@ -885,7 +885,7 @@ function AlertsSecurity() {
             </div>
 
             {/* Panel 3 — Security Snapshot */}
-            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 10, flexShrink: 0 }}>
                 Security Snapshot
               </div>
@@ -915,7 +915,7 @@ function AlertsSecurity() {
             </div>
 
             {/* Panel 4 — Open Anomalies */}
-            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column" }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", marginBottom: 8, flexShrink: 0 }}>
                 Open Anomalies <span style={{ fontSize: 11, fontWeight: 400, color: "var(--gray-500)", textTransform: "none" }}>({anomalies.length})</span>
               </div>
@@ -1090,7 +1090,7 @@ function AlertsSecurity() {
               </div>
             )}
 
-            {/* Security Logs table */}
+            {/* Security Logs tab */}
             {activeTab === "logs" && (
               <div className="table-wrap table-wrap--fill">
                 <table>
@@ -1105,10 +1105,14 @@ function AlertsSecurity() {
                       ? <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No security events in this period.</td></tr>
                       : secLogs.map((item) => {
                         const isPII = !!item.pii_detected;
+                        const openPiiDetail = isPII ? () => {
+                          if (item.event_id?.startsWith("req-")) setProxyPiiModalId(item.event_id);
+                          else setPiiModalEventId(item.event_id);
+                        } : undefined;
                         return (
                           <tr
                             key={item.id}
-                            onClick={isPII ? () => setPiiModalEventId(item.event_id) : undefined}
+                            onClick={openPiiDetail}
                             style={isPII ? { cursor: "pointer", background: "rgba(158,42,151,0.04)" } : undefined}
                             title={isPII ? "Click to view PII detail" : undefined}
                           >
@@ -1139,9 +1143,142 @@ function AlertsSecurity() {
                 </table>
               </div>
             )}
+
           </div>
 
+          {/* ── Security Logs — standalone risk-grouped table ──────────────── */}
+          <div className="panel">
+          <div className="section-head">
+            <div>
+              <h3>Security Logs</h3>
+              <p style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                {secLogs.length} event{secLogs.length !== 1 ? "s" : ""} · grouped by risk level
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              {[
+                { label: "High",   color: "#ef4444", count: secLogs.filter(l => Number(l.risk_score || 0) >= 0.7).length },
+                { label: "Medium", color: "#f97316", count: secLogs.filter(l => { const s = Number(l.risk_score || 0); return s >= 0.4 && s < 0.7; }).length },
+                { label: "Low",    color: "#22c55e", count: secLogs.filter(l => Number(l.risk_score || 0) < 0.4).length },
+              ].map(b => b.count > 0 && (
+                <span key={b.label} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: b.color }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: b.color, display: "inline-block" }} />
+                  {b.label} ({b.count})
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {secLogs.length === 0 ? (
+            <p style={{ color: "var(--gray-500)", fontSize: 13, padding: "12px 0" }}>No security events in this period.</p>
+          ) : (
+            <>
+              {[
+                { label: "High Risk",   color: "#ef4444", bg: "rgba(239,68,68,0.04)",   filter: l => Number(l.risk_score || 0) >= 0.7 },
+                { label: "Medium Risk", color: "#f97316", bg: "rgba(249,115,22,0.04)",  filter: l => { const s = Number(l.risk_score || 0); return s >= 0.4 && s < 0.7; } },
+                { label: "Low Risk",    color: "#22c55e", bg: "rgba(34,197,94,0.03)",   filter: l => Number(l.risk_score || 0) < 0.4 },
+              ].map(band => {
+                const rows = [...secLogs]
+                  .filter(band.filter)
+                  .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0));
+                if (rows.length === 0) return null;
+                return (
+                  <div key={band.label} style={{ marginBottom: 24 }}>
+                    {/* Band header */}
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                      background: band.bg, borderLeft: `3px solid ${band.color}`,
+                      borderRadius: "6px 6px 0 0", marginBottom: 0,
+                    }}>
+                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: band.color, display: "inline-block" }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: band.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {band.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--gray-400)", marginLeft: 2 }}>— {rows.length} event{rows.length !== 1 ? "s" : ""}</span>
+                    </div>
+
+                    <div className="table-wrap" style={{ borderRadius: "0 0 8px 8px", marginTop: 0 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Event</th>
+                            <th>PII</th>
+                            <th>PII Types</th>
+                            <th>Data Out</th>
+                            <th>Misuse</th>
+                            <th>Spike</th>
+                            <th>Risk</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map(item => {
+                            const isPII    = !!item.pii_detected;
+                            const score    = Number(item.risk_score || 0);
+                            const piiTypes = item.pii_type
+                              ? item.pii_type.split(",").map(s => s.trim()).filter(Boolean)
+                              : [];
+                            const openPiiDetail = isPII ? () => {
+                              if (item.event_id?.startsWith("req-")) setProxyPiiModalId(item.event_id);
+                              else setPiiModalEventId(item.event_id);
+                            } : undefined;
+                            return (
+                              <tr
+                                key={item.id}
+                                onClick={openPiiDetail}
+                                style={isPII ? { cursor: "pointer" } : undefined}
+                                title={isPII ? "Click to view PII detail" : undefined}
+                              >
+                                <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
+                                <td>
+                                  {isPII
+                                    ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
+                                    : <span className="badge-no">no</span>}
+                                </td>
+                                <td>
+                                  {piiTypes.length > 0 ? (
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                                      <span style={{
+                                        fontSize: 11, padding: "2px 8px", borderRadius: 20,
+                                        background: "rgba(158,42,151,0.1)", color: "#9E2A97",
+                                        fontWeight: 600, fontFamily: "monospace",
+                                      }}>{piiTypes[0]}</span>
+                                      {piiTypes.length > 1 && (
+                                        <span
+                                          onClick={e => { e.stopPropagation(); setPiiTypesModal(piiTypes); }}
+                                          style={{
+                                            fontSize: 10, fontWeight: 700, color: "#9E2A97",
+                                            background: "rgba(158,42,151,0.12)", padding: "2px 7px",
+                                            borderRadius: 20, cursor: "pointer",
+                                            border: "1px solid rgba(158,42,151,0.3)",
+                                          }}
+                                        >+{piiTypes.length - 1}</span>
+                                      )}
+                                    </span>
+                                  ) : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                                </td>
+                                <td>{item.data_out_violation      ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                                <td>{item.misuse_pattern_detected ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                                <td>{item.abnormal_usage_spike    ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                                <td>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: band.color, display: "inline-block" }} />
+                                    <span style={{ color: band.color, fontWeight: 700, fontSize: 13 }}>{score.toFixed(1)}</span>
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
+
+        </div>{/* close inner flex column */}
       </div>{/* close page-body */}
 
       {piiModalEventId && (
