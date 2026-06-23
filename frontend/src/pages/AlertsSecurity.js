@@ -8,6 +8,7 @@ import {
   getAnomaliesCombined, resolveAnomaly, getAdminPIIDetail, getProjects,
   getProxyRequestPiiDetail,
 } from "../api";
+import { failureLabel, statusPillClass } from "../failureCodes";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const num   = (v) => Number(v || 0).toLocaleString();
@@ -121,7 +122,48 @@ function ProxyPiiDetailModal({ requestId, onClose }) {
         {loading && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--gray-400)" }}>Loading…</div>}
         {error   && <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>}
 
-        {detail && (
+        {detail && !detail.pii_detected && detail.failure_code && (
+          <>
+            {/* ── Non-PII failure: no entity detail to show, surface the failure code/reason instead ── */}
+            <div style={{
+              display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap",
+              padding: "12px 16px", borderRadius: 10, marginBottom: 20,
+              background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+            }}>
+              <div>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Status</span>
+                <div style={{ marginTop: 4 }}>
+                  <span className={`status-pill ${statusPillClass(detail.request_status)}`}>{detail.request_status || "—"}</span>
+                </div>
+              </div>
+              <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24 }}>
+                <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Failure Code</span>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#9E2A97", marginTop: 4 }}>{failureLabel(detail.failure_code)}</div>
+              </div>
+              {detail.failure_reason && (
+                <div style={{ borderLeft: "1px solid var(--gray-200)", paddingLeft: 24, flex: 1, minWidth: 200 }}>
+                  <span style={{ fontSize: 11, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Reason</span>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>{detail.failure_reason}</div>
+                </div>
+              )}
+            </div>
+
+            {detail.request_payload && (
+              <section>
+                <h4 style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97" }}>
+                  Request Payload
+                </h4>
+                <pre style={{
+                  margin: 0, padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                  background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+                  whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflowY: "auto",
+                }}>{JSON.stringify(detail.request_payload, null, 2)}</pre>
+              </section>
+            )}
+          </>
+        )}
+
+        {detail && detail.pii_detected && (
           <>
             {/* ── Section A: Summary ────────────────────────────────── */}
             <div style={{
@@ -664,6 +706,8 @@ function AlertsSecurity() {
   const [piiTotal, setPiiTotal]                 = useState(0);
   const [blockedRequests, setBlockedRequests]   = useState([]);
   const [blockedTotal, setBlockedTotal]         = useState(0);
+  const [failureRequests, setFailureRequests]   = useState([]);
+  const [failureTotal, setFailureTotal]         = useState(0);
 
   // Security data
   const [secSummary, setSecSummary]             = useState(null);
@@ -677,6 +721,7 @@ function AlertsSecurity() {
   const [activeTab, setActiveTab]               = useState("pii");
   const [piiPage, setPiiPage]                   = useState(0);
   const [blockedPage, setBlockedPage]           = useState(0);
+  const [failurePage, setFailurePage]           = useState(0);
   const [piiSeverityFilter, setPiiSeverityFilter] = useState([]);
   const [proxyPiiModalId, setProxyPiiModalId]   = useState(null);
   const PAGE_SIZE = 25;
@@ -694,12 +739,13 @@ function AlertsSecurity() {
       const proj      = selectedProject || undefined;
       const startDate = daysToStartDate(days);
 
-      const [ovRes, piiSumRes, piiReqRes, blockedRes, secSumRes, secLogRes, anomalyRes] =
+      const [ovRes, piiSumRes, piiReqRes, blockedRes, failureRes, secSumRes, secLogRes, anomalyRes] =
         await Promise.allSettled([
           getProxyOverview(undefined, days),
           getProxyPiiSummary(undefined, days),
           getProxyRequests({ project_id: proj, pii_only: true, pii_severity: piiSeverityFilter.length ? piiSeverityFilter.join(",") : undefined, limit: PAGE_SIZE, offset: piiPage * PAGE_SIZE }),
-          getProxyRequests({ project_id: proj, status: "blocked", limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
+          getProxyRequests({ project_id: proj, status: "blocked", pii_only: true, limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
+          getProxyRequests({ project_id: proj, failure_only: true, limit: PAGE_SIZE, offset: failurePage * PAGE_SIZE }),
           getSecuritySummaryCombined(undefined, proj, startDate),
           getSecurityLogsCombined(undefined, undefined, undefined, proj, startDate),
           getAnomaliesCombined("open", undefined, proj, startDate),
@@ -718,6 +764,10 @@ function AlertsSecurity() {
       setBlockedRequests(blockedData.items || []);
       setBlockedTotal(blockedData.total   || 0);
 
+      const failureData = val(failureRes, { items: [], total: 0 });
+      setFailureRequests(failureData.items || []);
+      setFailureTotal(failureData.total   || 0);
+
       setSecSummary(val(secSumRes,   null));
       setSecLogs(val(secLogRes,      []));
       setAnomalies(val(anomalyRes,   []));
@@ -727,7 +777,7 @@ function AlertsSecurity() {
     } finally {
       setLoading(false);
     }
-  }, [days, selectedProject, piiPage, blockedPage, piiSeverityFilter]);
+  }, [days, selectedProject, piiPage, blockedPage, failurePage, piiSeverityFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -735,6 +785,7 @@ function AlertsSecurity() {
 
   const piiPages     = Math.ceil(piiTotal     / PAGE_SIZE);
   const blockedPages = Math.ceil(blockedTotal / PAGE_SIZE);
+  const failurePages = Math.ceil(failureTotal / PAGE_SIZE);
 
   return (
     <>
@@ -949,9 +1000,10 @@ function AlertsSecurity() {
           <div className="panel" style={{ flexShrink: 0, padding: "12px 16px", display: "flex", flexDirection: "column", height: 340, overflow: "hidden" }}>
             <div style={{ display: "flex", gap: 6, marginBottom: 10, borderBottom: "1px solid var(--gray-200)", paddingBottom: 8, flexShrink: 0 }}>
               {[
-                { key: "pii",     label: `PII Detections (${num(piiTotal)})` },
-                { key: "blocked", label: `Blocked (${num(blockedTotal)})` },
-                { key: "logs",    label: `Security Logs (${secLogs.length})` },
+                { key: "pii",      label: `PII Detections (${num(piiTotal)})` },
+                { key: "blocked",  label: `Blocked (${num(blockedTotal)})` },
+                { key: "failures", label: `Failures (${num(failureTotal)})` },
+                { key: "logs",     label: `Security Logs (${secLogs.length})` },
               ].map(tab => (
                 <button key={tab.key} type="button"
                   className={`btn ${activeTab === tab.key ? "btn-primary" : "btn-ghost"}`}
@@ -1008,7 +1060,7 @@ function AlertsSecurity() {
                               </span>
                             </td>
                             <td>
-                              <span className={`status-pill ${row.request_status === "blocked" ? "critical" : row.request_status === "completed" ? "low" : "medium"}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                              <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 10, padding: "1px 7px" }}>
                                 {row.request_status}
                               </span>
                             </td>
@@ -1085,6 +1137,56 @@ function AlertsSecurity() {
                     <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={blockedPage === 0} onClick={() => setBlockedPage(p => p - 1)}>← Prev</button>
                     <span style={{ padding: "4px 10px", fontSize: 12 }}>Page {blockedPage + 1} of {blockedPages}</span>
                     <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={blockedPage >= blockedPages - 1} onClick={() => setBlockedPage(p => p + 1)}>Next →</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Failures tab — non-PII blocks + failed/partial requests */}
+            {activeTab === "failures" && (
+              <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div className="table-wrap table-wrap--fill">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th>
+                        <th>Status</th><th>Failure Code</th><th>Reason</th><th>Received</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {failureRequests.length === 0
+                        ? <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No failures in this period.</td></tr>
+                        : failureRequests.map(row => (
+                          <tr
+                            key={row.request_id}
+                            onClick={() => setProxyPiiModalId(row.request_id)}
+                            style={{ cursor: "pointer" }}
+                            title="Click to view failure detail"
+                          >
+                            <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
+                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
+                            <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                            <td>
+                              <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                                {row.request_status}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 12 }}>{row.failure_code ? failureLabel(row.failure_code) : "—"}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.failure_reason || "—"}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                {failurePages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 6, paddingTop: 6, flexShrink: 0 }}>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={failurePage === 0} onClick={() => setFailurePage(p => p - 1)}>← Prev</button>
+                    <span style={{ padding: "4px 10px", fontSize: 12 }}>Page {failurePage + 1} of {failurePages}</span>
+                    <button className="btn btn-ghost" style={{ fontSize: 11, padding: "4px 10px" }} disabled={failurePage >= failurePages - 1} onClick={() => setFailurePage(p => p + 1)}>Next →</button>
                   </div>
                 )}
               </div>

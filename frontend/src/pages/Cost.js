@@ -9,6 +9,7 @@ import {
   getOrganizations, getBudgetUtilization, getProjects,
   createBudget, updateBudget, deleteBudget,
 } from "../api";
+import { failureLabel, statusPillClass } from "../failureCodes";
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4", "#3FB6D4", "#f59e0b", "#10b981"];
@@ -453,9 +454,15 @@ function RequestTable({ requests }) {
                 <td><strong>{row.model_name || "—"}</strong></td>
                 <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                 <td>
-                  <span className={`status-pill ${row.request_status === "completed" ? "low" : row.request_status === "blocked" ? "critical" : row.request_status === "failed" ? "high" : "medium"}`}>
+                  <span
+                    className={`status-pill ${statusPillClass(row.request_status)}`}
+                    title={row.failure_reason || (row.failure_code ? failureLabel(row.failure_code) : undefined)}
+                  >
                     {row.request_status}
                   </span>
+                  {row.failure_code && (
+                    <div style={{ fontSize: 10, color: "var(--gray-500)", marginTop: 2 }}>{failureLabel(row.failure_code)}</div>
+                  )}
                 </td>
                 <td>{num(row.prompt_tokens)}</td>
                 <td>{num(row.completion_tokens)}</td>

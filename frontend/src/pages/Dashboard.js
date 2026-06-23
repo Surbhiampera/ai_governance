@@ -8,6 +8,7 @@ import {
   getProxyByModel, getProxyRequests, getProxyPiiSummary,
   getOpenAnomalyCount,
 } from "../api";
+import { statusPillClass } from "../failureCodes";
 
 const money2 = (v) => { const n = Number(v || 0); return n > 0 && n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`; };
 const money  = (v) => `$${Number(v || 0).toFixed(4)}`;
@@ -413,7 +414,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                     <table>
                       <thead>
                         <tr>
-                          <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th>
+                          <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th>
                           <th>PII Types</th><th>Tokens</th><th>Cost</th><th>Received</th>
                         </tr>
                       </thead>
@@ -424,6 +425,9 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                             <td>{row.project_id || "—"}</td>
                             <td><strong>{row.model_name || "—"}</strong></td>
                             <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                            <td>
+                              <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 11 }}>{row.request_status || "—"}</span>
+                            </td>
                             <td>
                               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                                 {(row.pii_types || []).map(t => <span key={t} className="status-pill critical" style={{ fontSize: 11 }}>{t}</span>)}
@@ -696,6 +700,8 @@ function Dashboard() {
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
           { label: "Blocked",          value: num(overview?.blocked),                sub: "by governance policies",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> },
+          { label: "Failed",           value: num((overview?.failed || 0) + (overview?.partial || 0)), sub: `${num(overview?.partial || 0)} partial streams`,
+            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
           { label: "Open Anomalies",   value: num(openAnomalyCount),                  sub: "unresolved spikes",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
         ].map(card => {
