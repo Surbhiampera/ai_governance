@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com",
+  baseURL: import.meta.env.VITE_API_URL,
   timeout: 120000,
 });
 
@@ -28,13 +28,17 @@ export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
 
 export const getTodaySummary = () => API.get("/summary/today");
 export const getDailySummary = (start, end, orgId) =>
-  API.get("/summary/daily", { params: { start, end, org_id: orgId || undefined } });
+  API.get("/summary/daily", {
+    params: { start, end, org_id: orgId || undefined },
+  });
 export const getMonthlySummary = (orgId, projectId) =>
   API.get("/summary/monthly", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
 export const getUsageTrends = (orgId, days) =>
-  API.get("/summary/trends", { params: { org_id: orgId || undefined, days: days || 30 } });
+  API.get("/summary/trends", {
+    params: { org_id: orgId || undefined, days: days || 30 },
+  });
 
 // ─────────────────────── Alerts ───────────────────────
 export const getAlerts = (status) =>
@@ -43,30 +47,82 @@ export const resolveAlert = (id) => API.patch(`/alerts/${id}/resolve`);
 
 // ─────────────────────── Security ───────────────────────
 export const getSecuritySummary = (startDate) =>
-  API.get("/security/summary", { params: { start_date: startDate || undefined } });
+  API.get("/security/summary", {
+    params: { start_date: startDate || undefined },
+  });
 export const getSecurityLogs = (piiDetected, misuseDetected, startDate) =>
-  API.get("/security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected, start_date: startDate || undefined } });
+  API.get("/security/logs", {
+    params: {
+      pii_detected: piiDetected,
+      misuse_detected: misuseDetected,
+      start_date: startDate || undefined,
+    },
+  });
 export const getUsageAnomalies = (status = "open", startDate) =>
-  API.get("/security/anomalies", { params: { status, start_date: startDate || undefined } });
+  API.get("/security/anomalies", {
+    params: { status, start_date: startDate || undefined },
+  });
 
 // Combined alerts & security
 export const getAlertsSecurity = (status, orgId, projectId, startDate) =>
-  API.get("/alerts-security/alerts", { params: { status: status || undefined, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
+  API.get("/alerts-security/alerts", {
+    params: {
+      status: status || undefined,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+      start_date: startDate || undefined,
+    },
+  });
 export const resolveAlertCombined = (id) =>
   API.patch(`/alerts-security/alerts/${id}/resolve`);
 export const getSecuritySummaryCombined = (orgId, projectId, startDate) =>
-  API.get("/alerts-security/summary", { params: { org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
-export const getSecurityLogsCombined = (piiDetected, misuseDetected, orgId, projectId, startDate) =>
-  API.get("/alerts-security/logs", { params: { pii_detected: piiDetected, misuse_detected: misuseDetected, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
-export const getAnomaliesCombined = (status = "open", orgId, projectId, startDate) =>
-  API.get("/alerts-security/anomalies", { params: { status, org_id: orgId || undefined, project_id: projectId || undefined, start_date: startDate || undefined } });
+  API.get("/alerts-security/summary", {
+    params: {
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+      start_date: startDate || undefined,
+    },
+  });
+export const getSecurityLogsCombined = (
+  piiDetected,
+  misuseDetected,
+  orgId,
+  projectId,
+  startDate,
+) =>
+  API.get("/alerts-security/logs", {
+    params: {
+      pii_detected: piiDetected,
+      misuse_detected: misuseDetected,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+      start_date: startDate || undefined,
+    },
+  });
+export const getAnomaliesCombined = (
+  status = "open",
+  orgId,
+  projectId,
+  startDate,
+) =>
+  API.get("/alerts-security/anomalies", {
+    params: {
+      status,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+      start_date: startDate || undefined,
+    },
+  });
 export const resolveAnomaly = (id) =>
   API.patch(`/alerts-security/anomalies/${id}/resolve`);
 export const getOpenAnomalyCount = (orgId, projectId) =>
-  API.get("/alerts-security/anomalies/open-count", { params: { org_id: orgId || undefined, project_id: projectId || undefined } });
+  API.get("/alerts-security/anomalies/open-count", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
 
 // ─────────────────────── Telemetry / Tracing ───────────────────────
-export const getTelemetryLogs = (params) => API.get("/telemetry/logs", { params });
+export const getTelemetryLogs = (params) =>
+  API.get("/telemetry/logs", { params });
 export const getTrace = (eventId) => API.get(`/telemetry/traces/${eventId}`);
 export const postTelemetryEvent = (data) => API.post("/telemetry/event", data);
 export const postTelemetryBatch = (events) =>
@@ -85,7 +141,9 @@ export const getDecoratorRegistrations = (params) =>
 export const getDecoratorInventory = (params) =>
   API.get("/decorator/inventory", { params });
 export const getDecoratorInventoryByTool = (toolName, orgId) =>
-  API.get(`/decorator/inventory/${toolName}`, { params: { org_id: orgId || undefined } });
+  API.get(`/decorator/inventory/${toolName}`, {
+    params: { org_id: orgId || undefined },
+  });
 export const getDecoratorUsage = (params) =>
   API.get("/decorator/usage", { params });
 export const getDecoratorLogs = (params) =>
@@ -105,14 +163,22 @@ export const getAdminPIIDetail = (eventId) =>
 
 // ─────────────────────── Control (vendor-agnostic ingestion) ───────────────────────
 export const controlIngest = (data) => API.post("/control/ingest", data);
-export const controlIngestBatch = (events) => API.post("/control/ingest/batch", { events });
-export const controlIngestTrace = (data) => API.post("/control/ingest/trace", data);
+export const controlIngestBatch = (events) =>
+  API.post("/control/ingest/batch", { events });
+export const controlIngestTrace = (data) =>
+  API.post("/control/ingest/trace", data);
 export const getControlQuota = (orgId, projectId) =>
-  API.get(`/control/quota/${orgId}`, { params: { project_id: projectId || undefined } });
+  API.get(`/control/quota/${orgId}`, {
+    params: { project_id: projectId || undefined },
+  });
 export const getProjectTrace = (projectId, orgId) =>
-  API.get(`/control/project/${projectId}/trace`, { params: { org_id: orgId || undefined } });
+  API.get(`/control/project/${projectId}/trace`, {
+    params: { org_id: orgId || undefined },
+  });
 export const getControlTraceDetail = (traceId, orgId) =>
-  API.get(`/control/trace/${traceId}`, { params: { org_id: orgId || undefined } });
+  API.get(`/control/trace/${traceId}`, {
+    params: { org_id: orgId || undefined },
+  });
 export const getControlCostBreakdown = (orgId, projectId) =>
   API.get("/control/cost-breakdown", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
@@ -121,21 +187,28 @@ export const getProjectCostBreakdown = (projectId, orgId) =>
   API.get("/costs/project-breakdown", {
     params: { project_id: projectId, org_id: orgId || undefined },
   });
-export const getNotificationStatus = () => API.get("/control/notifications/status");
+export const getNotificationStatus = () =>
+  API.get("/control/notifications/status");
 
 // ─────────────────────── Tools / Models ───────────────────────
 export const getTools = () => API.get("/tools/");
 export const registerTool = (data) => API.post("/tools/register", data);
 export const assignToolProject = (toolName, projectId) =>
-  API.patch(`/tools/${encodeURIComponent(toolName)}/project`, null, { params: { project_id: projectId || undefined } });
+  API.patch(`/tools/${encodeURIComponent(toolName)}/project`, null, {
+    params: { project_id: projectId || undefined },
+  });
 export const getToolsUsage = () => API.get("/tools/usage");
 export const getConnectors = () => API.get("/tools/connectors");
 export const createConnector = (data) => API.post("/tools/connectors", data);
-export const updateConnector = (id, data) => API.patch(`/tools/connectors/${id}`, data);
+export const updateConnector = (id, data) =>
+  API.patch(`/tools/connectors/${id}`, data);
 export const deleteConnector = (id) => API.delete(`/tools/connectors/${id}`);
 export const getConnectorSyncLogs = (connectorId, limit = 50) =>
-  API.get("/tools/connectors/sync-logs", { params: { connector_id: connectorId || undefined, limit } });
-export const triggerConnectorSync = (id) => API.post(`/tools/connectors/${id}/trigger-sync`);
+  API.get("/tools/connectors/sync-logs", {
+    params: { connector_id: connectorId || undefined, limit },
+  });
+export const triggerConnectorSync = (id) =>
+  API.post(`/tools/connectors/${id}/trigger-sync`);
 
 // Response fields: model_name, provider, input_cost_per_1k, output_cost_per_1k, currency
 export const getModels = () => API.get("/models/");
@@ -150,7 +223,8 @@ export const createRule = (data) => API.post("/governance/rules", data);
 export const getOrganizations = () => API.get("/organizations/");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
 export const createOrganization = (data) => API.post("/organizations/", data);
-export const updateOrganization = (id, data) => API.put(`/organizations/${id}`, data);
+export const updateOrganization = (id, data) =>
+  API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
 
 export const getProjects = (orgId) =>
@@ -169,7 +243,8 @@ export const getBudgetUtilization = (orgId) =>
 export const getRateLimits = (orgId) =>
   API.get("/rate-limits/", { params: { org_id: orgId || undefined } });
 export const createRateLimit = (data) => API.post("/rate-limits/", data);
-export const updateRateLimit = (id, data) => API.put(`/rate-limits/${id}`, data);
+export const updateRateLimit = (id, data) =>
+  API.put(`/rate-limits/${id}`, data);
 export const deleteRateLimit = (id) => API.delete(`/rate-limits/${id}`);
 export const createBudget = (data) => API.post("/budgets/", data);
 export const updateBudget = (id, data) => API.put(`/budgets/${id}`, data);
@@ -188,7 +263,11 @@ export const getCostByProject = (orgId) =>
   API.get("/costs/by-project", { params: { org_id: orgId || undefined } });
 export const getCostDaily = (days, orgId, projectId) =>
   API.get("/costs/daily", {
-    params: { days, org_id: orgId || undefined, project_id: projectId || undefined },
+    params: {
+      days,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+    },
   });
 export const getCostMonthly = (orgId, projectId) =>
   API.get("/costs/monthly", {
@@ -221,7 +300,11 @@ export const getCostBreakdown = (orgId, projectId) =>
   });
 export const getCostPerToolDaily = (days, orgId, projectId) =>
   API.get("/costs/per-tool-daily", {
-    params: { days: days || 14, org_id: orgId || undefined, project_id: projectId || undefined },
+    params: {
+      days: days || 14,
+      org_id: orgId || undefined,
+      project_id: projectId || undefined,
+    },
   });
 export const getCostSpendCapStatus = (orgId, projectId) =>
   API.get("/costs/spend-cap-status", {
@@ -236,10 +319,14 @@ export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
 // ─────────────────────── Lookups (dynamic dropdowns) ───────────────────────
 export const getTracingOrgs = () => API.get("/lookups/tracing-orgs");
 export const getTracingProjects = (orgId) =>
-  API.get("/lookups/tracing-projects", { params: { org_id: orgId || undefined } });
+  API.get("/lookups/tracing-projects", {
+    params: { org_id: orgId || undefined },
+  });
 export const getLookupAuthTypes = () => API.get("/lookups/auth-types");
-export const getLookupIngestionModes = () => API.get("/lookups/ingestion-modes");
-export const getLookupConnectorStatuses = () => API.get("/lookups/connector-statuses");
+export const getLookupIngestionModes = () =>
+  API.get("/lookups/ingestion-modes");
+export const getLookupConnectorStatuses = () =>
+  API.get("/lookups/connector-statuses");
 export const getLookupToolTypes = () => API.get("/lookups/tool-types");
 export const getLookupProviders = () => API.get("/lookups/providers");
 export const getLookupRuleMetrics = () => API.get("/lookups/rule-metrics");
@@ -261,40 +348,89 @@ export const triggerMonthlyAggregation = () =>
 export const triggerAnomalyDetection = () =>
   API.post("/workers/anomaly-detection/sync");
 export const triggerAlertScan = () => API.post("/workers/alert-scan/sync");
-export const triggerConnectorPoll = () => API.post("/workers/connector-poll/sync");
+export const triggerConnectorPoll = () =>
+  API.post("/workers/connector-poll/sync");
 
 // ─────────────────────── Proxy — Governance Keys ───────────────────────
 export const listGovernanceKeys = (orgId) =>
   API.get("/governance-keys/", { params: { org_id: orgId } });
-export const createGovernanceKey = (payload) => API.post("/governance-keys/", payload);
-export const revokeGovernanceKey = (keyId) => API.delete(`/governance-keys/${keyId}`);
-export const rotateGovernanceKey = (keyId) => API.post(`/governance-keys/${keyId}/rotate`);
+export const createGovernanceKey = (payload) =>
+  API.post("/governance-keys/", payload);
+export const revokeGovernanceKey = (keyId) =>
+  API.delete(`/governance-keys/${keyId}`);
+export const rotateGovernanceKey = (keyId) =>
+  API.post(`/governance-keys/${keyId}/rotate`);
 
 // ─────────────────────── Proxy — Provider Configs ──────────────────────
-export const listProviderConfigs = (orgId) => API.get(`/proxy/provider-configs/${orgId}`);
-export const createProviderConfig = (payload) => API.post("/proxy/provider-configs", payload);
-export const deleteProviderConfig = (configId) => API.delete(`/proxy/provider-configs/${configId}`);
+export const listProviderConfigs = (orgId) =>
+  API.get(`/proxy/provider-configs/${orgId}`);
+export const createProviderConfig = (payload) =>
+  API.post("/proxy/provider-configs", payload);
+export const deleteProviderConfig = (configId) =>
+  API.delete(`/proxy/provider-configs/${configId}`);
 
 // ─────────────────────── Proxy — PII Policies ──────────────────────────
-export const listPiiPolicies = (orgId) => API.get(`/proxy/pii-policies/${orgId}`);
-export const createPiiPolicy = (payload) => API.post("/proxy/pii-policies", payload);
+export const listPiiPolicies = (orgId) =>
+  API.get(`/proxy/pii-policies/${orgId}`);
+export const createPiiPolicy = (payload) =>
+  API.post("/proxy/pii-policies", payload);
 
 // ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
 export const getProxyOverview = (orgId, days = 30, projectId) =>
-  API.get("/proxy/stats/overview", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+  API.get("/proxy/stats/overview", {
+    params: {
+      org_id: orgId || undefined,
+      days,
+      project_id: projectId || undefined,
+    },
+  });
 export const getProxyTrends = (orgId, days = 30, projectId) =>
-  API.get("/proxy/stats/trends", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+  API.get("/proxy/stats/trends", {
+    params: {
+      org_id: orgId || undefined,
+      days,
+      project_id: projectId || undefined,
+    },
+  });
 export const getProxyByProject = (orgId, days = 30, projectId) =>
-  API.get("/costs/by-project", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
-export const getProxyByModel = (orgId, days = 30, projectId, provider, modelName) =>
-  API.get("/costs/by-model", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined, provider: provider || undefined, model_name: modelName || undefined } });
+  API.get("/costs/by-project", {
+    params: {
+      org_id: orgId || undefined,
+      days,
+      project_id: projectId || undefined,
+    },
+  });
+export const getProxyByModel = (
+  orgId,
+  days = 30,
+  projectId,
+  provider,
+  modelName,
+) =>
+  API.get("/costs/by-model", {
+    params: {
+      org_id: orgId || undefined,
+      days,
+      project_id: projectId || undefined,
+      provider: provider || undefined,
+      model_name: modelName || undefined,
+    },
+  });
 export const getProxyRequests = (params) =>
   API.get("/proxy/v1/requests", { params });
 export const getProxyRequestPiiDetail = (requestId) =>
   API.get(`/proxy/v1/requests/${requestId}/pii-detail`);
 export const getProxyPiiSummary = (orgId, days = 30, projectId) =>
-  API.get("/proxy/stats/pii", { params: { org_id: orgId || undefined, days, project_id: projectId || undefined } });
+  API.get("/proxy/stats/pii", {
+    params: {
+      org_id: orgId || undefined,
+      days,
+      project_id: projectId || undefined,
+    },
+  });
 export const getProxyByProjectModel = (orgId, days = 30) =>
-  API.get("/proxy/stats/by-project-model", { params: { org_id: orgId || undefined, days } });
+  API.get("/proxy/stats/by-project-model", {
+    params: { org_id: orgId || undefined, days },
+  });
 
 export default API;

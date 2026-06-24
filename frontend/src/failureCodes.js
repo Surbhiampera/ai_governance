@@ -17,12 +17,16 @@ export function failureLabel(code) {
 }
 
 // Maps request_status to the existing .status-pill modifier classes.
+// Covers both vocabularies seen in this codebase: completed/blocked/failed/partial
+// (proxy request log) and success/error/partial (telemetry event status).
 export function statusPillClass(status) {
   switch (status) {
-    case "completed": return "low";
-    case "blocked":   return "critical";
-    case "failed":    return "high";
-    case "partial":   return "warning";
-    default:          return "medium";
+    case "completed":
+    case "success":   return "success";
+    case "blocked":    return "critical";
+    case "failed":
+    case "error":      return "high";
+    case "partial":    return "warning";
+    default:           return "medium";
   }
 }

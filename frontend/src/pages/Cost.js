@@ -120,6 +120,28 @@ function ProjectIntelligence({ byProject, projectModelMap, grandTotal }) {
 
 // ── Full Project Detail View ─────────────────────────────────────────────────
 function ProjectDetailView({ projData, modelData, allProjects, trends, requests, reqTotal, reqPage, setReqPage, days, grandTotal }) {
+  const [expandedRequests, setExpandedRequests] = useState({});
+
+  const toggleRequestRow = async (requestId) => {
+    const cur = expandedRequests[requestId];
+    if (cur?.open) {
+      setExpandedRequests(prev => ({ ...prev, [requestId]: { ...cur, open: false } }));
+      return;
+    }
+    if (cur?.children) {
+      setExpandedRequests(prev => ({ ...prev, [requestId]: { ...cur, open: true } }));
+      return;
+    }
+    setExpandedRequests(prev => ({ ...prev, [requestId]: { open: true, loading: true, children: null } }));
+    try {
+      const res = await getProxyRequests({ parent_request_id: requestId });
+      const children = res.data?.items || res.data || [];
+      setExpandedRequests(prev => ({ ...prev, [requestId]: { open: true, loading: false, children } }));
+    } catch {
+      setExpandedRequests(prev => ({ ...prev, [requestId]: { open: true, loading: false, children: [], error: true } }));
+    }
+  };
+
   if (!projData) return <div className="panel" style={{ padding: 24, color: "var(--gray-500)" }}>No data for this project yet.</div>;
 
   const pid          = projData.project_id || "unassigned";
@@ -354,6 +376,8 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                     <th>Request ID</th>
                     <th>Model</th>
                     <th>Route</th>
+                    <th>Status</th>
+                    <th>Reason</th>
                     <th style={{textAlign:"right"}}>Input Tokens</th>
                     <th style={{textAlign:"right"}}>Output Tokens</th>
                     <th style={{textAlign:"right"}}>Total Tokens</th>
@@ -375,36 +399,124 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                     const outCost  = row.output_cost != null ? Number(row.output_cost) : (totTok > 0 ? (outTok / totTok) * llmCost : 0);
                     const share    = projData.total_cost > 0 ? pct(totCost, projData.total_cost) : "0.0";
                     const barColor = CHART_COLORS[i % CHART_COLORS.length];
+                    const reqCount = Number(row.request_count || 1);
+                    const isGroup  = reqCount > 1;
+                    const expState = expandedRequests[row.request_id];
+                    const isOpen   = !!expState?.open;
                     return (
-                      <tr key={row.request_id || i}>
-                        <td style={{ fontFamily: "monospace", fontSize: 11, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.request_id}>{row.request_id || "—"}</td>
-                        <td>
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: `${modelColor(row.model_name)}15`, border: `1px solid ${modelColor(row.model_name)}40`, color: modelColor(row.model_name), fontWeight: 600, fontFamily: "monospace" }}>
-                            {row.model_name || "—"}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
-                        <td style={{textAlign:"right", color:"#7C70AE", fontWeight:500}}>{num(inTok)}</td>
-                        <td style={{textAlign:"right", color:"#9E2A97", fontWeight:500}}>{num(outTok)}</td>
-                        <td style={{textAlign:"right", fontWeight:600}}>{num(totTok)}</td>
-                        <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(inCost)}</td>
-                        <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(outCost)}</td>
-                        <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#9E2A97"}}>{money(totCost)}</td>
-                        <td style={{textAlign:"right"}}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                            <div style={{ width: 50, height: 5, borderRadius: 3, background: "rgba(124,112,174,0.15)", overflow: "hidden" }}>
-                              <div style={{ width: `${share}%`, height: "100%", background: barColor }} />
+                      <React.Fragment key={row.request_id || i}>
+                        <tr style={isGroup ? { fontWeight: 600 } : undefined}>
+                          <td style={{ fontFamily: "monospace", fontSize: 11, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.request_id}>
+                            {isGroup && (
+                              <button onClick={() => toggleRequestRow(row.request_id)} aria-label={isOpen ? "Collapse calls" : "Expand calls"}
+                                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginRight: 6, color: "var(--gray-400)", verticalAlign: "middle" }}>
+                                <ChevronIcon open={isOpen} />
+                              </button>
+                            )}
+                            {row.request_id || "—"}
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: `${modelColor(row.model_name)}15`, border: `1px solid ${modelColor(row.model_name)}40`, color: modelColor(row.model_name), fontWeight: 600, fontFamily: "monospace" }}>
+                              {row.model_name || "—"}
+                            </span>
+                            {isGroup && (
+                              <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 7px", borderRadius: 10, background: "rgba(124,112,174,0.15)", color: "#7C70AE", fontWeight: 700 }}>
+                                {reqCount} calls
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                          <td>
+                            <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                              {row.request_status || "—"}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 11, maxWidth: 220 }}>
+                            {row.failure_code
+                              ? (
+                                <>
+                                  <div style={{ fontWeight: 600, color: "var(--gray-700)" }}>{failureLabel(row.failure_code)}</div>
+                                  {row.failure_reason && <div style={{ color: "var(--gray-500)" }}>{row.failure_reason}</div>}
+                                </>
+                              )
+                              : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                          </td>
+                          <td style={{textAlign:"right", color:"#7C70AE", fontWeight:500}}>{num(inTok)}</td>
+                          <td style={{textAlign:"right", color:"#9E2A97", fontWeight:500}}>{num(outTok)}</td>
+                          <td style={{textAlign:"right", fontWeight:600}}>{num(totTok)}</td>
+                          <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(inCost)}</td>
+                          <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(outCost)}</td>
+                          <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#9E2A97"}}>{money(totCost)}</td>
+                          <td style={{textAlign:"right"}}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                              <div style={{ width: 50, height: 5, borderRadius: 3, background: "rgba(124,112,174,0.15)", overflow: "hidden" }}>
+                                <div style={{ width: `${share}%`, height: "100%", background: barColor }} />
+                              </div>
+                              <span style={{ fontSize: 11, color: "var(--gray-500)" }}>{share}%</span>
                             </div>
-                            <span style={{ fontSize: 11, color: "var(--gray-500)" }}>{share}%</span>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                        {isGroup && isOpen && (
+                          expState?.loading ? (
+                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>Loading calls…</td></tr>
+                          ) : expState?.error ? (
+                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "#ef4444" }}>Failed to load calls.</td></tr>
+                          ) : (expState?.children || []).length === 0 ? (
+                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>No child calls found.</td></tr>
+                          ) : expState.children.map((child, ci) => {
+                            const cInTok   = Number(child.prompt_tokens     || 0);
+                            const cOutTok  = Number(child.completion_tokens || 0);
+                            const cTotTok  = cInTok + cOutTok;
+                            const cLlmCost = Number(child.llm_cost   || 0);
+                            const cTotCost = Number(child.total_cost || 0);
+                            const cInCost  = child.input_cost  != null ? Number(child.input_cost)  : (cTotTok > 0 ? (cInTok  / cTotTok) * cLlmCost : 0);
+                            const cOutCost = child.output_cost != null ? Number(child.output_cost) : (cTotTok > 0 ? (cOutTok / cTotTok) * cLlmCost : 0);
+                            return (
+                              <tr key={child.request_id || ci} style={{ background: "rgba(124,112,174,0.04)" }}>
+                                <td style={{ fontFamily: "monospace", fontSize: 11, paddingLeft: 28, color: "var(--gray-500)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={child.request_id}>
+                                  ↳ {child.request_id || "—"}
+                                </td>
+                                <td>
+                                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: `${modelColor(child.model_name)}15`, color: modelColor(child.model_name), fontWeight: 500, fontFamily: "monospace" }}>
+                                    {child.model_name || "—"}
+                                  </span>
+                                </td>
+                                <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{child.entry_point || "—"}</td>
+                                <td>
+                                  <span className={`status-pill ${statusPillClass(child.request_status)}`} style={{ fontSize: 10, padding: "1px 7px" }}>
+                                    {child.request_status || "—"}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize: 11, maxWidth: 220 }}>
+                                  {child.failure_code
+                                    ? (
+                                      <>
+                                        <div style={{ fontWeight: 600, color: "var(--gray-700)" }}>{failureLabel(child.failure_code)}</div>
+                                        {child.failure_reason && <div style={{ color: "var(--gray-500)" }}>{child.failure_reason}</div>}
+                                      </>
+                                    )
+                                    : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                                </td>
+                                <td style={{textAlign:"right", color:"#7C70AE"}}>{num(cInTok)}</td>
+                                <td style={{textAlign:"right", color:"#9E2A97"}}>{num(cOutTok)}</td>
+                                <td style={{textAlign:"right"}}>{num(cTotTok)}</td>
+                                <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cInCost)}</td>
+                                <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cOutCost)}</td>
+                                <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11, color:"#9E2A97"}}>{money(cTotCost)}</td>
+                                <td />
+                              </tr>
+                            );
+                          })
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
                 <tfoot>
                   <tr style={{ borderTop: "2px solid rgba(124,112,174,0.2)", background: "rgba(158,42,151,0.03)" }}>
                     <td><strong>Total</strong></td>
+                    <td />
+                    <td />
                     <td />
                     <td />
                     <td style={{textAlign:"right", color:"#7C70AE", fontWeight:700}}>{num(requests.reduce((s,r)=>s+(Number(r.prompt_tokens)||0),0))}</td>
@@ -439,14 +551,14 @@ function RequestTable({ requests }) {
       <table>
         <thead>
           <tr>
-            <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th>
+            <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th><th>Reason</th>
             <th>Prompt Tokens</th><th>Completion Tokens</th>
             <th>LLM Cost</th><th>Total Cost</th><th>PII</th><th>Received</th>
           </tr>
         </thead>
         <tbody>
           {requests.length === 0
-            ? <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No requests yet.</td></tr>
+            ? <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--gray-500)", padding: "24px 0" }}>No requests yet.</td></tr>
             : requests.map(row => (
               <tr key={row.request_id}>
                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
@@ -454,15 +566,19 @@ function RequestTable({ requests }) {
                 <td><strong>{row.model_name || "—"}</strong></td>
                 <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                 <td>
-                  <span
-                    className={`status-pill ${statusPillClass(row.request_status)}`}
-                    title={row.failure_reason || (row.failure_code ? failureLabel(row.failure_code) : undefined)}
-                  >
+                  <span className={`status-pill ${statusPillClass(row.request_status)}`}>
                     {row.request_status}
                   </span>
-                  {row.failure_code && (
-                    <div style={{ fontSize: 10, color: "var(--gray-500)", marginTop: 2 }}>{failureLabel(row.failure_code)}</div>
-                  )}
+                </td>
+                <td style={{ fontSize: 11, maxWidth: 220 }}>
+                  {row.failure_code
+                    ? (
+                      <>
+                        <div style={{ fontWeight: 600, color: "var(--gray-700)" }}>{failureLabel(row.failure_code)}</div>
+                        {row.failure_reason && <div style={{ color: "var(--gray-500)" }}>{row.failure_reason}</div>}
+                      </>
+                    )
+                    : <span style={{ color: "var(--gray-400)" }}>—</span>}
                 </td>
                 <td>{num(row.prompt_tokens)}</td>
                 <td>{num(row.completion_tokens)}</td>
@@ -1383,7 +1499,7 @@ function Cost() {
           {/* 6 ── Request log */}
           <section className="panel">
             <div className="section-head">
-              <div><h3>Request Cost Log</h3><p style={{ color: "var(--gray-500)", fontSize: 13 }}>{num(reqTotal)} total</p></div>
+              <div><h3>Request Log</h3><p style={{ color: "var(--gray-500)", fontSize: 13 }}>{num(reqTotal)} total</p></div>
             </div>
             <RequestTable requests={requests} />
             {totalPages > 1 && (

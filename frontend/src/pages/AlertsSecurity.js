@@ -75,25 +75,8 @@ function ProxyPiiDetailModal({ requestId, onClose }) {
 
   if (!requestId) return null;
 
-  // Build original and sanitized text from request_payload messages
-  const originalMessages = detail?.pii_detail?.length
-    ? null  // entity_details has the originals
-    : null;
-  const payloadMessages = detail?.request_payload?.messages || [];
-  const sanitizedText   = payloadMessages.map((m) => (m.content || "")).join("\n\n");
-
-  // Re-construct original text by restoring masked values
-  function buildOriginalText() {
-    if (!sanitizedText || !detail?.pii_detail?.length) return sanitizedText || "";
-    let text = sanitizedText;
-    // Replace masked placeholders back with original values (best-effort)
-    for (const e of (detail.pii_detail || [])) {
-      if (e.masked_value && e.original_value) {
-        text = text.replace(e.masked_value, e.original_value);
-      }
-    }
-    return text;
-  }
+  const sanitizedText = detail?.sanitized_prompt_text || "";
+  const originalText  = detail?.original_prompt_text  || "";
 
   // Highlight [PLACEHOLDER] tokens in the sanitized text
   function highlightMasked(text) {
@@ -253,7 +236,7 @@ function ProxyPiiDetailModal({ requestId, onClose }) {
                       margin: 0, padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.6,
                       background: "#fef2f2", border: "1px solid #fca5a5",
                       whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 300, overflowY: "auto",
-                    }}>{buildOriginalText()}</pre>
+                    }}>{originalText}</pre>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "var(--gray-500)", marginBottom: 6, textTransform: "uppercase" }}>Sanitized</div>
