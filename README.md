@@ -133,3 +133,52 @@ ANY TOOL → POST /telemetry/event → telemetry_events
   "latency_ms": 450
 }
 ```
+
+```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tool_name": "seo_tool",
+  "component_name": "gpt-4",
+  "service_type": "llm",
+  "execution_type": "inference",
+  "user_id": "user1",
+  "org_id": "default",
+  "input_data_size_mb": 0.2,
+  "output_data_size_mb": 1.5,
+  "tokens": { "input": 1200, "output": 300 },
+  "external_tools": [{ "name": "serpapi", "cost": 0.01 }],
+  "latency_ms": 450
+}
+```
+
+```````json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tool_name": "seo_tool",
+  "component_name": "gpt-4",
+  "service_type": "llm",
+  "execution_type": "inference",
+  "user_id": "user1",
+  "org_id": "default",
+  "input_data_size_mb": 0.2,
+  "output_data_size_mb": 1.5,
+  "tokens": { "input": 1200, "output": 300 },
+  "external_tools": [{ "name": "serpapi", "cost": 0.01 }],
+  "latency_ms": 450
+}
+``````json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tool_name": "seo_tool",
+  "component_name": "gpt-4",
+  "service_type": "llm",
+  "execution_type": "inference",
+  "user_id": "user1",
+  "org_id": "default",
+  "input_data_size_mb": 0.2,
+  "output_data_size_mb": 1.5,
+  "tokens": { "input": 1200, "output": 300 },
+  "external_tools": [{ "name": "serpapi", "cost": 0.01 }],
+  "latency_ms": 450
+}
+```````
