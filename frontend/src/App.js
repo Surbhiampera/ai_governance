@@ -10,7 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import ProxySetup from "./pages/ProxySetup";
-import ChatBot from "./components/ChatBot";
+// import ChatBot from "./components/ChatBot";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
@@ -100,7 +100,7 @@ function App() {
         </main>
       </div>
 
-      <ChatBot />
+      {/* <ChatBot /> */}
     </Router>
   );
 }

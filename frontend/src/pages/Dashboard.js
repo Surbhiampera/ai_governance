@@ -132,6 +132,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
     success_rate:   "Request Outcomes",
     pii_detections: "PII Security",
     blocked:        "Blocked Requests",
+    failed:         "Failed Requests",
   };
 
   function renderContent() {
@@ -378,6 +379,21 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
         </>
       );
     }
+    if (cardKey === "failed") {
+      const failedCount  = Number(overview?.failed || 0);
+      const partialCount = Number(overview?.partial || 0);
+      const total        = Number(overview?.total_requests || 0);
+      const failedTotal  = failedCount + partialCount;
+      const failedPct    = total > 0 ? ((failedTotal / total) * 100).toFixed(1) : "0.0";
+      return (
+        <MSection title="Failed & Partial Requests">
+          <MRow label="Failed"         value={num(failedCount)}  accent="#ef4444" />
+          <MRow label="Partial Streams" value={num(partialCount)} accent="#f97316" />
+          <MRow label="Total Requests" value={num(total)} />
+          <MRow label="Failure Rate"   value={`${failedPct}%`} accent={Number(failedPct) > 5 ? "#ef4444" : "#f97316"} />
+        </MSection>
+      );
+    }
     return <p style={{ fontSize: 14, color: "#64748b" }}>No detail available for this metric.</p>;
   }
 
@@ -571,10 +587,11 @@ function Dashboard() {
         getOpenAnomalyCount(),
       ]);
       const val = (r, fb) => r.status === "fulfilled" ? (r.value?.data ?? fb) : fb;
+      const valArr = (r, fb) => { const v = val(r, fb); return Array.isArray(v) ? v : fb; };
       setOverview(val(ovRes, null));
-      setTrends(val(trRes, []));
-      setByProject(val(prjRes, []));
-      setByModel(val(modRes, []));
+      setTrends(valArr(trRes, []));
+      setByProject(valArr(prjRes, []));
+      setByModel(valArr(modRes, []));
       setPiiSummary(val(piiRes, null));
       setOpenAnomalyCount(val(anomalyRes, { open_anomalies: 0 }).open_anomalies || 0);
       setError("");
