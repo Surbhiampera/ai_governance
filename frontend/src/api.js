@@ -376,20 +376,24 @@ export const createPiiPolicy = (payload) =>
   API.post("/proxy/pii-policies", payload);
 
 // ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
-export const getProxyOverview = (orgId, days = 30, projectId) =>
+export const getProxyOverview = (orgId, days = 30, projectId, provider, modelName) =>
   API.get("/proxy/stats/overview", {
     params: {
       org_id: orgId || undefined,
       days,
       project_id: projectId || undefined,
+      provider: provider || undefined,
+      model_name: modelName || undefined,
     },
   });
-export const getProxyTrends = (orgId, days = 30, projectId) =>
+export const getProxyTrends = (orgId, days = 30, projectId, provider, modelName) =>
   API.get("/proxy/stats/trends", {
     params: {
       org_id: orgId || undefined,
       days,
       project_id: projectId || undefined,
+      provider: provider || undefined,
+      model_name: modelName || undefined,
     },
   });
 export const getProxyByProject = (orgId, days = 30, projectId) =>
@@ -420,12 +424,14 @@ export const getProxyRequests = (params) =>
   API.get("/proxy/v1/requests", { params });
 export const getProxyRequestPiiDetail = (requestId) =>
   API.get(`/proxy/v1/requests/${requestId}/pii-detail`);
-export const getProxyPiiSummary = (orgId, days = 30, projectId) =>
+export const getProxyPiiSummary = (orgId, days = 30, projectId, provider, modelName) =>
   API.get("/proxy/stats/pii", {
     params: {
       org_id: orgId || undefined,
       days,
       project_id: projectId || undefined,
+      provider: provider || undefined,
+      model_name: modelName || undefined,
     },
   });
 export const getProxyByProjectModel = (orgId, days = 30) =>

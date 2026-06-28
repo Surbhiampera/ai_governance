@@ -13,6 +13,7 @@ import {
   createRateLimit,
   deleteRateLimit,
 } from "../api";
+import { displayName } from "../utils/displayName";
 
 const INPUT_STYLE = {
   padding: "8px 12px",
@@ -37,12 +38,12 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
   useEffect(() => {
     if (selectedOrg && orgs.length > 0) {
       const found = orgs.find((o) => o.id === selectedOrg);
-      if (found) setName(found.org_name || found.id);
+      if (found) setName(displayName(found.org_name) || displayName(found.id));
     }
   }, [selectedOrg, orgs]);
 
   const filtered = orgs.filter((o) =>
-    (o.org_name || o.id).toLowerCase().includes(name.toLowerCase())
+    (displayName(o.org_name) || displayName(o.id)).toLowerCase().includes(name.toLowerCase())
   );
 
   const handleCreate = async () => {
@@ -77,7 +78,7 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
 
   const handleSelect = (o) => {
     setSelectedOrg(o.id);
-    setName(o.org_name || o.id);
+    setName(displayName(o.org_name) || displayName(o.id));
     setShowSuggestions(false);
   };
 
@@ -90,7 +91,7 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
         </div>
         {selectedOrg && (
           <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>
-            ✓ Selected: {orgs.find(o => o.id === selectedOrg)?.org_name || selectedOrg}
+            ✓ Selected: {displayName(orgs.find(o => o.id === selectedOrg)?.org_name) || displayName(selectedOrg)}
           </span>
         )}
       </div>
@@ -124,7 +125,7 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
                     background: selectedOrg === o.id ? "rgba(34,197,94,0.06)" : "transparent",
                   }}
                 >
-                  <span>{o.org_name || o.id}</span>
+                  <span>{displayName(o.org_name) || displayName(o.id)}</span>
                   {selectedOrg === o.id && (
                     <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>selected</span>
                   )}
@@ -167,7 +168,7 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
   useEffect(() => {
     if (selectedProject && projects.length > 0) {
       const found = projects.find((p) => p.id === selectedProject);
-      if (found) setName(found.project_name || found.id);
+      if (found) setName(displayName(found.project_name) || displayName(found.id));
     }
     if (!selectedProject) setName("");
   }, [selectedProject, projects]);
@@ -175,7 +176,7 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
   useEffect(() => { load(); }, [load]);
 
   const filtered = projects.filter((p) =>
-    (p.project_name || p.id).toLowerCase().includes(name.toLowerCase())
+    (displayName(p.project_name) || displayName(p.id)).toLowerCase().includes(name.toLowerCase())
   );
 
   const handleCreate = async () => {
@@ -209,7 +210,7 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
 
   const handleSelect = (p) => {
     setSelectedProject(p.id);
-    setName(p.project_name || p.id);
+    setName(displayName(p.project_name) || displayName(p.id));
     setShowSuggestions(false);
   };
 
@@ -222,7 +223,7 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
         </div>
         {selectedProject && (
           <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>
-            ✓ Selected: {projects.find(p => p.id === selectedProject)?.project_name || selectedProject}
+            ✓ Selected: {displayName(projects.find(p => p.id === selectedProject)?.project_name) || displayName(selectedProject)}
           </span>
         )}
       </div>
@@ -256,7 +257,7 @@ function ProjectStep({ orgId, projects, setProjects, selectedProject, setSelecte
                     background: selectedProject === p.id ? "rgba(34,197,94,0.06)" : "transparent",
                   }}
                 >
-                  <span>{p.project_name || p.id}</span>
+                  <span>{displayName(p.project_name) || displayName(p.id)}</span>
                   {selectedProject === p.id && (
                     <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>selected</span>
                   )}
@@ -832,7 +833,7 @@ function RateLimitsSection({ orgId, projects }) {
               <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project (optional)</div>
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={SEL}>
                 <option value="">— Org-level —</option>
-                {(projects || []).map(p => <option key={p.id} value={p.id}>{p.project_name || p.id}</option>)}
+                {(projects || []).map(p => <option key={p.id} value={p.id}>{displayName(p.project_name) || displayName(p.id)}</option>)}
               </select>
             </div>
             <div>

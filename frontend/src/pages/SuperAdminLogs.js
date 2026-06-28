@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   getAdminPIIDetail,
@@ -11,6 +11,7 @@ import {
   getTracingOrgs,
 } from "../api";
 import { RANGE_OPTIONS, rangeToStartDate } from "../utils/filters";
+import { displayName } from "../utils/displayName";
 
 const money = (v) => `$${Number(v || 0).toFixed(4)}`;
 const money2 = (v) => { const n = Number(v || 0); return n > 0 && n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`; };
@@ -74,7 +75,7 @@ function NotificationBanner({ notifications, onDismiss, onOrgClick }) {
         {ordered.map((n, i) => {
           const ctxBits = [];
           if (n.project_name || n.project_id) {
-            ctxBits.push(`Project: ${n.project_name || n.project_id}`);
+            ctxBits.push(`Project: ${displayName(n.project_name) || displayName(n.project_id)}`);
           }
           if (n.tool_name || n.model_name) {
             ctxBits.push(`Tool: ${n.tool_name || n.model_name}`);
@@ -121,11 +122,11 @@ function NotificationBanner({ notifications, onDismiss, onOrgClick }) {
                     textDecoration: "underline",
                   }}
                 >
-                  {n.org_name || n.org_id}
+                  {displayName(n.org_name) || displayName(n.org_id)}
                 </button>
               ) : (
                 <span style={{ fontSize: 11, color: "var(--gray-400)", whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {n.org_name || n.org_id}
+                  {displayName(n.org_name) || displayName(n.org_id)}
                 </span>
               )}
             </div>
@@ -229,8 +230,8 @@ function PIIDetailModal({ eventId, onClose }) {
               <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>
                 Context
               </h4>
-              <DetailRow label="Organization" value={`${detail.org_name}${detail.org_id !== detail.org_name ? ` (${detail.org_id})` : ""}`} />
-              <DetailRow label="Project" value={detail.project_name ? `${detail.project_name}${detail.project_id !== detail.project_name ? ` (${detail.project_id})` : ""}` : detail.project_id} />
+              <DetailRow label="Organization" value={displayName(detail.org_name) || displayName(detail.org_id)} />
+              <DetailRow label="Project" value={displayName(detail.project_name) || displayName(detail.project_id)} />
               {detail.project_environment && <DetailRow label="Environment" value={detail.project_environment} />}
               <DetailRow label="Model / Tool" value={detail.model_name} />
               <DetailRow label="Provider" value={detail.provider} />
@@ -419,7 +420,7 @@ function OrgDetailModal({ orgId, notifications, aggregate, logs, onClose, onAppl
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {orgNotifs.map((n, i) => {
                 const ctxBits = [];
-                if (n.project_name || n.project_id) ctxBits.push(`Project: ${n.project_name || n.project_id}`);
+                if (n.project_name || n.project_id) ctxBits.push(`Project: ${displayName(n.project_name) || displayName(n.project_id)}`);
                 if (n.tool_name || n.model_name) ctxBits.push(`Tool: ${n.tool_name || n.model_name}`);
                 return (
                   <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 12px", background: "var(--surface-2, #f8f9fa)", border: "1px solid var(--border, #e5e7eb)", borderRadius: 6 }}>
@@ -536,6 +537,11 @@ function SuperAdminLogs() {
   const [aggregate, setAggregate] = useState([]);
   const [insights, setInsights] = useState(null);
   const [orgs, setOrgs] = useState([]);
+  const orgNameMap = useMemo(() => {
+    const m = {};
+    orgs.forEach(o => { m[o.id] = o.label || o.name || o.org_name; });
+    return m;
+  }, [orgs]);
   const [tools, setTools] = useState([]);
   const [providers, setProviders] = useState([]);
   const [eventStatuses, setEventStatuses] = useState([]);
@@ -950,7 +956,7 @@ function SuperAdminLogs() {
                   <tr key={`${row.org_id}-${row.model_name}-${i}`}>
                     <td><strong>{row.model_name}</strong></td>
                     <td>{row.provider}</td>
-                    <td>{row.org_id}</td>
+                    <td>{displayName(orgNameMap[row.org_id]) || displayName(row.org_id)}</td>
                     <td>{num(row.total_events)}</td>
                     <td>{num(row.prompt_tokens)}</td>
                     <td>{num(row.completion_tokens)}</td>
@@ -1030,7 +1036,7 @@ function SuperAdminLogs() {
                       : "";
                 return (
                   <tr key={`${row.org_id}-${row.tool_name}-${i}`}>
-                    <td>{row.org_id}</td>
+                    <td>{displayName(orgNameMap[row.org_id]) || displayName(row.org_id)}</td>
                     <td><strong>{row.tool_name}</strong></td>
                     <td>{num(row.total_events)}</td>
                     <td>{num(row.prompt_tokens)}</td>
@@ -1102,10 +1108,10 @@ function SuperAdminLogs() {
                   >
                     <td>{row.created_at ? new Date(row.created_at).toLocaleString() : "-"}</td>
                     <td>
-                      <span title={row.org_id}>{row.org_name || row.org_id || "-"}</span>
+                      <span title={row.org_id}>{displayName(row.org_name) || displayName(row.org_id) || "-"}</span>
                     </td>
                     <td>
-                      <span title={row.project_id}>{row.project_name || row.project_id || "-"}</span>
+                      <span title={row.project_id}>{displayName(row.project_name) || displayName(row.project_id) || "-"}</span>
                     </td>
                     <td>{row.provider || "-"}</td>
                     <td>

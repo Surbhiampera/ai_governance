@@ -9,6 +9,7 @@ import {
   getProxyRequestPiiDetail,
 } from "../api";
 import { failureLabel, statusPillClass } from "../failureCodes";
+import { displayName } from "../utils/displayName";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 const num   = (v) => Number(v || 0).toLocaleString();
@@ -318,8 +319,8 @@ function PIIDetailModal({ eventId, onClose }) {
           <>
             <section style={{ marginBottom: 20 }}>
               <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9E2A97", paddingBottom: 6, borderBottom: "1px solid var(--gray-200)" }}>Context</h4>
-              <DetailRow label="Organization" value={`${detail.org_name}${detail.org_id !== detail.org_name ? ` (${detail.org_id})` : ""}`} />
-              <DetailRow label="Project" value={detail.project_name ? `${detail.project_name}${detail.project_id !== detail.project_name ? ` (${detail.project_id})` : ""}` : detail.project_id} />
+              <DetailRow label="Organization" value={displayName(detail.org_name) || displayName(detail.org_id)} />
+              <DetailRow label="Project" value={displayName(detail.project_name) || displayName(detail.project_id)} />
               {detail.project_environment && <DetailRow label="Environment" value={detail.project_environment} />}
               <DetailRow label="Model / Tool"  value={detail.model_name} />
               <DetailRow label="Provider"       value={detail.provider} />
@@ -707,7 +708,8 @@ function AlertsSecurity() {
   const [failurePage, setFailurePage]           = useState(0);
   const [piiSeverityFilter, setPiiSeverityFilter] = useState([]);
   const [proxyPiiModalId, setProxyPiiModalId]   = useState(null);
-  const PAGE_SIZE = 25;
+  const [secLogRiskFilter, setSecLogRiskFilter] = useState("all");
+  const PAGE_SIZE = 15;
 
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
@@ -727,7 +729,7 @@ function AlertsSecurity() {
           getProxyOverview(undefined, days),
           getProxyPiiSummary(undefined, days),
           getProxyRequests({ project_id: proj, pii_only: true, pii_severity: piiSeverityFilter.length ? piiSeverityFilter.join(",") : undefined, limit: PAGE_SIZE, offset: piiPage * PAGE_SIZE }),
-          getProxyRequests({ project_id: proj, status: "blocked", pii_only: true, limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
+          getProxyRequests({ project_id: proj, status: "blocked", limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
           getProxyRequests({ project_id: proj, failure_only: true, limit: PAGE_SIZE, offset: failurePage * PAGE_SIZE }),
           getSecuritySummaryCombined(undefined, proj, startDate),
           getSecurityLogsCombined(undefined, undefined, undefined, proj, startDate),
@@ -783,7 +785,7 @@ function AlertsSecurity() {
         >
           <option value="">All Projects</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.project_name || p.id}</option>
+            <option key={p.id} value={p.id}>{displayName(p.project_name) || displayName(p.id)}</option>
           ))}
         </select>
 
@@ -970,7 +972,7 @@ function AlertsSecurity() {
                     </div>
                     <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 3 }}>
                       <span className={`status-pill ${item.severity}`} style={{ fontSize: 10, padding: "1px 7px" }}>{item.severity}</span>
-                      {" "}{Number(item.anomaly_score || 0).toFixed(2)}× spike · {item.project_name || item.project_id || "—"}
+                      {" "}{Number(item.anomaly_score || 0).toFixed(2)}× spike · {displayName(item.project_name) || displayName(item.project_id) || "—"}
                     </div>
                   </div>
                 )) : <div style={{ fontSize: 12, color: "var(--gray-400)" }}>No open anomalies.</div>}
@@ -980,7 +982,7 @@ function AlertsSecurity() {
           </div>
 
           {/* ── Row 3: Tabs — PII Detections | Blocked | Security Logs ──────── */}
-          <div className="panel" style={{ flexShrink: 0, padding: "12px 16px", display: "flex", flexDirection: "column", height: 340, overflow: "hidden" }}>
+          <div className="panel" style={{ flexShrink: 0, padding: "12px 16px", display: "flex", flexDirection: "column", height: 860, overflow: "hidden" }}>
             <div style={{ display: "flex", gap: 6, marginBottom: 10, borderBottom: "1px solid var(--gray-200)", paddingBottom: 8, flexShrink: 0 }}>
               {[
                 { key: "pii",      label: `PII Detections (${num(piiTotal)})` },
@@ -1237,130 +1239,138 @@ function AlertsSecurity() {
             <div>
               <h3>Security Logs</h3>
               <p style={{ color: "var(--gray-500)", fontSize: 13 }}>
-                {secLogs.length} event{secLogs.length !== 1 ? "s" : ""} · grouped by risk level
+                {secLogs.length} event{secLogs.length !== 1 ? "s" : ""} · filter by risk level
               </p>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               {[
-                { label: "High",   color: "#ef4444", count: secLogs.filter(l => Number(l.risk_score || 0) >= 0.7).length },
-                { label: "Medium", color: "#f97316", count: secLogs.filter(l => { const s = Number(l.risk_score || 0); return s >= 0.4 && s < 0.7; }).length },
-                { label: "Low",    color: "#22c55e", count: secLogs.filter(l => Number(l.risk_score || 0) < 0.4).length },
-              ].map(b => b.count > 0 && (
-                <span key={b.label} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: b.color }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: b.color, display: "inline-block" }} />
-                  {b.label} ({b.count})
-                </span>
-              ))}
+                { key: "all",    label: "All",    color: "#7C70AE", count: secLogs.length },
+                { key: "high",   label: "High",   color: "#ef4444", count: secLogs.filter(l => Number(l.risk_score || 0) >= 0.7).length },
+                { key: "medium", label: "Medium", color: "#f97316", count: secLogs.filter(l => { const s = Number(l.risk_score || 0); return s >= 0.4 && s < 0.7; }).length },
+                { key: "low",    label: "Low",    color: "#22c55e", count: secLogs.filter(l => Number(l.risk_score || 0) < 0.4).length },
+              ].map(b => {
+                const active = secLogRiskFilter === b.key;
+                return (
+                  <button
+                    key={b.key}
+                    onClick={() => setSecLogRiskFilter(b.key)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600,
+                      color: active ? "#fff" : b.color,
+                      background: active ? b.color : "transparent",
+                      border: `1px solid ${b.color}`,
+                      borderRadius: 20, padding: "3px 10px", cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: active ? "#fff" : b.color, display: "inline-block" }} />
+                    {b.label} ({b.count})
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {secLogs.length === 0 ? (
             <p style={{ color: "var(--gray-500)", fontSize: 13, padding: "12px 0" }}>No security events in this period.</p>
-          ) : (
-            <>
-              {[
-                { label: "High Risk",   color: "#ef4444", bg: "rgba(239,68,68,0.04)",   filter: l => Number(l.risk_score || 0) >= 0.7 },
-                { label: "Medium Risk", color: "#f97316", bg: "rgba(249,115,22,0.04)",  filter: l => { const s = Number(l.risk_score || 0); return s >= 0.4 && s < 0.7; } },
-                { label: "Low Risk",    color: "#22c55e", bg: "rgba(34,197,94,0.03)",   filter: l => Number(l.risk_score || 0) < 0.4 },
-              ].map(band => {
-                const rows = [...secLogs]
-                  .filter(band.filter)
-                  .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0));
-                if (rows.length === 0) return null;
-                return (
-                  <div key={band.label} style={{ marginBottom: 24 }}>
-                    {/* Band header */}
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
-                      background: band.bg, borderLeft: `3px solid ${band.color}`,
-                      borderRadius: "6px 6px 0 0", marginBottom: 0,
-                    }}>
-                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: band.color, display: "inline-block" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: band.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        {band.label}
-                      </span>
-                      <span style={{ fontSize: 11, color: "var(--gray-400)", marginLeft: 2 }}>— {rows.length} event{rows.length !== 1 ? "s" : ""}</span>
-                    </div>
+          ) : (() => {
+            const riskBand = (l) => {
+              const s = Number(l.risk_score || 0);
+              if (s >= 0.7) return { label: "High Risk", color: "#ef4444" };
+              if (s >= 0.4) return { label: "Medium Risk", color: "#f97316" };
+              return { label: "Low Risk", color: "#22c55e" };
+            };
+            const rows = [...secLogs]
+              .filter(l => {
+                if (secLogRiskFilter === "all") return true;
+                const s = Number(l.risk_score || 0);
+                if (secLogRiskFilter === "high") return s >= 0.7;
+                if (secLogRiskFilter === "medium") return s >= 0.4 && s < 0.7;
+                return s < 0.4;
+              })
+              .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0));
 
-                    <div className="table-wrap" style={{ borderRadius: "0 0 8px 8px", marginTop: 0 }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Event</th>
-                            <th>PII</th>
-                            <th>PII Types</th>
-                            <th>Data Out</th>
-                            <th>Misuse</th>
-                            <th>Spike</th>
-                            <th>Risk</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map(item => {
-                            const isPII    = !!item.pii_detected;
-                            const score    = Number(item.risk_score || 0);
-                            const piiTypes = item.pii_type
-                              ? item.pii_type.split(",").map(s => s.trim()).filter(Boolean)
-                              : [];
-                            const openPiiDetail = isPII ? () => {
-                              if (item.event_id?.startsWith("req-")) setProxyPiiModalId(item.event_id);
-                              else setPiiModalEventId(item.event_id);
-                            } : undefined;
-                            return (
-                              <tr
-                                key={item.id}
-                                onClick={openPiiDetail}
-                                style={isPII ? { cursor: "pointer" } : undefined}
-                                title={isPII ? "Click to view PII detail" : undefined}
-                              >
-                                <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
-                                <td>
-                                  {isPII
-                                    ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
-                                    : <span className="badge-no">no</span>}
-                                </td>
-                                <td>
-                                  {piiTypes.length > 0 ? (
-                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                                      <span style={{
-                                        fontSize: 11, padding: "2px 8px", borderRadius: 20,
-                                        background: "rgba(158,42,151,0.1)", color: "#9E2A97",
-                                        fontWeight: 600, fontFamily: "monospace",
-                                      }}>{piiTypes[0]}</span>
-                                      {piiTypes.length > 1 && (
-                                        <span
-                                          onClick={e => { e.stopPropagation(); setPiiTypesModal(piiTypes); }}
-                                          style={{
-                                            fontSize: 10, fontWeight: 700, color: "#9E2A97",
-                                            background: "rgba(158,42,151,0.12)", padding: "2px 7px",
-                                            borderRadius: 20, cursor: "pointer",
-                                            border: "1px solid rgba(158,42,151,0.3)",
-                                          }}
-                                        >+{piiTypes.length - 1}</span>
-                                      )}
-                                    </span>
-                                  ) : <span style={{ color: "var(--gray-400)" }}>—</span>}
-                                </td>
-                                <td>{item.data_out_violation      ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
-                                <td>{item.misuse_pattern_detected ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
-                                <td>{item.abnormal_usage_spike    ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
-                                <td>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: band.color, display: "inline-block" }} />
-                                    <span style={{ color: band.color, fontWeight: 700, fontSize: 13 }}>{score.toFixed(1)}</span>
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
+            if (rows.length === 0) {
+              return <p style={{ color: "var(--gray-500)", fontSize: 13, padding: "12px 0" }}>No events at this risk level.</p>;
+            }
+
+            return (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>PII</th>
+                      <th>PII Types</th>
+                      <th>Data Out</th>
+                      <th>Misuse</th>
+                      <th>Spike</th>
+                      <th>Risk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(item => {
+                      const isPII    = !!item.pii_detected;
+                      const score    = Number(item.risk_score || 0);
+                      const band     = riskBand(item);
+                      const piiTypes = item.pii_type
+                        ? item.pii_type.split(",").map(s => s.trim()).filter(Boolean)
+                        : [];
+                      const openPiiDetail = isPII ? () => {
+                        if (item.event_id?.startsWith("req-")) setProxyPiiModalId(item.event_id);
+                        else setPiiModalEventId(item.event_id);
+                      } : undefined;
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={openPiiDetail}
+                          style={isPII ? { cursor: "pointer" } : undefined}
+                          title={isPII ? "Click to view PII detail" : undefined}
+                        >
+                          <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
+                          <td>
+                            {isPII
+                              ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
+                              : <span className="badge-no">no</span>}
+                          </td>
+                          <td>
+                            {piiTypes.length > 0 ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                                <span style={{
+                                  fontSize: 11, padding: "2px 8px", borderRadius: 20,
+                                  background: "rgba(158,42,151,0.1)", color: "#9E2A97",
+                                  fontWeight: 600, fontFamily: "monospace",
+                                }}>{piiTypes[0]}</span>
+                                {piiTypes.length > 1 && (
+                                  <span
+                                    onClick={e => { e.stopPropagation(); setPiiTypesModal(piiTypes); }}
+                                    style={{
+                                      fontSize: 10, fontWeight: 700, color: "#9E2A97",
+                                      background: "rgba(158,42,151,0.12)", padding: "2px 7px",
+                                      borderRadius: 20, cursor: "pointer",
+                                      border: "1px solid rgba(158,42,151,0.3)",
+                                    }}
+                                  >+{piiTypes.length - 1}</span>
+                                )}
+                              </span>
+                            ) : <span style={{ color: "var(--gray-400)" }}>—</span>}
+                          </td>
+                          <td>{item.data_out_violation      ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                          <td>{item.misuse_pattern_detected ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                          <td>{item.abnormal_usage_spike    ? <span className="badge-yes">yes</span> : <span className="badge-no">no</span>}</td>
+                          <td>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: "50%", background: band.color, display: "inline-block" }} />
+                              <span style={{ color: band.color, fontWeight: 700, fontSize: 13 }}>{score.toFixed(1)}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
 
         </div>{/* close inner flex column */}

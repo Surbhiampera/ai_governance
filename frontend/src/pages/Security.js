@@ -7,6 +7,7 @@ import {
   getProjects,
 } from "../api";
 import { RANGE_OPTIONS as RANGE_OPTIONS_S, rangeToStartDate as rangeToStartDateS } from "../utils/filters";
+import { displayName } from "../utils/displayName";
 
 const RISK_COLOR_S = (score) => {
   if (score >= 80) return "#ef4444";
@@ -77,8 +78,8 @@ function SecurityPIIModal({ eventId, onClose }) {
           <>
             <section style={{ marginBottom: 20 }}>
               <h4 style={{ margin: "0 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--gray-500)" }}>Context</h4>
-              <SDetailRow label="Organization" value={`${detail.org_name}${detail.org_id !== detail.org_name ? ` (${detail.org_id})` : ""}`} />
-              <SDetailRow label="Project" value={detail.project_name ? `${detail.project_name}${detail.project_id !== detail.project_name ? ` (${detail.project_id})` : ""}` : detail.project_id} />
+              <SDetailRow label="Organization" value={displayName(detail.org_name) || displayName(detail.org_id)} />
+              <SDetailRow label="Project" value={displayName(detail.project_name) || displayName(detail.project_id)} />
               {detail.project_environment && <SDetailRow label="Environment" value={detail.project_environment} />}
               <SDetailRow label="Model / Tool" value={detail.model_name} />
               <SDetailRow label="Provider" value={detail.provider} />
@@ -208,7 +209,7 @@ function Security() {
               style={{ fontSize: 13, padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)", color: "#fff", minWidth: 160 }}
             >
               <option value="" style={{ color: "#333" }}>All Projects</option>
-              {projects.map((p) => <option key={p.id} value={p.id} style={{ color: "#333" }}>{p.project_name || p.id}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id} style={{ color: "#333" }}>{displayName(p.project_name) || displayName(p.id)}</option>)}
             </select>
           </div>
           <div className="action-row" style={{ marginTop: 12 }}>
@@ -285,8 +286,8 @@ function Security() {
                     {"  "} {item.message}
                   </div>
                   <div className="list-meta" style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
-                    Org: <strong>{item.org_name || item.org_id || "—"}</strong>
-                    {" · "}Project: <strong>{item.project_name || item.project_id || "—"}</strong>
+                    Org: <strong>{displayName(item.org_name) || displayName(item.org_id) || "—"}</strong>
+                    {" · "}Project: <strong>{displayName(item.project_name) || displayName(item.project_id) || "—"}</strong>
                     {" · "}Tool: <strong>{item.tool_name || "—"}</strong>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area, AreaChart, CartesianGrid,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -6,9 +6,10 @@ import {
 import {
   getProxyOverview, getProxyTrends, getProxyByProject,
   getProxyByModel, getProxyRequests, getProxyPiiSummary,
-  getOpenAnomalyCount,
+  getOpenAnomalyCount, getProjects,
 } from "../api";
 import { statusPillClass } from "../failureCodes";
+import { displayName } from "../utils/displayName";
 
 const money2 = (v) => { const n = Number(v || 0); return n > 0 && n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`; };
 const money  = (v) => `$${Number(v || 0).toFixed(4)}`;
@@ -20,6 +21,10 @@ function fmtTokens(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
   if (n >= 1_000)     return (n / 1_000).toFixed(1) + "K";
   return String(n);
+}
+
+function projLabel(r, fallback = "Unassigned") {
+  return displayName(r.project_name) || displayName(r.project_id) || fallback;
 }
 
 const RANGE_OPTIONS = [
@@ -37,7 +42,7 @@ function computeInsights(byProject, byModel, trends, overview, piiSummary, days)
     const top  = [...byProject].sort((a, b) => Number(b.total_cost || 0) - Number(a.total_cost || 0))[0];
     const share = pct(top.total_cost, grandTotal);
     if (share > 0) insights.push({
-      text: `${top.project_name || top.project_id || "Unassigned"} contributed ${share}% of total cost.`,
+      text: `${projLabel(top)} contributed ${share}% of total cost.`,
       level: "info",
     });
   }
@@ -118,7 +123,7 @@ function MSection({ title, children }) {
   );
 }
 
-function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onClose }) {
+function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onClose, projectNameMap = {} }) {
   const grandTotal = byProject.reduce((s, r) => s + Number(r.total_cost || 0), 0);
   const totalTok   = byModel.reduce((s, m) => s + Number(m.total_tokens || 0), 0);
   const [actionModal, setActionModal] = useState(null); // { action, rows, loading, error }
@@ -151,7 +156,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                 const share = grandTotal > 0 ? Math.round((Number(p.total_cost || 0) / grandTotal) * 100) : 0;
                 return (
                   <div key={p.project_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{p.project_name || p.project_id || "Unassigned"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{projLabel(p)}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 11, color: "#94a3b8" }}>{share}%</span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: "#9E2A97", fontFamily: "monospace" }}>{money2(p.total_cost)}</span>
@@ -203,7 +208,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
             <div style={{ display: "grid", gap: 6 }}>
               {[...byProject].sort((a, b) => Number(b.total_requests || 0) - Number(a.total_requests || 0)).slice(0, 5).map(p => (
                 <div key={p.project_id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{p.project_name || p.project_id || "Unassigned"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{projLabel(p)}</span>
                   <span style={{ fontSize: 13, fontWeight: 700 }}>{num(p.total_requests)} req</span>
                 </div>
               ))}
@@ -369,7 +374,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
             <div style={{ display: "grid", gap: 6 }}>
               {piiProjects.slice(0, 5).map(p => (
                 <div key={p.project_id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#fef2f2", borderRadius: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{p.project_name || p.project_id || "Unassigned"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{projLabel(p)}</span>
                   <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 700 }}>{num(p.pii_hits)} PII hit{p.pii_hits !== 1 ? "s" : ""}</span>
                 </div>
               ))}
@@ -438,7 +443,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                         {actionModal.rows.map(row => (
                           <tr key={row.request_id}>
                             <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
-                            <td>{row.project_id || "—"}</td>
+                            <td>{displayName(projectNameMap[row.project_id] || row.project_id) || "—"}</td>
                             <td><strong>{row.model_name || "—"}</strong></td>
                             <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                             <td>
@@ -563,7 +568,8 @@ function Dashboard() {
 
   const [overview, setOverview]       = useState(null);
   const [trends, setTrends]           = useState([]);
-  const [byProject, setByProject]     = useState([]);
+  const [byProjectRaw, setByProject]   = useState([]);
+  const [allProjects, setAllProjects] = useState([]);
   const [byModel, setByModel]         = useState([]);
   const [piiSummary, setPiiSummary]         = useState(null);
   const [openAnomalyCount, setOpenAnomalyCount] = useState(0);
@@ -576,14 +582,16 @@ function Dashboard() {
   const load = useCallback(async (isRefresh = false) => {
     try {
       isRefresh ? setRefreshing(true) : setLoading(true);
-      const proj = selProject || undefined;
+      const proj  = selProject  || undefined;
+      const prov  = selProvider || undefined;
+      const model = selModel    || undefined;
       const [ovRes, trRes, prjRes, modRes, reqRes, piiRes, anomalyRes] = await Promise.allSettled([
-        getProxyOverview(undefined, days, proj),
-        getProxyTrends(undefined, days, proj),
+        getProxyOverview(undefined, days, proj, prov, model),
+        getProxyTrends(undefined, days, proj, prov, model),
         getProxyByProject(undefined, days, proj),
-        getProxyByModel(undefined, days, proj, selProvider || undefined, selModel || undefined),
-        getProxyRequests({ limit: 10, project_id: proj, provider: selProvider || undefined, model_name: selModel || undefined }),
-        getProxyPiiSummary(undefined, days, proj),
+        getProxyByModel(undefined, days, proj, prov, model),
+        getProxyRequests({ limit: 10, project_id: proj, provider: prov, model_name: model }),
+        getProxyPiiSummary(undefined, days, proj, prov, model),
         getOpenAnomalyCount(),
       ]);
       const val = (r, fb) => r.status === "fulfilled" ? (r.value?.data ?? fb) : fb;
@@ -608,6 +616,25 @@ function Dashboard() {
     else load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
+
+  // Cost aggregates are keyed by project_id but don't carry a reliable project_name,
+  // so resolve display names from the canonical project list instead of showing raw ids.
+  useEffect(() => {
+    getProjects()
+      .then(r => setAllProjects(r.data || []))
+      .catch(() => setAllProjects([]));
+  }, []);
+
+  const projectNameMap = useMemo(() => {
+    const m = {};
+    allProjects.forEach(p => { m[p.id] = p.project_name; });
+    return m;
+  }, [allProjects]);
+
+  const byProject = useMemo(
+    () => byProjectRaw.map(r => ({ ...r, project_name: r.project_name || projectNameMap[r.project_id] })),
+    [byProjectRaw, projectNameMap]
+  );
 
   if (loading) return <div className="loading">Loading AI Governance Dashboard…</div>;
 
@@ -665,7 +692,7 @@ function Dashboard() {
             <option value="">All Projects</option>
             {byProject.map(r => (
               <option key={r.project_id || "unassigned"} value={r.project_id || "unassigned"}>
-                {r.project_name || r.project_id || "unassigned"}
+                {projLabel(r, "unassigned")}
               </option>
             ))}
           </select>
@@ -810,7 +837,7 @@ function Dashboard() {
                     return (
                       <tr key={r.project_id || i}>
                         <td>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{r.project_name || r.project_id || "Unassigned"}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{projLabel(r)}</div>
                           {r.pii_hits > 0 && <span className="status-pill critical" style={{ fontSize: 10, marginTop: 2 }}>{r.pii_hits} PII</span>}
                         </td>
                         <td style={{ textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#9E2A97" }}>{money2(r.total_cost)}</td>
@@ -971,6 +998,7 @@ function Dashboard() {
           byModel={byModel}
           piiSummary={piiSummary}
           days={days}
+          projectNameMap={projectNameMap}
           onClose={() => setActiveCard(null)}
         />
       )}

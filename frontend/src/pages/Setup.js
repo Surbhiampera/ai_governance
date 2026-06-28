@@ -10,6 +10,7 @@ import {
   getOrganizations,
   getProjects,
 } from "../api";
+import { displayName } from "../utils/displayName";
 
 const PROXY_BASE =
   import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com";
@@ -440,7 +441,7 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
   return (
     <form onSubmit={submit}>
       <p className="panel-muted" style={{ marginBottom: 24, marginTop: 0 }}>
-        Create an API key for <strong>{org.org_name}</strong> / <strong>{project.project_name || project.id}</strong>.
+        Create an API key for <strong>{displayName(org.org_name) || displayName(org.id)}</strong> / <strong>{displayName(project.project_name) || displayName(project.id)}</strong>.
         The secret token is auto-generated — share it with the external team so their SDK can authenticate.
       </p>
 
@@ -616,7 +617,7 @@ function ResourceRow({ label, value, onDelete, deleting }) {
       <td>
         <code style={{ color: "var(--brand-primary)", fontSize: 13 }}>{value.id}</code>
       </td>
-      <td>{label === "org" ? value.org_name : label === "project" ? (value.project_name || "—") : (value.key_name || "—")}</td>
+      <td>{label === "org" ? displayName(value.org_name) : label === "project" ? (displayName(value.project_name) || "—") : (value.key_name || "—")}</td>
       <td>
         {label === "project" ? <code style={{ fontSize: 12 }}>{value.org_id}</code> : null}
         {label === "key" ? <code style={{ fontSize: 12 }}>{value.org_id || "—"}</code> : null}

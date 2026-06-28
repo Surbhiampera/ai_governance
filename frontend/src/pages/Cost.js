@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
@@ -10,6 +10,7 @@ import {
   createBudget, updateBudget, deleteBudget,
 } from "../api";
 import { failureLabel, statusPillClass } from "../failureCodes";
+import { displayName } from "../utils/displayName";
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 const CHART_COLORS = ["#9E2A97", "#7C70AE", "#b565b0", "#9a8fbf", "#c97dc4", "#3FB6D4", "#f59e0b", "#10b981"];
@@ -23,7 +24,8 @@ const MODEL_COLOR_MAP = {
   "gpt-4o-mini": "#6366f1", "gpt-5-nano": "#8b5cf6",
   "text-embedding-3-small": "#3b82f6", "gpt-4o": "#9E2A97", "gpt-5": "#ec4899",
 };
-function modelColor(name = "") {
+function modelColor(name) {
+  name = name || "";
   for (const [k, c] of Object.entries(MODEL_COLOR_MAP)) { if (name.includes(k)) return c; }
   return "#7C70AE";
 }
@@ -33,7 +35,8 @@ function fmtTokens(n) {
   if (n >= 1_000)     return (n / 1_000).toFixed(1) + "K";
   return String(n);
 }
-function projLabel(r) { return r.project_name || r.project_id || "unassigned"; }
+function projLabel(r) { return displayName(r.project_name) || displayName(r.project_id) || "unassigned"; }
+function orgLabel(orgId, orgNameMap = {}) { return displayName(orgNameMap[orgId]) || displayName(orgId) || "—"; }
 
 const RANGE_OPTIONS = [
   { label: "7d", value: 7 }, { label: "14d", value: 14 },
@@ -74,7 +77,7 @@ function KpiCard({ label, value, sub, color = "#9E2A97", icon }) {
 }
 
 // ── Project Intelligence (no project selected) ───────────────────────────────
-function ProjectIntelligence({ byProject, projectModelMap, grandTotal }) {
+function ProjectIntelligence({ byProject, projectModelMap, grandTotal, orgNameMap }) {
   if (byProject.length < 2) return null;
 
   const sorted     = [...byProject].sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0));
@@ -86,7 +89,7 @@ function ProjectIntelligence({ byProject, projectModelMap, grandTotal }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, fontSize: 13 }}>{projLabel(r)}</div>
-        <div style={{ fontSize: 11, color: "var(--gray-400)", fontFamily: "monospace" }}>{r.org_id || "—"}</div>
+        <div style={{ fontSize: 11, color: "var(--gray-400)", fontFamily: "monospace" }}>{orgLabel(r.org_id, orgNameMap)}</div>
       </div>
       <div style={{ fontWeight: 700, fontSize: 14, color, fontFamily: "monospace" }}>{fmt(metric(r))}</div>
     </div>
@@ -119,7 +122,7 @@ function ProjectIntelligence({ byProject, projectModelMap, grandTotal }) {
 }
 
 // ── Full Project Detail View ─────────────────────────────────────────────────
-function ProjectDetailView({ projData, modelData, allProjects, trends, requests, reqTotal, reqPage, setReqPage, days, grandTotal }) {
+function ProjectDetailView({ projData, modelData, allProjects, trends, requests, reqTotal, reqPage, setReqPage, days, grandTotal, orgNameMap }) {
   const [expandedRequests, setExpandedRequests] = useState({});
 
   const toggleRequestRow = async (requestId) => {
@@ -183,7 +186,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
           <div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Project Deep Dive · {days}d</div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{projLabel(projData)}</h2>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4, fontFamily: "monospace" }}>{projData.org_id}</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4, fontFamily: "monospace" }}>{orgLabel(projData.org_id, orgNameMap)}</div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {projData.pii_hits > 0 && <span className="status-pill critical">{projData.pii_hits} PII hits</span>}
@@ -385,6 +388,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                     <th style={{textAlign:"right"}}>Output Cost</th>
                     <th style={{textAlign:"right"}}>Total Cost</th>
                     <th style={{textAlign:"right"}}>Cost Share (%)</th>
+                    <th>Received At</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -455,14 +459,15 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                               <span style={{ fontSize: 11, color: "var(--gray-500)" }}>{share}%</span>
                             </div>
                           </td>
+                          <td style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{row.received_at ? new Date(row.received_at).toLocaleString() : "—"}</td>
                         </tr>
                         {isGroup && isOpen && (
                           expState?.loading ? (
-                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>Loading calls…</td></tr>
+                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>Loading calls…</td></tr>
                           ) : expState?.error ? (
-                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "#ef4444" }}>Failed to load calls.</td></tr>
+                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "#ef4444" }}>Failed to load calls.</td></tr>
                           ) : (expState?.children || []).length === 0 ? (
-                            <tr><td colSpan={12} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>No child calls found.</td></tr>
+                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>No child calls found.</td></tr>
                           ) : expState.children.map((child, ci) => {
                             const cInTok   = Number(child.prompt_tokens     || 0);
                             const cOutTok  = Number(child.completion_tokens || 0);
@@ -504,6 +509,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cOutCost)}</td>
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11, color:"#9E2A97"}}>{money(cTotCost)}</td>
                                 <td />
+                                <td style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{child.received_at ? new Date(child.received_at).toLocaleString() : "—"}</td>
                               </tr>
                             );
                           })
@@ -545,7 +551,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
 }
 
 // ── Shared request table ─────────────────────────────────────────────────────
-function RequestTable({ requests }) {
+function RequestTable({ requests, projectNameMap = {} }) {
   return (
     <div className="table-wrap">
       <table>
@@ -562,7 +568,7 @@ function RequestTable({ requests }) {
             : requests.map(row => (
               <tr key={row.request_id}>
                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
-                <td>{row.project_id || "—"}</td>
+                <td>{displayName(projectNameMap[row.project_id] || row.project_id) || "—"}</td>
                 <td><strong>{row.model_name || "—"}</strong></td>
                 <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                 <td>
@@ -925,7 +931,7 @@ function BudgetStatusSection() {
     const rawPct = limit > 0 ? (spent / limit) * 100 : 0;
     const barPct = Math.min(rawPct, 100);
     const color  = statusColor(b.status, rawPct);
-    const label  = b.project_id ? (b.project_name || b.project_id) : "Org-level";
+    const label  = b.project_id ? (displayName(b.project_name) || displayName(b.project_id)) : "Org-level";
 
     return (
       <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "14px 18px" }}>
@@ -971,7 +977,7 @@ function BudgetStatusSection() {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {orgs.length > 0 && (
             <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)} style={{ ...SEL, width: "auto" }}>
-              {orgs.map(o => <option key={o.id} value={o.id}>{o.org_name || o.id}</option>)}
+              {orgs.map(o => <option key={o.id} value={o.id}>{o.org_name}</option>)}
             </select>
           )}
           {selectedOrg && (
@@ -990,7 +996,7 @@ function BudgetStatusSection() {
               <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}>Project (leave blank for org-level)</div>
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={SEL}>
                 <option value="">— Org-level —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.project_name || p.id}</option>)}
+                {projects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
               </select>
             </div>
             <div>
@@ -1057,7 +1063,9 @@ function Cost() {
 
   const [overview, setOverview]                   = useState(null);
   const [trends, setTrends]                       = useState([]);
-  const [byProject, setByProject]                 = useState([]);
+  const [byProjectRaw, setByProject]               = useState([]);
+  const [allProjects, setAllProjects]             = useState([]);
+  const [allOrgs, setAllOrgs]                     = useState([]);
   const [byModel, setByModel]                     = useState([]);
   const [byProjectModel, setByProjectModel]       = useState([]);
   const [requests, setRequests]                   = useState([]);
@@ -1099,6 +1107,34 @@ function Cost() {
   }, [selectedProject, days, reqPage]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Cost aggregates are keyed by project_id/org_id but don't carry reliable names,
+  // so resolve display names from the canonical lists instead of showing raw ids.
+  useEffect(() => {
+    getProjects()
+      .then(r => setAllProjects(r.data || []))
+      .catch(() => setAllProjects([]));
+    getOrganizations()
+      .then(r => setAllOrgs(r.data || []))
+      .catch(() => setAllOrgs([]));
+  }, []);
+
+  const projectNameMap = useMemo(() => {
+    const m = {};
+    allProjects.forEach(p => { m[p.id] = p.project_name; });
+    return m;
+  }, [allProjects]);
+
+  const orgNameMap = useMemo(() => {
+    const m = {};
+    allOrgs.forEach(o => { m[o.id] = o.org_name; });
+    return m;
+  }, [allOrgs]);
+
+  const byProject = useMemo(
+    () => byProjectRaw.map(r => ({ ...r, project_name: r.project_name || projectNameMap[r.project_id] })),
+    [byProjectRaw, projectNameMap]
+  );
 
   if (loading) return <div className="loading">Loading cost data…</div>;
 
@@ -1151,7 +1187,7 @@ function Cost() {
           <option value="">All Projects</option>
           {byProject.map(r => (
             <option key={r.project_id || "unassigned"} value={r.project_id || "unassigned"}>
-              {r.project_name || r.project_id || "unassigned"}
+              {projLabel(r)}
             </option>
           ))}
         </select>
@@ -1215,6 +1251,7 @@ function Cost() {
           setReqPage={setReqPage}
           days={days}
           grandTotal={grandTotal}
+          orgNameMap={orgNameMap}
         />
       ) : (
         /* ════════════════════════════════════════════════════════════════════
@@ -1222,7 +1259,7 @@ function Cost() {
            ════════════════════════════════════════════════════════════════ */
         <>
           {/* 1 ── Project Intelligence */}
-          <ProjectIntelligence byProject={byProject} projectModelMap={projectModelMap} grandTotal={grandTotal} />
+          <ProjectIntelligence byProject={byProject} projectModelMap={projectModelMap} grandTotal={grandTotal} orgNameMap={orgNameMap} />
 
           {/* 2 ── Project Breakdown (expandable table) */}
           {byProject.length > 0 && (
@@ -1258,7 +1295,7 @@ function Cost() {
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px 24px", alignItems: "start" }}>
                           <div style={{ gridColumn: "1 / -1", marginBottom: 2 }}>
                             <span style={{ fontWeight: 700, fontSize: 14 }}>{projLabel(r)}</span>
-                            <span style={{ marginLeft: 10, fontSize: 11, color: "var(--gray-400)", fontFamily: "monospace" }}>{r.org_id}</span>
+                            <span style={{ marginLeft: 10, fontSize: 11, color: "var(--gray-400)", fontFamily: "monospace" }}>{orgLabel(r.org_id, orgNameMap)}</span>
                             {r.pii_hits > 0 && <span className="status-pill critical" style={{ marginLeft: 8 }}>{r.pii_hits} PII</span>}
                           </div>
                           <StatCell label="Requests"      value={num(r.total_requests)} />
@@ -1501,7 +1538,7 @@ function Cost() {
             <div className="section-head">
               <div><h3>Request Log</h3><p style={{ color: "var(--gray-500)", fontSize: 13 }}>{num(reqTotal)} total</p></div>
             </div>
-            <RequestTable requests={requests} />
+            <RequestTable requests={requests} projectNameMap={projectNameMap} />
             {totalPages > 1 && (
               <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
                 <button className="btn btn-ghost" disabled={reqPage === 0} onClick={() => setReqPage(p => p - 1)}>← Prev</button>
