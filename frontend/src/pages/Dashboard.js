@@ -202,6 +202,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
             <MRow label="Total Requests" value={num(overview?.total_requests)} />
             <MRow label="Completed"      value={num(overview?.completed)}      accent="#22c55e" />
             <MRow label="Blocked"        value={num(overview?.blocked)}        accent="#ef4444" />
+            <MRow label="Failed"         value={num(overview?.failed)}         accent="#ef4444" />
             <MRow label="Success Rate"   value={`${overview?.success_rate ?? 0}%`} accent={Number(overview?.success_rate || 0) >= 95 ? "#22c55e" : "#f97316"} />
           </MSection>
           <MSection title="By Project">

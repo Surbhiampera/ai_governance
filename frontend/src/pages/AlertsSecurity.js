@@ -91,7 +91,7 @@ function ProxyPiiDetailModal({ requestId, onClose }) {
   }
 
   return (
-    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2100 }}>
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2200 }}>
       <div onClick={(e) => e.stopPropagation()} className="modal-dialog"
         style={{ maxWidth: 860, padding: "24px 28px", maxHeight: "90vh", overflowY: "auto" }}>
 
@@ -709,7 +709,7 @@ function AlertsSecurity() {
   const [piiSeverityFilter, setPiiSeverityFilter] = useState([]);
   const [proxyPiiModalId, setProxyPiiModalId]   = useState(null);
   const [secLogRiskFilter, setSecLogRiskFilter] = useState("all");
-  const PAGE_SIZE = 15;
+  const PAGE_SIZE = 10;
 
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
@@ -1052,7 +1052,7 @@ function AlertsSecurity() {
                             title={row.pii_detected ? "Click to view PII detail" : undefined}
                           >
                             <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
-                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{displayName(row.project_name) || displayName(row.project_id) || "—"}</td>
                             <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
                             <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                             <td>
@@ -1126,8 +1126,8 @@ function AlertsSecurity() {
                         : blockedRequests.map(row => (
                           <tr key={row.request_id}>
                             <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
-                            <td style={{ fontSize: 12 }}>{row.org_id || "—"}</td>
-                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{displayName(row.org_id) || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{displayName(row.project_name) || displayName(row.project_id) || "—"}</td>
                             <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
                             <td>
                               {(row.pii_types || []).map(t => (
@@ -1178,7 +1178,7 @@ function AlertsSecurity() {
                             title="Click to view failure detail"
                           >
                             <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
-                            <td style={{ fontSize: 12 }}>{row.project_id || "—"}</td>
+                            <td style={{ fontSize: 12 }}>{displayName(row.project_name) || displayName(row.project_id) || "—"}</td>
                             <td><strong style={{ fontSize: 12 }}>{row.model_name || "—"}</strong></td>
                             <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
                             <td>
@@ -1212,13 +1212,13 @@ function AlertsSecurity() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Event</th><th>PII</th><th>Type</th>
+                      <th>Event</th><th>Project</th><th>PII</th><th>Type</th>
                       <th>Data Out</th><th>Misuse</th><th>Spike</th><th>Risk</th>
                     </tr>
                   </thead>
                   <tbody>
                     {secLogs.length === 0
-                      ? <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No security events in this period.</td></tr>
+                      ? <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No security events in this period.</td></tr>
                       : secLogs.map((item) => {
                         const isPII = !!item.pii_detected;
                         const openPiiDetail = isPII ? () => {
@@ -1233,6 +1233,7 @@ function AlertsSecurity() {
                             title={isPII ? "Click to view PII detail" : undefined}
                           >
                             <td style={{ fontFamily: "monospace", fontSize: 10 }}>{item.event_id}</td>
+                            <td style={{ fontSize: 12 }}>{displayName(item.project_name) || displayName(item.project_id) || "—"}</td>
                             <td>
                               {isPII
                                 ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
@@ -1328,6 +1329,7 @@ function AlertsSecurity() {
                   <thead>
                     <tr>
                       <th>Event</th>
+                      <th>Project</th>
                       <th>PII</th>
                       <th>PII Types</th>
                       <th>Data Out</th>
@@ -1356,6 +1358,7 @@ function AlertsSecurity() {
                           title={isPII ? "Click to view PII detail" : undefined}
                         >
                           <td style={{ fontFamily: "monospace", fontSize: 11 }}>{item.event_id}</td>
+                          <td style={{ fontSize: 12 }}>{displayName(item.project_name) || displayName(item.project_id) || "—"}</td>
                           <td>
                             {isPII
                               ? <span className="badge-yes" style={{ cursor: "pointer", textDecoration: "underline dotted" }}>yes</span>
@@ -1459,7 +1462,12 @@ function AlertsSecurity() {
                   </thead>
                   <tbody>
                     {actionModal.rows.map(row => (
-                      <tr key={row.request_id}>
+                      <tr
+                        key={row.request_id}
+                        onClick={() => setProxyPiiModalId(row.request_id)}
+                        style={{ cursor: "pointer" }}
+                        title="Click to view masked data detail"
+                      >
                         <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
                         <td>{row.project_id || "—"}</td>
                         <td><strong>{row.model_name || "—"}</strong></td>

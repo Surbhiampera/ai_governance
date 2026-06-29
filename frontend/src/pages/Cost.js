@@ -312,7 +312,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
 
         {/* Cost + token trend */}
         <div className="panel">
-          <div className="section-head"><div><h3>Daily Cost &amp; Token Trend</h3><p style={{fontSize:12,color:"var(--gray-400)"}}>Org-level trend for selected period</p></div></div>
+          <div className="section-head"><div><h3>Daily Cost &amp; Token Trend</h3><p style={{fontSize:12,color:"var(--gray-400)"}}>This project · selected period</p></div></div>
           {tokenTrend.length > 0 ? (
             <>
               <div style={{ width: "100%", minHeight: 130 }}>
@@ -1083,16 +1083,14 @@ function Cost() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [ovRes, trRes, prjRes, modRes, pmRes] = await Promise.allSettled([
+      const [ovRes, prjRes, modRes, pmRes] = await Promise.allSettled([
         getProxyOverview(undefined, days),
-        getProxyTrends(undefined, days),
         getProxyByProject(undefined, days),
         getProxyByModel(undefined, days),
         getProxyByProjectModel(undefined, days),
       ]);
       const val = (r, fb) => r.status === "fulfilled" ? (r.value?.data ?? fb) : fb;
       setOverview(val(ovRes, null));
-      setTrends(val(trRes, []));
       setByProject(val(prjRes, []));
       setByModel(val(modRes, []));
       setByProjectModel(val(pmRes, []));
@@ -1105,6 +1103,17 @@ function Cost() {
   }, [days]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Trends are scoped to the selected project (falls back to org-wide when
+  // no project is selected), so they're fetched independently of the other
+  // aggregates above which are always org-wide and filtered client-side.
+  useEffect(() => {
+    let cancelled = false;
+    getProxyTrends(undefined, days, selectedProject || undefined)
+      .then(res => { if (!cancelled) setTrends(res.data || []); })
+      .catch(() => { if (!cancelled) setTrends([]); });
+    return () => { cancelled = true; };
+  }, [days, selectedProject]);
 
   // Request log — paginated independently so clicking Next/Prev only hits the
   // one cheap endpoint instead of re-running every aggregate query above.
