@@ -1071,23 +1071,24 @@ function Cost() {
   const [requests, setRequests]                   = useState([]);
   const [reqTotal, setReqTotal]                   = useState(0);
   const [reqPage, setReqPage]                     = useState(0);
+  const [reqLoading, setReqLoading]               = useState(false);
   const [loading, setLoading]                     = useState(true);
   const [error, setError]                         = useState("");
   const [expandedProjects, setExpandedProjects]   = useState(new Set());
   const [activeCard, setActiveCard]               = useState(null);
   const PAGE_SIZE = 25;
 
+  // Main aggregates (overview/trends/by-project/by-model) — only need to refetch
+  // when the project/date filters change, not when paging through requests.
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const proj = selectedProject || undefined;
-      const [ovRes, trRes, prjRes, modRes, pmRes, reqRes] = await Promise.allSettled([
+      const [ovRes, trRes, prjRes, modRes, pmRes] = await Promise.allSettled([
         getProxyOverview(undefined, days),
         getProxyTrends(undefined, days),
         getProxyByProject(undefined, days),
         getProxyByModel(undefined, days),
         getProxyByProjectModel(undefined, days),
-        getProxyRequests({ project_id: proj, limit: PAGE_SIZE, offset: reqPage * PAGE_SIZE }),
       ]);
       const val = (r, fb) => r.status === "fulfilled" ? (r.value?.data ?? fb) : fb;
       setOverview(val(ovRes, null));
@@ -1095,18 +1096,37 @@ function Cost() {
       setByProject(val(prjRes, []));
       setByModel(val(modRes, []));
       setByProjectModel(val(pmRes, []));
-      const reqData = val(reqRes, { items: [], total: 0 });
-      setRequests(reqData.items || []);
-      setReqTotal(reqData.total || 0);
       setError("");
     } catch (err) {
       setError(err?.response?.data?.detail || "Unable to load cost data.");
     } finally {
       setLoading(false);
     }
-  }, [selectedProject, days, reqPage]);
+  }, [days]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Request log — paginated independently so clicking Next/Prev only hits the
+  // one cheap endpoint instead of re-running every aggregate query above.
+  useEffect(() => { setReqPage(0); }, [selectedProject]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReqLoading(true);
+    getProxyRequests({ project_id: selectedProject || undefined, limit: PAGE_SIZE, offset: reqPage * PAGE_SIZE })
+      .then(res => {
+        if (cancelled) return;
+        setRequests(res.data?.items || []);
+        setReqTotal(res.data?.total || 0);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRequests([]);
+        setReqTotal(0);
+      })
+      .finally(() => { if (!cancelled) setReqLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedProject, reqPage]);
 
   // Cost aggregates are keyed by project_id/org_id but don't carry reliable names,
   // so resolve display names from the canonical lists instead of showing raw ids.

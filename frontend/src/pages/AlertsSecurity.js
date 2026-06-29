@@ -718,19 +718,18 @@ function AlertsSecurity() {
     getProjects().then((r) => setProjects(r.data || [])).catch(() => {});
   }, []);
 
+  // Overview/summary/logs/anomalies — only depend on the project/date filters,
+  // not on which tab/page is open, so paging a tab no longer re-runs all of this.
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const proj      = selectedProject || undefined;
       const startDate = daysToStartDate(days);
 
-      const [ovRes, piiSumRes, piiReqRes, blockedRes, failureRes, secSumRes, secLogRes, anomalyRes] =
+      const [ovRes, piiSumRes, secSumRes, secLogRes, anomalyRes] =
         await Promise.allSettled([
           getProxyOverview(undefined, days),
           getProxyPiiSummary(undefined, days),
-          getProxyRequests({ project_id: proj, pii_only: true, pii_severity: piiSeverityFilter.length ? piiSeverityFilter.join(",") : undefined, limit: PAGE_SIZE, offset: piiPage * PAGE_SIZE }),
-          getProxyRequests({ project_id: proj, status: "blocked", limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE }),
-          getProxyRequests({ project_id: proj, failure_only: true, limit: PAGE_SIZE, offset: failurePage * PAGE_SIZE }),
           getSecuritySummaryCombined(undefined, proj, startDate),
           getSecurityLogsCombined(undefined, undefined, undefined, proj, startDate),
           getAnomaliesCombined("open", undefined, proj, startDate),
@@ -740,19 +739,6 @@ function AlertsSecurity() {
 
       setOverview(val(ovRes, null));
       setPiiSummary(val(piiSumRes, null));
-
-      const piiData = val(piiReqRes, { items: [], total: 0 });
-      setPiiRequests(piiData.items || []);
-      setPiiTotal(piiData.total   || 0);
-
-      const blockedData = val(blockedRes, { items: [], total: 0 });
-      setBlockedRequests(blockedData.items || []);
-      setBlockedTotal(blockedData.total   || 0);
-
-      const failureData = val(failureRes, { items: [], total: 0 });
-      setFailureRequests(failureData.items || []);
-      setFailureTotal(failureData.total   || 0);
-
       setSecSummary(val(secSumRes,   null));
       setSecLogs(val(secLogRes,      []));
       setAnomalies(val(anomalyRes,   []));
@@ -762,9 +748,52 @@ function AlertsSecurity() {
     } finally {
       setLoading(false);
     }
-  }, [days, selectedProject, piiPage, blockedPage, failurePage, piiSeverityFilter]);
+  }, [days, selectedProject]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Each paginated tab fetches independently — clicking Next/Prev on one tab
+  // now hits a single cheap endpoint instead of reloading the whole page.
+  useEffect(() => {
+    let cancelled = false;
+    const proj = selectedProject || undefined;
+    getProxyRequests({ project_id: proj, pii_only: true, pii_severity: piiSeverityFilter.length ? piiSeverityFilter.join(",") : undefined, limit: PAGE_SIZE, offset: piiPage * PAGE_SIZE })
+      .then(res => {
+        if (cancelled) return;
+        setPiiRequests(res.data?.items || []);
+        setPiiTotal(res.data?.total || 0);
+      })
+      .catch(() => { if (!cancelled) { setPiiRequests([]); setPiiTotal(0); } });
+    return () => { cancelled = true; };
+  }, [selectedProject, piiPage, piiSeverityFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const proj = selectedProject || undefined;
+    getProxyRequests({ project_id: proj, status: "blocked", limit: PAGE_SIZE, offset: blockedPage * PAGE_SIZE })
+      .then(res => {
+        if (cancelled) return;
+        setBlockedRequests(res.data?.items || []);
+        setBlockedTotal(res.data?.total || 0);
+      })
+      .catch(() => { if (!cancelled) { setBlockedRequests([]); setBlockedTotal(0); } });
+    return () => { cancelled = true; };
+  }, [selectedProject, blockedPage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const proj = selectedProject || undefined;
+    getProxyRequests({ project_id: proj, failure_only: true, limit: PAGE_SIZE, offset: failurePage * PAGE_SIZE })
+      .then(res => {
+        if (cancelled) return;
+        setFailureRequests(res.data?.items || []);
+        setFailureTotal(res.data?.total || 0);
+      })
+      .catch(() => { if (!cancelled) { setFailureRequests([]); setFailureTotal(0); } });
+    return () => { cancelled = true; };
+  }, [selectedProject, failurePage]);
+
+  useEffect(() => { setPiiPage(0); setBlockedPage(0); setFailurePage(0); }, [selectedProject]);
 
   if (loading) return <div className="loading">Loading alerts &amp; security data…</div>;
 
