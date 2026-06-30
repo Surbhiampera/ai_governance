@@ -123,6 +123,74 @@ function MSection({ title, children }) {
   );
 }
 
+// ── PII Action Requests Modal (shows requests for a single action only) ───────
+function ActionRequestsModal({ action, rows, total, loading, error, onClose, projectNameMap = {} }) {
+  return (
+    <div onClick={onClose} className="modal-backdrop" style={{ zIndex: 2200 }}>
+      <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 860 }}>
+        <div className="modal-header">
+          <div>
+            <h3 style={{ margin: "0 0 2px", textTransform: "capitalize" }}>{action} — Requests</h3>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>
+              {loading
+                ? "Loading…"
+                : `${total} request${total !== 1 ? "s" : ""}${rows.length < total ? ` (showing first ${rows.length})` : ""}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-close">×</button>
+        </div>
+        {loading && <div style={{ textAlign: "center", padding: "32px 0", color: "var(--gray-400)" }}>Loading…</div>}
+        {error  && <div style={{ color: "#ef4444", fontSize: 13, padding: "12px 0" }}>Failed to load requests.</div>}
+        {!loading && !error && (
+          rows.length === 0
+            ? <p style={{ color: "var(--gray-400)", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No matching requests found.</p>
+            : <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th>
+                      <th>PII Types</th><th>Tokens</th><th>Cost</th><th>Received</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(row => (
+                      <tr key={row.request_id}>
+                        <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
+                        <td>{displayName(projectNameMap[row.project_id] || row.project_id) || "—"}</td>
+                        <td><strong>{row.model_name || "—"}</strong></td>
+                        <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
+                        <td>
+                          <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 11 }}>{row.request_status || "—"}</span>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {(row.pii_types || []).map(t => <span key={t} className="status-pill critical" style={{ fontSize: 11 }}>{t}</span>)}
+                            {!row.pii_types?.length && <span style={{ color: "var(--gray-400)" }}>—</span>}
+                          </div>
+                        </td>
+                        <td>{Number(row.total_tokens || 0).toLocaleString()}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>${Number(row.total_cost || 0).toFixed(6)}</td>
+                        <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                          {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+async function fetchActionRows(action, extraParams = {}) {
+  const res = await getProxyRequests({ pii_action_taken: action, limit: 200, ...extraParams });
+  const data = res.data || {};
+  const items = data.items || (Array.isArray(data) ? data : []);
+  return { rows: items, total: data.total ?? items.length };
+}
+
 function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onClose, projectNameMap = {} }) {
   const grandTotal = byProject.reduce((s, r) => s + Number(r.total_cost || 0), 0);
   const totalTok   = byModel.reduce((s, m) => s + Number(m.total_tokens || 0), 0);
@@ -335,11 +403,10 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                   <div
                     key={item.action}
                     onClick={async () => {
-                      setActionModal({ action: item.action, rows: [], loading: true, error: false });
+                      setActionModal({ action: item.action, rows: [], total: 0, loading: true, error: false });
                       try {
-                        const res = await getProxyRequests({ pii_only: true, limit: 100 });
-                        const items = res.data?.items || res.data || [];
-                        setActionModal({ action: item.action, rows: items.filter(r => r.pii_action_taken === item.action), loading: false, error: false });
+                        const { rows, total } = await fetchActionRows(item.action);
+                        setActionModal({ action: item.action, rows, total, loading: false, error: false });
                       } catch {
                         setActionModal(prev => ({ ...prev, loading: false, error: true }));
                       }
@@ -416,59 +483,15 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
       </div>
 
       {actionModal && (
-        <div onClick={() => setActionModal(null)} className="modal-backdrop" style={{ zIndex: 2200 }}>
-          <div onClick={e => e.stopPropagation()} className="modal-dialog" style={{ maxWidth: 860 }}>
-            <div className="modal-header">
-              <div>
-                <h3 style={{ margin: "0 0 2px", textTransform: "capitalize" }}>{actionModal.action} — Requests</h3>
-                <p style={{ margin: 0, fontSize: 12, color: "var(--gray-500)" }}>
-                  {actionModal.loading ? "Loading…" : `${actionModal.rows.length} request${actionModal.rows.length !== 1 ? "s" : ""}`}
-                </p>
-              </div>
-              <button onClick={() => setActionModal(null)} className="btn-close">×</button>
-            </div>
-            {actionModal.loading && <div style={{ textAlign: "center", padding: "32px 0", color: "var(--gray-400)" }}>Loading…</div>}
-            {actionModal.error  && <div style={{ color: "#ef4444", fontSize: 13, padding: "12px 0" }}>Failed to load requests.</div>}
-            {!actionModal.loading && !actionModal.error && (
-              actionModal.rows.length === 0
-                ? <p style={{ color: "var(--gray-400)", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No matching requests found.</p>
-                : <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Request ID</th><th>Project</th><th>Model</th><th>Route</th><th>Status</th>
-                          <th>PII Types</th><th>Tokens</th><th>Cost</th><th>Received</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {actionModal.rows.map(row => (
-                          <tr key={row.request_id}>
-                            <td style={{ fontFamily: "monospace", fontSize: 11 }}>{row.request_id}</td>
-                            <td>{displayName(projectNameMap[row.project_id] || row.project_id) || "—"}</td>
-                            <td><strong>{row.model_name || "—"}</strong></td>
-                            <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gray-500)" }}>{row.entry_point || "—"}</td>
-                            <td>
-                              <span className={`status-pill ${statusPillClass(row.request_status)}`} style={{ fontSize: 11 }}>{row.request_status || "—"}</span>
-                            </td>
-                            <td>
-                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                {(row.pii_types || []).map(t => <span key={t} className="status-pill critical" style={{ fontSize: 11 }}>{t}</span>)}
-                                {!row.pii_types?.length && <span style={{ color: "var(--gray-400)" }}>—</span>}
-                              </div>
-                            </td>
-                            <td>{Number(row.total_tokens || 0).toLocaleString()}</td>
-                            <td style={{ fontFamily: "monospace", fontSize: 12 }}>${Number(row.total_cost || 0).toFixed(6)}</td>
-                            <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                              {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-            )}
-          </div>
-        </div>
+        <ActionRequestsModal
+          action={actionModal.action}
+          rows={actionModal.rows}
+          total={actionModal.total}
+          loading={actionModal.loading}
+          error={actionModal.error}
+          onClose={() => setActionModal(null)}
+          projectNameMap={projectNameMap}
+        />
       )}
     </>
   );
@@ -579,6 +602,18 @@ function Dashboard() {
   const [error, setError]             = useState("");
   const [activeCard, setActiveCard]   = useState(null);
   const [piiSummaryModal, setPiiSummaryModal] = useState(false);
+  const [pillAction, setPillAction]   = useState(null); // { action, rows, loading, error }
+
+  const openPillAction = useCallback(async (action, e) => {
+    e.stopPropagation();
+    setPillAction({ action, rows: [], total: 0, loading: true, error: false });
+    try {
+      const { rows, total } = await fetchActionRows(action, selProject ? { project_id: selProject } : {});
+      setPillAction({ action, rows, total, loading: false, error: false });
+    } catch {
+      setPillAction(prev => ({ ...prev, loading: false, error: true }));
+    }
+  }, [selProject]);
 
   const load = useCallback(async (isRefresh = false) => {
     try {
@@ -977,7 +1012,12 @@ function Dashboard() {
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Actions</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {piiSummary.action_breakdown.map(item => (
-                    <div key={item.action} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+                    <div
+                      key={item.action}
+                      onClick={e => openPillAction(item.action, e)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer" }}
+                      title={`View ${item.action} requests only`}
+                    >
                       <span style={{ fontWeight: 600, minWidth: 60 }}>{item.action}</span>
                       <span className={`status-pill ${item.action === "block" ? "critical" : item.action === "mask" ? "medium" : "low"}`}>{item.count}</span>
                     </div>
@@ -1009,6 +1049,18 @@ function Dashboard() {
           piiSummary={piiSummary}
           overview={overview}
           onClose={() => setPiiSummaryModal(false)}
+        />
+      )}
+
+      {pillAction && (
+        <ActionRequestsModal
+          action={pillAction.action}
+          rows={pillAction.rows}
+          total={pillAction.total}
+          loading={pillAction.loading}
+          error={pillAction.error}
+          onClose={() => setPillAction(null)}
+          projectNameMap={projectNameMap}
         />
       )}
     </>
