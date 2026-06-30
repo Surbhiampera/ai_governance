@@ -29,9 +29,9 @@ const ACTION_COLOR = {
 };
 
 const riskColor = (score) => {
-  if (score >= 80) return "#ef4444";
-  if (score >= 60) return "#f97316";
-  if (score >= 30) return "#eab308";
+  if (score >= 0.7) return "#ef4444";
+  if (score >= 0.4) return "#f97316";
+  if (score >= 0.2) return "#eab308";
   return "#22c55e";
 };
 
@@ -1092,7 +1092,7 @@ function AlertsSecurity() {
                             <td style={{ fontSize: 12 }}>{num(row.total_tokens)}</td>
                             <td style={{ fontSize: 12 }}>{money(row.total_cost)}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                              {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                             </td>
                           </tr>
                         ))}
@@ -1139,7 +1139,7 @@ function AlertsSecurity() {
                             <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || row.source_system || "—"}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.client_ip || "—"}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                              {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                             </td>
                           </tr>
                         ))}
@@ -1189,7 +1189,7 @@ function AlertsSecurity() {
                             <td style={{ fontSize: 12 }}>{row.failure_code ? failureLabel(row.failure_code) : "—"}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.failure_reason || "—"}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                              {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                             </td>
                           </tr>
                         ))}
@@ -1488,7 +1488,7 @@ function AlertsSecurity() {
                         <td>{num(row.total_tokens)}</td>
                         <td style={{ fontFamily: "monospace", fontSize: 12 }}>{money(row.total_cost)}</td>
                         <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                          {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                          {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                         </td>
                       </tr>
                     ))}

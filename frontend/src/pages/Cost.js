@@ -459,7 +459,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                               <span style={{ fontSize: 11, color: "var(--gray-500)" }}>{share}%</span>
                             </div>
                           </td>
-                          <td style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{row.received_at ? new Date(row.received_at).toLocaleString() : "—"}</td>
+                          <td style={{ fontSize: 12, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                         </tr>
                         {isGroup && isOpen && (
                           expState?.loading ? (
@@ -509,7 +509,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cOutCost)}</td>
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11, color:"#9E2A97"}}>{money(cTotCost)}</td>
                                 <td />
-                                <td style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{child.received_at ? new Date(child.received_at).toLocaleString() : "—"}</td>
+                                <td style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{child.received_at ? new Date(child.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                               </tr>
                             );
                           })
@@ -591,7 +591,7 @@ function RequestTable({ requests, projectNameMap = {} }) {
                 <td>{money(row.llm_cost)}</td>
                 <td><strong>{money(row.total_cost)}</strong></td>
                 <td>{row.pii_detected ? <span className="status-pill critical">{(row.pii_types || []).join(", ")}</span> : <span style={{ color: "var(--gray-400)" }}>none</span>}</td>
-                <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{row.received_at ? new Date(row.received_at).toLocaleString() : "—"}</td>
+                <td style={{ fontSize: 12, color: "var(--gray-500)" }}>{row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
               </tr>
             ))
           }

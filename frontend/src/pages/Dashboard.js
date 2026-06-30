@@ -459,7 +459,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
                             <td>{Number(row.total_tokens || 0).toLocaleString()}</td>
                             <td style={{ fontFamily: "monospace", fontSize: 12 }}>${Number(row.total_cost || 0).toFixed(6)}</td>
                             <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                              {row.received_at ? new Date(row.received_at).toLocaleString() : "—"}
+                              {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                             </td>
                           </tr>
                         ))}
