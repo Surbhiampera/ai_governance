@@ -191,7 +191,7 @@ export const getNotificationStatus = () =>
   API.get("/control/notifications/status");
 
 // ─────────────────────── Tools / Models ───────────────────────
-export const getTools = () => API.get("/tools/");
+export const getTools = () => API.get("/tools");
 export const registerTool = (data) => API.post("/tools/register", data);
 export const assignToolProject = (toolName, projectId) =>
   API.patch(`/tools/${encodeURIComponent(toolName)}/project`, null, {
@@ -211,7 +211,7 @@ export const triggerConnectorSync = (id) =>
   API.post(`/tools/connectors/${id}/trigger-sync`);
 
 // Response fields: model_name, provider, input_cost_per_1k, output_cost_per_1k, currency
-export const getModels = () => API.get("/models/");
+export const getModels = () => API.get("/models");
 // registerModel removed — POST /models/register returns 404; use POST /pricing instead
 
 // ─────────────────────── Governance rules ───────────────────────
@@ -220,41 +220,41 @@ export const getRules = (orgId) =>
 export const createRule = (data) => API.post("/governance/rules", data);
 
 // ─────────────────────── Organizations / Projects ───────────────────────
-export const getOrganizations = () => API.get("/organizations/");
+export const getOrganizations = () => API.get("/organizations");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
-export const createOrganization = (data) => API.post("/organizations/", data);
+export const createOrganization = (data) => API.post("/organizations", data);
 export const updateOrganization = (id, data) =>
   API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
 
 export const getProjects = (orgId) =>
-  API.get("/projects/", { params: { org_id: orgId || undefined } });
+  API.get("/projects", { params: { org_id: orgId || undefined } });
 export const getProject = (id) => API.get(`/projects/${id}`);
-export const createProject = (data) => API.post("/projects/", data);
+export const createProject = (data) => API.post("/projects", data);
 export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
 export const deleteProject = (id) => API.delete(`/projects/${id}`);
 
 // ─────────────────────── Budgets / API Keys ───────────────────────
 export const getBudgets = (orgId) =>
-  API.get("/budgets/", { params: { org_id: orgId || undefined } });
+  API.get("/budgets", { params: { org_id: orgId || undefined } });
 export const getBudgetUtilization = (orgId) =>
   API.get("/budgets/utilization", { params: { org_id: orgId || undefined } });
 
 export const getRateLimits = (orgId) =>
-  API.get("/rate-limits/", { params: { org_id: orgId || undefined } });
-export const createRateLimit = (data) => API.post("/rate-limits/", data);
+  API.get("/rate-limits", { params: { org_id: orgId || undefined } });
+export const createRateLimit = (data) => API.post("/rate-limits", data);
 export const updateRateLimit = (id, data) =>
   API.put(`/rate-limits/${id}`, data);
 export const deleteRateLimit = (id) => API.delete(`/rate-limits/${id}`);
-export const createBudget = (data) => API.post("/budgets/", data);
+export const createBudget = (data) => API.post("/budgets", data);
 export const updateBudget = (id, data) => API.put(`/budgets/${id}`, data);
 export const deleteBudget = (id) => API.delete(`/budgets/${id}`);
 
 export const getApiKeys = (orgId, projectId) =>
-  API.get("/api-keys/", {
+  API.get("/api-keys", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
-export const createApiKey = (data) => API.post("/api-keys/", data);
+export const createApiKey = (data) => API.post("/api-keys", data);
 export const deleteApiKey = (id) => API.delete(`/api-keys/${id}`);
 
 // ─────────────────────── Costs ───────────────────────
@@ -353,9 +353,9 @@ export const triggerConnectorPoll = () =>
 
 // ─────────────────────── Proxy — Governance Keys ───────────────────────
 export const listGovernanceKeys = (orgId) =>
-  API.get("/governance-keys/", { params: { org_id: orgId } });
+  API.get("/governance-keys", { params: { org_id: orgId } });
 export const createGovernanceKey = (payload) =>
-  API.post("/governance-keys/", payload);
+  API.post("/governance-keys", payload);
 export const revokeGovernanceKey = (keyId) =>
   API.delete(`/governance-keys/${keyId}`);
 export const rotateGovernanceKey = (keyId) =>
@@ -376,7 +376,13 @@ export const createPiiPolicy = (payload) =>
   API.post("/proxy/pii-policies", payload);
 
 // ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
-export const getProxyOverview = (orgId, days = 30, projectId, provider, modelName) =>
+export const getProxyOverview = (
+  orgId,
+  days = 30,
+  projectId,
+  provider,
+  modelName,
+) =>
   API.get("/proxy/stats/overview", {
     params: {
       org_id: orgId || undefined,
@@ -386,7 +392,13 @@ export const getProxyOverview = (orgId, days = 30, projectId, provider, modelNam
       model_name: modelName || undefined,
     },
   });
-export const getProxyTrends = (orgId, days = 30, projectId, provider, modelName) =>
+export const getProxyTrends = (
+  orgId,
+  days = 30,
+  projectId,
+  provider,
+  modelName,
+) =>
   API.get("/proxy/stats/trends", {
     params: {
       org_id: orgId || undefined,
@@ -424,7 +436,13 @@ export const getProxyRequests = (params) =>
   API.get("/proxy/v1/requests", { params });
 export const getProxyRequestPiiDetail = (requestId) =>
   API.get(`/proxy/v1/requests/${requestId}/pii-detail`);
-export const getProxyPiiSummary = (orgId, days = 30, projectId, provider, modelName) =>
+export const getProxyPiiSummary = (
+  orgId,
+  days = 30,
+  projectId,
+  provider,
+  modelName,
+) =>
   API.get("/proxy/stats/pii", {
     params: {
       org_id: orgId || undefined,
