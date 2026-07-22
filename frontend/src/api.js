@@ -42,7 +42,7 @@ export const getUsageTrends = (orgId, days) =>
 
 // ─────────────────────── Alerts ───────────────────────
 export const getAlerts = (status) =>
-  API.get("/alerts/", { params: { status: status || undefined } });
+  API.get("/alerts", { params: { status: status || undefined } });
 export const resolveAlert = (id) => API.patch(`/alerts/${id}/resolve`);
 
 // ─────────────────────── Security ───────────────────────
@@ -312,8 +312,8 @@ export const getCostSpendCapStatus = (orgId, projectId) =>
   });
 
 // ─────────────────────── Pricing ───────────────────────
-export const getModelPricing = () => API.get("/pricing/");
-export const createModelPricing = (data) => API.post("/pricing/", data);
+export const getModelPricing = () => API.get("/pricing");
+export const createModelPricing = (data) => API.post("/pricing", data);
 export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
 
 // ─────────────────────── Lookups (dynamic dropdowns) ───────────────────────
