@@ -12,9 +12,7 @@ import {
 } from "../api";
 import { displayName } from "../utils/displayName";
 
-const PROXY_BASE =
-  import.meta.env.VITE_API_URL || "https://aigovernance-backend-1.onrender.com";
-
+const PROXY_BASE = import.meta.env.REACT_APP_API_URL;
 // ─── SDK Snippet (auto-filled with real key + server URL) ─────────────────────
 
 function SdkSnippet({ govKey }) {
@@ -37,8 +35,7 @@ function SdkSnippet({ govKey }) {
     env: {
       label: "Env vars",
       note: "Zero code change — set once in .env",
-      code:
-`# .env  (or CI/CD secrets)
+      code: `# .env  (or CI/CD secrets)
 OPENAI_BASE_URL=${PROXY_BASE}/proxy/openai
 GOVERNANCE_KEY=${govKey}
 
@@ -55,8 +52,7 @@ client = OpenAI(
     python: {
       label: "Python",
       note: "2 lines added — nothing else changes",
-      code:
-`from openai import OpenAI
+      code: `from openai import OpenAI
 
 client = OpenAI(
     api_key="sk-...",                                      # unchanged
@@ -73,8 +69,7 @@ response = client.chat.completions.create(
     node: {
       label: "Node.js",
       note: "2 lines added — nothing else changes",
-      code:
-`import OpenAI from "openai";
+      code: `import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: "sk-...",                                          // unchanged
@@ -101,45 +96,85 @@ const response = await client.chat.completions.create({
 
   return (
     <div style={{ marginTop: 24 }}>
-      <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "var(--gray-700)" }}>
+      <p
+        style={{
+          margin: "0 0 12px",
+          fontSize: 13,
+          fontWeight: 700,
+          color: "var(--gray-700)",
+        }}
+      >
         SDK Configuration — share this with the external team
       </p>
 
       {/* Tabs + code */}
-      <div style={{
-        background: "var(--gray-50)", borderRadius: 12,
-        border: "1px solid rgba(124,112,174,0.2)", overflow: "hidden",
-      }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "10px 10px 0",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--gray-100,#f3f4f6)",
-        }}>
+      <div
+        style={{
+          background: "var(--gray-50)",
+          borderRadius: 12,
+          border: "1px solid rgba(124,112,174,0.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "10px 10px 0",
+            borderBottom: "1px solid var(--border)",
+            background: "var(--gray-100,#f3f4f6)",
+          }}
+        >
           {Object.entries(snippets).map(([key, s]) => (
-            <button key={key} style={TAB_STYLE(tab === key)} onClick={() => setTab(key)}>
+            <button
+              key={key}
+              style={TAB_STYLE(tab === key)}
+              onClick={() => setTab(key)}
+            >
               {s.label}
             </button>
           ))}
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "#22c55e", fontWeight: 600,
-            alignSelf: "center", paddingRight: 4 }}>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 11,
+              color: "#22c55e",
+              fontWeight: 600,
+              alignSelf: "center",
+              paddingRight: 4,
+            }}
+          >
             ✓ {current.note}
           </span>
           <button
             type="button"
             onClick={copyAll}
             style={{
-              padding: "4px 12px", fontSize: 11, borderRadius: 6, border: "1px solid rgba(158,42,151,0.3)",
-              background: "transparent", cursor: "pointer", color: "#9e2a97", fontWeight: 600, marginLeft: 6,
+              padding: "4px 12px",
+              fontSize: 11,
+              borderRadius: 6,
+              border: "1px solid rgba(158,42,151,0.3)",
+              background: "transparent",
+              cursor: "pointer",
+              color: "#9e2a97",
+              fontWeight: 600,
+              marginLeft: 6,
             }}
           >
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <pre style={{
-          color: "var(--brand-primary,#9e2a97)", fontSize: 12, margin: 0,
-          padding: "16px", overflowX: "auto", lineHeight: 1.65,
-        }}>
+        <pre
+          style={{
+            color: "var(--brand-primary,#9e2a97)",
+            fontSize: 12,
+            margin: 0,
+            padding: "16px",
+            overflowX: "auto",
+            lineHeight: 1.65,
+          }}
+        >
           {current.code}
         </pre>
       </div>
@@ -153,13 +188,27 @@ const STEPS = ["Organization", "Project", "API Key", "Done"];
 
 function StepBar({ current }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 32 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0,
+        marginBottom: 32,
+      }}
+    >
       {STEPS.map((label, i) => {
         const done = i < current;
         const active = i === current;
         return (
           <React.Fragment key={label}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
               <div
                 style={{
                   width: 36,
@@ -173,10 +222,12 @@ function StepBar({ current }) {
                   background: done
                     ? "linear-gradient(135deg,#9e2a97,#7c70ae)"
                     : active
-                    ? "linear-gradient(135deg,#9e2a97,#7c70ae)"
-                    : "rgba(124,112,174,0.12)",
+                      ? "linear-gradient(135deg,#9e2a97,#7c70ae)"
+                      : "rgba(124,112,174,0.12)",
                   color: done || active ? "#fff" : "#6d6782",
-                  border: active ? "2px solid #9e2a97" : "2px solid transparent",
+                  border: active
+                    ? "2px solid #9e2a97"
+                    : "2px solid transparent",
                   transition: "all 0.22s ease",
                 }}
               >
@@ -201,9 +252,10 @@ function StepBar({ current }) {
                   height: 2,
                   margin: "0 8px",
                   marginBottom: 22,
-                  background: i < current
-                    ? "linear-gradient(90deg,#9e2a97,#7c70ae)"
-                    : "rgba(124,112,174,0.18)",
+                  background:
+                    i < current
+                      ? "linear-gradient(90deg,#9e2a97,#7c70ae)"
+                      : "rgba(124,112,174,0.18)",
                   transition: "background 0.3s ease",
                 }}
               />
@@ -258,8 +310,14 @@ function OrgStep({ onNext }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!form.id.trim()) { setError("Organization ID is required."); return; }
-    if (!form.org_name.trim()) { setError("Organization name is required."); return; }
+    if (!form.id.trim()) {
+      setError("Organization ID is required.");
+      return;
+    }
+    if (!form.org_name.trim()) {
+      setError("Organization name is required.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -302,7 +360,9 @@ function OrgStep({ onNext }) {
         </div>
         <div className="form-grid">
           <div className="field">
-            <label>Plan Type <span style={{ opacity: 0.6 }}>(optional)</span></label>
+            <label>
+              Plan Type <span style={{ opacity: 0.6 }}>(optional)</span>
+            </label>
             <input
               value={form.plan_type}
               onChange={(e) => set("plan_type", e.target.value)}
@@ -312,7 +372,10 @@ function OrgStep({ onNext }) {
         </div>
       </div>
       <InlineError msg={error} />
-      <div className="action-row" style={{ marginTop: 24, justifyContent: "flex-end" }}>
+      <div
+        className="action-row"
+        style={{ marginTop: 24, justifyContent: "flex-end" }}
+      >
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Creating…" : "Create Organization & Continue"}
         </button>
@@ -324,20 +387,29 @@ function OrgStep({ onNext }) {
 // ─── Step 2: Project ──────────────────────────────────────────────────────────
 
 function ProjectStep({ org, onNext, onBack }) {
-  const [form, setForm] = useState({ id: "", project_name: "", environment: "" });
+  const [form, setForm] = useState({
+    id: "",
+    project_name: "",
+    environment: "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!form.id.trim()) { setError("Project ID is required."); return; }
+    if (!form.id.trim()) {
+      setError("Project ID is required.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       const payload = { id: form.id.trim(), org_id: org.id };
-      if (form.project_name.trim()) payload.project_name = form.project_name.trim();
-      if (form.environment.trim()) payload.environment = form.environment.trim();
+      if (form.project_name.trim())
+        payload.project_name = form.project_name.trim();
+      if (form.environment.trim())
+        payload.environment = form.environment.trim();
       const res = await createProject(payload);
       onNext(res.data);
     } catch (err) {
@@ -364,13 +436,21 @@ function ProjectStep({ org, onNext, onBack }) {
             />
           </div>
           <div className="field">
-            <label>Org ID <span style={{ opacity: 0.6 }}>(auto-filled)</span></label>
-            <input value={org.id} disabled style={{ background: "var(--gray-100)" }} />
+            <label>
+              Org ID <span style={{ opacity: 0.6 }}>(auto-filled)</span>
+            </label>
+            <input
+              value={org.id}
+              disabled
+              style={{ background: "var(--gray-100)" }}
+            />
           </div>
         </div>
         <div className="form-grid">
           <div className="field">
-            <label>Project Name <span style={{ opacity: 0.6 }}>(optional)</span></label>
+            <label>
+              Project Name <span style={{ opacity: 0.6 }}>(optional)</span>
+            </label>
             <input
               value={form.project_name}
               onChange={(e) => set("project_name", e.target.value)}
@@ -378,7 +458,9 @@ function ProjectStep({ org, onNext, onBack }) {
             />
           </div>
           <div className="field">
-            <label>Environment <span style={{ opacity: 0.6 }}>(optional)</span></label>
+            <label>
+              Environment <span style={{ opacity: 0.6 }}>(optional)</span>
+            </label>
             <input
               value={form.environment}
               onChange={(e) => set("environment", e.target.value)}
@@ -388,8 +470,13 @@ function ProjectStep({ org, onNext, onBack }) {
         </div>
       </div>
       <InlineError msg={error} />
-      <div className="action-row" style={{ marginTop: 24, justifyContent: "space-between" }}>
-        <button type="button" className="btn btn-ghost" onClick={onBack}>Back</button>
+      <div
+        className="action-row"
+        style={{ marginTop: 24, justifyContent: "space-between" }}
+      >
+        <button type="button" className="btn btn-ghost" onClick={onBack}>
+          Back
+        </button>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Creating…" : "Create Project & Continue"}
         </button>
@@ -404,7 +491,10 @@ function generateKeyId(orgId) {
   const rand = Array.from(crypto.getRandomValues(new Uint8Array(12)))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  const slug = (orgId || "org").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+  const slug = (orgId || "org")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 8);
   return `gvk-${slug}-${rand}`;
 }
 
@@ -420,7 +510,10 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!keyName.trim()) { setError("Key name is required."); return; }
+    if (!keyName.trim()) {
+      setError("Key name is required.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -441,19 +534,38 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
   return (
     <form onSubmit={submit}>
       <p className="panel-muted" style={{ marginBottom: 24, marginTop: 0 }}>
-        Create an API key for <strong>{displayName(org.org_name) || displayName(org.id)}</strong> / <strong>{displayName(project.project_name) || displayName(project.id)}</strong>.
-        The secret token is auto-generated — share it with the external team so their SDK can authenticate.
+        Create an API key for{" "}
+        <strong>{displayName(org.org_name) || displayName(org.id)}</strong> /{" "}
+        <strong>
+          {displayName(project.project_name) || displayName(project.id)}
+        </strong>
+        . The secret token is auto-generated — share it with the external team
+        so their SDK can authenticate.
       </p>
 
       <div className="stack">
-
         {/* ── Secret token (generated, read-only) ── */}
         <div className="field">
           <label>
             Secret Token
-            <span style={{ marginLeft: 8, fontWeight: 400, color: "var(--gray-500)", textTransform: "none", letterSpacing: 0 }}>
+            <span
+              style={{
+                marginLeft: 8,
+                fontWeight: 400,
+                color: "var(--gray-500)",
+                textTransform: "none",
+                letterSpacing: 0,
+              }}
+            >
               — this IS the key; the external team sends it as the{" "}
-              <code style={{ padding: "1px 5px", background: "var(--gray-100)", borderRadius: 4, fontSize: 12 }}>
+              <code
+                style={{
+                  padding: "1px 5px",
+                  background: "var(--gray-100)",
+                  borderRadius: 4,
+                  fontSize: 12,
+                }}
+              >
                 X-API-Key
               </code>{" "}
               request header
@@ -478,7 +590,11 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
               className="btn btn-ghost"
               onClick={regenerate}
               title="Generate a new secret"
-              style={{ padding: "0 14px", borderRadius: 14, whiteSpace: "nowrap" }}
+              style={{
+                padding: "0 14px",
+                borderRadius: 14,
+                whiteSpace: "nowrap",
+              }}
             >
               Regenerate
             </button>
@@ -490,7 +606,15 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
           <div className="field">
             <label>
               Key Name
-              <span style={{ marginLeft: 8, fontWeight: 400, color: "var(--gray-500)", textTransform: "none", letterSpacing: 0 }}>
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontWeight: 400,
+                  color: "var(--gray-500)",
+                  textTransform: "none",
+                  letterSpacing: 0,
+                }}
+              >
                 — a label so you can identify this key in the table
               </span>
             </label>
@@ -510,11 +634,15 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
             />
           </div>
         </div>
-
       </div>
       <InlineError msg={error} />
-      <div className="action-row" style={{ marginTop: 24, justifyContent: "space-between" }}>
-        <button type="button" className="btn btn-ghost" onClick={onBack}>Back</button>
+      <div
+        className="action-row"
+        style={{ marginTop: 24, justifyContent: "space-between" }}
+      >
+        <button type="button" className="btn btn-ghost" onClick={onBack}>
+          Back
+        </button>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Creating…" : "Create API Key & Finish"}
         </button>
@@ -527,16 +655,28 @@ function ApiKeyStep({ org, project, onNext, onBack }) {
 
 function DoneStep({ org, project, apiKey, onReset }) {
   const summaryRows = [
-    { label: "Organization ID", hint: "pass as org_id in every event body", value: org.id },
-    { label: "Project ID",      hint: "pass as project_id in every event body", value: project.id },
-    { label: "Key Name",        hint: "display label only — not used in requests", value: apiKey.key_name || "—" },
+    {
+      label: "Organization ID",
+      hint: "pass as org_id in every event body",
+      value: org.id,
+    },
+    {
+      label: "Project ID",
+      hint: "pass as project_id in every event body",
+      value: project.id,
+    },
+    {
+      label: "Key Name",
+      hint: "display label only — not used in requests",
+      value: apiKey.key_name || "—",
+    },
   ];
 
   return (
     <div className="stack">
       <p className="panel-muted" style={{ marginTop: 0 }}>
-        Setup complete. The secret token below is what the external team must use — copy it now,
-        it cannot be retrieved again from this UI.
+        Setup complete. The secret token below is what the external team must
+        use — copy it now, it cannot be retrieved again from this UI.
       </p>
 
       {/* ── Secret token — highlighted prominently ── */}
@@ -548,11 +688,29 @@ function DoneStep({ org, project, apiKey, onReset }) {
           border: "2px solid rgba(158,42,151,0.22)",
         }}
       >
-        <span style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--gray-500)", marginBottom: 8 }}>
-          Secret Token  (API Key ID)
+        <span
+          style={{
+            display: "block",
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: "0.14em",
+            color: "var(--gray-500)",
+            marginBottom: 8,
+          }}
+        >
+          Secret Token (API Key ID)
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <code style={{ flex: 1, fontSize: 15, color: "var(--brand-primary)", fontWeight: 700, letterSpacing: "0.04em", wordBreak: "break-all" }}>
+          <code
+            style={{
+              flex: 1,
+              fontSize: 15,
+              color: "var(--brand-primary)",
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              wordBreak: "break-all",
+            }}
+          >
             {apiKey.id}
           </code>
           <CopyBtn value={apiKey.id} />
@@ -574,11 +732,32 @@ function DoneStep({ org, project, apiKey, onReset }) {
           }}
         >
           <div>
-            <span style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--gray-500)", marginBottom: 3 }}>
+            <span
+              style={{
+                display: "block",
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "var(--gray-500)",
+                marginBottom: 3,
+              }}
+            >
               {label}
             </span>
-            <code style={{ fontSize: 13, color: "var(--gray-700)", fontWeight: 600 }}>{value}</code>
-            <span style={{ marginLeft: 10, fontSize: 11, color: "var(--gray-500)" }}>{hint}</span>
+            <code
+              style={{
+                fontSize: 13,
+                color: "var(--gray-700)",
+                fontWeight: 600,
+              }}
+            >
+              {value}
+            </code>
+            <span
+              style={{ marginLeft: 10, fontSize: 11, color: "var(--gray-500)" }}
+            >
+              {hint}
+            </span>
           </div>
           {value !== "—" && <CopyBtn value={value} />}
         </div>
@@ -597,7 +776,8 @@ function DoneStep({ org, project, apiKey, onReset }) {
           fontSize: 14,
         }}
       >
-        All three resources are live. Share the secret token with the external team — they embed it in every request.
+        All three resources are live. Share the secret token with the external
+        team — they embed it in every request.
       </div>
 
       <div className="action-row" style={{ justifyContent: "flex-end" }}>
@@ -615,18 +795,35 @@ function ResourceRow({ label, value, onDelete, deleting }) {
   return (
     <tr>
       <td>
-        <code style={{ color: "var(--brand-primary)", fontSize: 13 }}>{value.id}</code>
+        <code style={{ color: "var(--brand-primary)", fontSize: 13 }}>
+          {value.id}
+        </code>
       </td>
-      <td>{label === "org" ? displayName(value.org_name) : label === "project" ? (displayName(value.project_name) || "—") : (value.key_name || "—")}</td>
       <td>
-        {label === "project" ? <code style={{ fontSize: 12 }}>{value.org_id}</code> : null}
-        {label === "key" ? <code style={{ fontSize: 12 }}>{value.org_id || "—"}</code> : null}
-        {label === "org" ? (value.plan_type || "—") : null}
+        {label === "org"
+          ? displayName(value.org_name)
+          : label === "project"
+            ? displayName(value.project_name) || "—"
+            : value.key_name || "—"}
+      </td>
+      <td>
+        {label === "project" ? (
+          <code style={{ fontSize: 12 }}>{value.org_id}</code>
+        ) : null}
+        {label === "key" ? (
+          <code style={{ fontSize: 12 }}>{value.org_id || "—"}</code>
+        ) : null}
+        {label === "org" ? value.plan_type || "—" : null}
       </td>
       <td>
         <button
           className="btn btn-ghost"
-          style={{ padding: "5px 12px", fontSize: 12, borderRadius: 10, color: "var(--brand-primary)" }}
+          style={{
+            padding: "5px 12px",
+            fontSize: 12,
+            borderRadius: 10,
+            color: "var(--brand-primary)",
+          }}
           onClick={() => onDelete(value.id)}
           disabled={deleting}
         >
@@ -644,13 +841,19 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
 
   const doDelete = async (fn, setDeleting, id) => {
     setDeleting(id);
-    try { await fn(id); await onRefresh(); }
-    finally { setDeleting(null); }
+    try {
+      await fn(id);
+      await onRefresh();
+    } finally {
+      setDeleting(null);
+    }
   };
 
   return (
     <div className="stack" style={{ marginTop: 40 }}>
-      <h3 style={{ margin: 0, color: "var(--gray-700)" }}>Registered Tenants</h3>
+      <h3 style={{ margin: 0, color: "var(--gray-700)" }}>
+        Registered Tenants
+      </h3>
 
       <div className="table-wrap">
         <table>
@@ -664,16 +867,27 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
           </thead>
           <tbody>
             {orgs.length === 0 ? (
-              <tr><td colSpan={4} style={{ color: "var(--gray-500)", fontStyle: "italic" }}>No organizations yet.</td></tr>
-            ) : orgs.map((o) => (
-              <ResourceRow
-                key={o.id}
-                label="org"
-                value={o}
-                onDelete={(id) => doDelete(deleteOrganization, setDeletingOrg, id)}
-                deleting={deletingOrg === o.id}
-              />
-            ))}
+              <tr>
+                <td
+                  colSpan={4}
+                  style={{ color: "var(--gray-500)", fontStyle: "italic" }}
+                >
+                  No organizations yet.
+                </td>
+              </tr>
+            ) : (
+              orgs.map((o) => (
+                <ResourceRow
+                  key={o.id}
+                  label="org"
+                  value={o}
+                  onDelete={(id) =>
+                    doDelete(deleteOrganization, setDeletingOrg, id)
+                  }
+                  deleting={deletingOrg === o.id}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -690,16 +904,27 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
           </thead>
           <tbody>
             {projects.length === 0 ? (
-              <tr><td colSpan={4} style={{ color: "var(--gray-500)", fontStyle: "italic" }}>No projects yet.</td></tr>
-            ) : projects.map((p) => (
-              <ResourceRow
-                key={p.id}
-                label="project"
-                value={p}
-                onDelete={(id) => doDelete(deleteProject, setDeletingProject, id)}
-                deleting={deletingProject === p.id}
-              />
-            ))}
+              <tr>
+                <td
+                  colSpan={4}
+                  style={{ color: "var(--gray-500)", fontStyle: "italic" }}
+                >
+                  No projects yet.
+                </td>
+              </tr>
+            ) : (
+              projects.map((p) => (
+                <ResourceRow
+                  key={p.id}
+                  label="project"
+                  value={p}
+                  onDelete={(id) =>
+                    doDelete(deleteProject, setDeletingProject, id)
+                  }
+                  deleting={deletingProject === p.id}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -716,16 +941,25 @@ function ExistingResources({ orgs, projects, apiKeys, onRefresh }) {
           </thead>
           <tbody>
             {apiKeys.length === 0 ? (
-              <tr><td colSpan={4} style={{ color: "var(--gray-500)", fontStyle: "italic" }}>No API keys yet.</td></tr>
-            ) : apiKeys.map((k) => (
-              <ResourceRow
-                key={k.id}
-                label="key"
-                value={k}
-                onDelete={(id) => doDelete(deleteApiKey, setDeletingKey, id)}
-                deleting={deletingKey === k.id}
-              />
-            ))}
+              <tr>
+                <td
+                  colSpan={4}
+                  style={{ color: "var(--gray-500)", fontStyle: "italic" }}
+                >
+                  No API keys yet.
+                </td>
+              </tr>
+            ) : (
+              apiKeys.map((k) => (
+                <ResourceRow
+                  key={k.id}
+                  label="key"
+                  value={k}
+                  onDelete={(id) => doDelete(deleteApiKey, setDeletingKey, id)}
+                  deleting={deletingKey === k.id}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -762,7 +996,9 @@ export default function Setup() {
     }
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
   const reset = () => {
     setStep(0);
@@ -774,11 +1010,14 @@ export default function Setup() {
 
   return (
     <div className="page-shell">
-      <div className="hero-card" style={{ borderRadius: "var(--radius-lg)", padding: 28 }}>
+      <div
+        className="hero-card"
+        style={{ borderRadius: "var(--radius-lg)", padding: 28 }}
+      >
         <h2>Tenant Setup Wizard</h2>
         <p>
-          Register an external team's organization, project, and API key on your governance server
-          so their AI tools can start sending telemetry.
+          Register an external team's organization, project, and API key on your
+          governance server so their AI tools can start sending telemetry.
         </p>
       </div>
 
@@ -786,12 +1025,20 @@ export default function Setup() {
         <StepBar current={step} />
 
         {step === 0 && (
-          <OrgStep onNext={(data) => { setOrg(data); setStep(1); }} />
+          <OrgStep
+            onNext={(data) => {
+              setOrg(data);
+              setStep(1);
+            }}
+          />
         )}
         {step === 1 && org && (
           <ProjectStep
             org={org}
-            onNext={(data) => { setProject(data); setStep(2); }}
+            onNext={(data) => {
+              setProject(data);
+              setStep(2);
+            }}
             onBack={() => setStep(0)}
           />
         )}
@@ -799,12 +1046,21 @@ export default function Setup() {
           <ApiKeyStep
             org={org}
             project={project}
-            onNext={(data) => { setApiKey(data); setStep(3); loadAll(); }}
+            onNext={(data) => {
+              setApiKey(data);
+              setStep(3);
+              loadAll();
+            }}
             onBack={() => setStep(1)}
           />
         )}
         {step === 3 && org && project && apiKey && (
-          <DoneStep org={org} project={project} apiKey={apiKey} onReset={reset} />
+          <DoneStep
+            org={org}
+            project={project}
+            apiKey={apiKey}
+            onReset={reset}
+          />
         )}
       </div>
 
