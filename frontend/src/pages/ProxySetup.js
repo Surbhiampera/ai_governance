@@ -24,7 +24,7 @@ const INPUT_STYLE = {
   boxSizing: "border-box",
 };
 
-const PROXY_BASE = import.meta.env.REACT_APP_API_URL;
+const PROXY_BASE = import.meta.env.VITE_API_URL || "/api-proxy";
 // ─── Organization ────────────────────────────────────────────────────────────
 function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
   const [name, setName] = useState("");

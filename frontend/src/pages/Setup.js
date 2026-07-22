@@ -12,7 +12,7 @@ import {
 } from "../api";
 import { displayName } from "../utils/displayName";
 
-const PROXY_BASE = import.meta.env.REACT_APP_API_URL;
+const PROXY_BASE = import.meta.env.VITE_API_URL || "/api-proxy";
 // ─── SDK Snippet (auto-filled with real key + server URL) ─────────────────────
 
 function SdkSnippet({ govKey }) {

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 
-const API_BASE = import.meta.env.REACT_APP_API_URL;
+const API_BASE = import.meta.env.VITE_API_URL || "/api-proxy";
 const WELCOME = {
   id: 0,
   from: "bot",
