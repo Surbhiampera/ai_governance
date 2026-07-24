@@ -457,4 +457,20 @@ export const getProxyByProjectModel = (orgId, days = 30) =>
     params: { org_id: orgId || undefined, days },
   });
 
+// ─────────────────────── Optimization Tips ───────────────────────
+export const getOptimizationTips = (params) =>
+  API.get("/optimization-tips/", { params });
+export const getOptimizationTipsSummary = (orgId, projectId) =>
+  API.get("/optimization-tips/summary", {
+    params: { org_id: orgId || undefined, project_id: projectId || undefined },
+  });
+export const dismissOptimizationTip = (id) =>
+  API.patch(`/optimization-tips/${id}/dismiss`);
+export const applyOptimizationTip = (id) =>
+  API.patch(`/optimization-tips/${id}/apply`);
+export const rebuildOptimizationTips = (windowEnd) =>
+  API.post("/optimization-tips/admin/rebuild", null, {
+    params: { window_end: windowEnd || undefined },
+  });
+
 export default API;

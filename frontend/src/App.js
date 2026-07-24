@@ -10,12 +10,14 @@ import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import ProxySetup from "./pages/ProxySetup";
+import OptimizationTips from "./pages/OptimizationTips";
 // import ChatBot from "./components/ChatBot";
 
 const navItems = [
   { to: "/", label: "Overview", end: true },
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/cost", label: "Cost" },
+  { to: "/optimization-tips", label: "Optimization Tips" },
   { to: "/proxy-setup", label: "Proxy Setup" },
 ];
 
@@ -38,6 +40,11 @@ const NAV_ICONS = {
   "/proxy-setup": (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+    </svg>
+  ),
+  "/optimization-tips": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="4"/>
     </svg>
   ),
 };
@@ -95,6 +102,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/alerts-security" element={<AlertsSecurity />} />
             <Route path="/cost" element={<Cost />} />
+            <Route path="/optimization-tips" element={<OptimizationTips />} />
             <Route path="/proxy-setup" element={<ProxySetup />} />
           </Routes>
         </main>

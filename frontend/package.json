@@ -15,7 +15,7 @@
     "vitest": "^4.1.8"
   },
   "scripts": {
-    "start": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest"
