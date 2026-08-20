@@ -657,7 +657,7 @@ function Dashboard() {
   // so resolve display names from the canonical project list instead of showing raw ids.
   useEffect(() => {
     getProjects()
-      .then(r => setAllProjects(r.data || []))
+      .then(r => setAllProjects(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAllProjects([]));
   }, []);
 

@@ -1141,10 +1141,10 @@ function Cost() {
   // so resolve display names from the canonical lists instead of showing raw ids.
   useEffect(() => {
     getProjects()
-      .then(r => setAllProjects(r.data || []))
+      .then(r => setAllProjects(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAllProjects([]));
     getOrganizations()
-      .then(r => setAllOrgs(r.data || []))
+      .then(r => setAllOrgs(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAllOrgs([]));
   }, []);
 

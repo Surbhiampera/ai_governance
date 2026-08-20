@@ -570,10 +570,10 @@ function SuperAdminLogs() {
       getLookupProviders(),
       getLookupEventStatuses(),
     ]);
-    setOrgs(orgRes.data || []);
-    setTools(toolRes.data || []);
-    setProviders(provRes.data || []);
-    setEventStatuses(["", ...(statusRes.data || [])]);
+    setOrgs(Array.isArray(orgRes.data) ? orgRes.data : []);
+    setTools(Array.isArray(toolRes.data) ? toolRes.data : []);
+    setProviders(Array.isArray(provRes.data) ? provRes.data : []);
+    setEventStatuses(["", ...(Array.isArray(statusRes.data) ? statusRes.data : [])]);
   };
 
   const fetchInsights = useCallback(async (orgId) => {
