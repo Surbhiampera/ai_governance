@@ -42,7 +42,7 @@ export const getUsageTrends = (orgId, days) =>
 
 // ─────────────────────── Alerts ───────────────────────
 export const getAlerts = (status) =>
-  API.get("/alerts", { params: { status: status || undefined } });
+  API.get("/alerts/", { params: { status: status || undefined } });
 export const resolveAlert = (id) => API.patch(`/alerts/${id}/resolve`);
 
 // ─────────────────────── Security ───────────────────────
