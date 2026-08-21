@@ -211,7 +211,7 @@ export const triggerConnectorSync = (id) =>
   API.post(`/tools/connectors/${id}/trigger-sync`);
 
 // Response fields: model_name, provider, input_cost_per_1k, output_cost_per_1k, currency
-export const getModels = () => API.get("/models");
+export const getModels = () => API.get("/models/");
 // registerModel removed — POST /models/register returns 404; use POST /pricing instead
 
 // ─────────────────────── Governance rules ───────────────────────
@@ -222,7 +222,7 @@ export const createRule = (data) => API.post("/governance/rules", data);
 // ─────────────────────── Organizations / Projects ───────────────────────
 export const getOrganizations = () => API.get("/organizations/");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
-export const createOrganization = (data) => API.post("/organizations", data);
+export const createOrganization = (data) => API.post("/organizations/", data);
 export const updateOrganization = (id, data) =>
   API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
