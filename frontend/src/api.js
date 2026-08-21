@@ -236,25 +236,25 @@ export const deleteProject = (id) => API.delete(`/projects/${id}`);
 
 // ─────────────────────── Budgets / API Keys ───────────────────────
 export const getBudgets = (orgId) =>
-  API.get("/budgets", { params: { org_id: orgId || undefined } });
+  API.get("/budgets/", { params: { org_id: orgId || undefined } });
 export const getBudgetUtilization = (orgId) =>
   API.get("/budgets/utilization", { params: { org_id: orgId || undefined } });
 
 export const getRateLimits = (orgId) =>
-  API.get("/rate-limits", { params: { org_id: orgId || undefined } });
-export const createRateLimit = (data) => API.post("/rate-limits", data);
+  API.get("/rate-limits/", { params: { org_id: orgId || undefined } });
+export const createRateLimit = (data) => API.post("/rate-limits/", data);
 export const updateRateLimit = (id, data) =>
   API.put(`/rate-limits/${id}`, data);
 export const deleteRateLimit = (id) => API.delete(`/rate-limits/${id}`);
-export const createBudget = (data) => API.post("/budgets", data);
+export const createBudget = (data) => API.post("/budgets/", data);
 export const updateBudget = (id, data) => API.put(`/budgets/${id}`, data);
 export const deleteBudget = (id) => API.delete(`/budgets/${id}`);
 
 export const getApiKeys = (orgId, projectId) =>
-  API.get("/api-keys", {
+  API.get("/api-keys/", {
     params: { org_id: orgId || undefined, project_id: projectId || undefined },
   });
-export const createApiKey = (data) => API.post("/api-keys", data);
+export const createApiKey = (data) => API.post("/api-keys/", data);
 export const deleteApiKey = (id) => API.delete(`/api-keys/${id}`);
 
 // ─────────────────────── Costs ───────────────────────
@@ -312,8 +312,8 @@ export const getCostSpendCapStatus = (orgId, projectId) =>
   });
 
 // ─────────────────────── Pricing ───────────────────────
-export const getModelPricing = () => API.get("/pricing");
-export const createModelPricing = (data) => API.post("/pricing", data);
+export const getModelPricing = () => API.get("/pricing/");
+export const createModelPricing = (data) => API.post("/pricing/", data);
 export const deleteModelPricing = (id) => API.delete(`/pricing/${id}`);
 
 // ─────────────────────── Lookups (dynamic dropdowns) ───────────────────────
@@ -353,9 +353,9 @@ export const triggerConnectorPoll = () =>
 
 // ─────────────────────── Proxy — Governance Keys ───────────────────────
 export const listGovernanceKeys = (orgId) =>
-  API.get("/governance-keys", { params: { org_id: orgId } });
+  API.get("/governance-keys/", { params: { org_id: orgId } });
 export const createGovernanceKey = (payload) =>
-  API.post("/governance-keys", payload);
+  API.post("/governance-keys/", payload);
 export const revokeGovernanceKey = (keyId) =>
   API.delete(`/governance-keys/${keyId}`);
 export const rotateGovernanceKey = (keyId) =>
