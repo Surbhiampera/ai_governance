@@ -220,7 +220,7 @@ export const getRules = (orgId) =>
 export const createRule = (data) => API.post("/governance/rules", data);
 
 // ─────────────────────── Organizations / Projects ───────────────────────
-export const getOrganizations = () => API.get("/organizations");
+export const getOrganizations = () => API.get("/organizations/");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
 export const createOrganization = (data) => API.post("/organizations", data);
 export const updateOrganization = (id, data) =>
