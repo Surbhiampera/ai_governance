@@ -230,7 +230,7 @@ export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
 export const getProjects = (orgId) =>
   API.get("/projects", { params: { org_id: orgId || undefined } });
 export const getProject = (id) => API.get(`/projects/${id}`);
-export const createProject = (data) => API.post("/projects", data);
+export const createProject = (data) => API.post("/projects/", data);
 export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
 export const deleteProject = (id) => API.delete(`/projects/${id}`);
 
