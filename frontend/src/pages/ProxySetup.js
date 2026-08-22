@@ -12,8 +12,14 @@ import {
   getRateLimits,
   createRateLimit,
   deleteRateLimit,
+  getModelCatalog,
+  getOrganizationModels,
+  updateOrganizationModels,
+  getProjectModels,
+  updateProjectModels,
 } from "../api";
 import { displayName } from "../utils/displayName";
+import { ModelMultiSelect, ModelDefaultSelect } from "../components/ModelSelector";
 
 const INPUT_STYLE = {
   padding: "8px 12px",
@@ -26,11 +32,20 @@ const INPUT_STYLE = {
 
 const PROXY_BASE = import.meta.env.VITE_API_URL || "/api-proxy";
 // ─── Organization ────────────────────────────────────────────────────────────
-function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
+function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allowedModels, setAllowedModels] = useState([]);
+  const [defaultModel, setDefaultModel] = useState("");
+
+  // Keep default model valid whenever the allowed-model set changes
+  useEffect(() => {
+    if (defaultModel && !allowedModels.includes(defaultModel)) {
+      setDefaultModel("");
+    }
+  }, [allowedModels, defaultModel]);
 
   // Sync input text when selectedOrg changes from parent (e.g. auto-select on load)
   useEffect(() => {
@@ -59,7 +74,12 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
       "_" +
       Date.now();
     try {
-      const r = await createOrganization({ id: orgId, org_name: orgName });
+      const r = await createOrganization({
+        id: orgId,
+        org_name: orgName,
+        allowed_models: allowedModels,
+        default_model: defaultModel,
+      });
       const newOrg = r.data;
       // Extract created ID — backend may return id, org_id, or use our provided orgId
       const createdId = newOrg?.id || newOrg?.org_id || orgId;
@@ -72,6 +92,8 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
         list.find((o) => o.org_name === orgName);
       setSelectedOrg(found?.id || createdId);
       setName(orgName);
+      setAllowedModels([]);
+      setDefaultModel("");
       setMsg(`Organization "${orgName}" created.`);
     } catch (e) {
       const detail = e.response?.data?.detail;
@@ -186,11 +208,52 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
         <button
           className="btn btn-primary"
           onClick={handleCreate}
-          disabled={saving || !name.trim()}
+          disabled={saving || !name.trim() || !defaultModel}
           style={{ whiteSpace: "nowrap" }}
         >
           {saving ? "Creating…" : "Create Org"}
         </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Allowed Models
+          </div>
+          <ModelMultiSelect
+            catalog={catalog}
+            selected={allowedModels}
+            onChange={setAllowedModels}
+          />
+        </div>
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Default Model <span style={{ color: "#ef4444" }}>*</span>
+          </div>
+          <ModelDefaultSelect
+            catalog={catalog}
+            allowed={allowedModels}
+            value={defaultModel}
+            onChange={setDefaultModel}
+          />
+          <p
+            style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
+          >
+            Required — pick at least one allowed model, then choose the
+            default.
+          </p>
+        </div>
       </div>
 
       {msg && (
@@ -204,6 +267,14 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg }) {
           {msg}
         </p>
       )}
+
+      {selectedOrg && (
+        <ModelsSection
+          scope="organization"
+          id={selectedOrg}
+          catalog={catalog}
+        />
+      )}
     </section>
   );
 }
@@ -215,11 +286,20 @@ function ProjectStep({
   setProjects,
   selectedProject,
   setSelectedProject,
+  catalog,
 }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allowedModels, setAllowedModels] = useState([]);
+  const [defaultModel, setDefaultModel] = useState("");
+
+  useEffect(() => {
+    if (defaultModel && !allowedModels.includes(defaultModel)) {
+      setDefaultModel("");
+    }
+  }, [allowedModels, defaultModel]);
 
   const load = useCallback(() => {
     if (!orgId) return;
@@ -268,6 +348,8 @@ function ProjectStep({
         id: projId,
         org_id: orgId,
         project_name: projName,
+        ...(allowedModels.length > 0 && { allowed_models: allowedModels }),
+        ...(defaultModel && { default_model: defaultModel }),
       });
       const newProj = r.data;
       // Extract created ID — backend may return id, project_id, or use our provided projId
@@ -280,6 +362,8 @@ function ProjectStep({
         list.find((p) => p.project_name === projName);
       setSelectedProject(found?.id || createdId);
       setName(projName);
+      setAllowedModels([]);
+      setDefaultModel("");
       setMsg(`Project "${projName}" created.`);
     } catch (e) {
       const detail = e.response?.data?.detail;
@@ -404,6 +488,46 @@ function ProjectStep({
         </button>
       </div>
 
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Allowed Models
+          </div>
+          <ModelMultiSelect
+            catalog={catalog}
+            selected={allowedModels}
+            onChange={setAllowedModels}
+          />
+        </div>
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Default Model
+          </div>
+          <ModelDefaultSelect
+            catalog={catalog}
+            allowed={allowedModels}
+            value={defaultModel}
+            onChange={setDefaultModel}
+          />
+          <p
+            style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
+          >
+            Leave blank to inherit organization defaults.
+          </p>
+        </div>
+      </div>
+
       {msg && (
         <p
           style={{
@@ -415,7 +539,159 @@ function ProjectStep({
           {msg}
         </p>
       )}
+
+      {selectedProject && (
+        <ModelsSection scope="project" id={selectedProject} catalog={catalog} />
+      )}
     </section>
+  );
+}
+
+// ─── Models (edit existing org/project selection, independent of create flow) ─
+function ModelsSection({ scope, id, catalog }) {
+  const [allowedModels, setAllowedModels] = useState([]);
+  const [defaultModel, setDefaultModel] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const getFn = scope === "organization" ? getOrganizationModels : getProjectModels;
+  const updateFn =
+    scope === "organization" ? updateOrganizationModels : updateProjectModels;
+
+  const load = useCallback(() => {
+    if (!id) return;
+    setLoading(true);
+    getFn(id)
+      .then((r) => {
+        setAllowedModels(r.data?.allowed_models || []);
+        setDefaultModel(r.data?.default_model || "");
+        setDirty(false);
+        setMsg("");
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, scope]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg("");
+    try {
+      await updateFn(id, {
+        allowed_models: allowedModels,
+        default_model: defaultModel || null,
+      });
+      setDirty(false);
+      setMsg("Saved.");
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const errMsg = Array.isArray(detail)
+        ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+        : detail || e.message;
+      setMsg("Error: " + errMsg);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        paddingTop: 16,
+        borderTop: "1px solid var(--border)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Models</div>
+        {loading && (
+          <span style={{ fontSize: 12, color: "var(--gray-400)" }}>
+            Loading…
+          </span>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Allowed Models
+          </div>
+          <ModelMultiSelect
+            catalog={catalog}
+            selected={allowedModels}
+            onChange={(v) => {
+              setAllowedModels(v);
+              setDirty(true);
+            }}
+            disabled={loading}
+          />
+        </div>
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Default Model
+          </div>
+          <ModelDefaultSelect
+            catalog={catalog}
+            allowed={allowedModels}
+            value={defaultModel}
+            onChange={(v) => {
+              setDefaultModel(v);
+              setDirty(true);
+            }}
+            disabled={loading}
+          />
+          {scope === "project" && (
+            <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}>
+              Leave blank to inherit organization defaults.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          className="btn btn-secondary"
+          onClick={handleSave}
+          disabled={saving || loading || !dirty}
+          style={{ fontSize: 12, padding: "6px 14px" }}
+        >
+          {saving ? "Saving…" : "Save Models"}
+        </button>
+        {msg && (
+          <span
+            style={{
+              fontSize: 12,
+              color: msg.startsWith("Error") ? "#ef4444" : "#22c55e",
+            }}
+          >
+            {msg}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1413,6 +1689,13 @@ export default function ProxySetup() {
   const [selectedProject, setSelectedProject] = useState("");
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [orgsError, setOrgsError] = useState("");
+  const [catalog, setCatalog] = useState([]);
+
+  useEffect(() => {
+    getModelCatalog()
+      .then((r) => setCatalog(r.data || []))
+      .catch(() => setCatalog([]));
+  }, []);
 
   useEffect(() => {
     setOrgsLoading(true);
@@ -1456,6 +1739,7 @@ export default function ProxySetup() {
           setOrgs={setOrgs}
           selectedOrg={selectedOrg}
           setSelectedOrg={setSelectedOrg}
+          catalog={catalog}
         />
 
         {selectedOrg && (
@@ -1465,6 +1749,7 @@ export default function ProxySetup() {
             setProjects={setProjects}
             selectedProject={selectedProject}
             setSelectedProject={setSelectedProject}
+            catalog={catalog}
           />
         )}
 
