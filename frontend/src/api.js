@@ -214,6 +214,9 @@ export const triggerConnectorSync = (id) =>
 export const getModels = () => API.get("/models/");
 // registerModel removed — POST /models/register returns 404; use POST /pricing instead
 
+// Response: array of { model_name, provider, category, input_per_1m, output_per_1m, context_window, max_output_tokens }
+export const getModelCatalog = () => API.get("/models/catalog");
+
 // ─────────────────────── Governance rules ───────────────────────
 export const getRules = (orgId) =>
   API.get("/governance/rules", { params: { org_id: orgId || undefined } });
@@ -227,12 +230,23 @@ export const updateOrganization = (id, data) =>
   API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
 
+// Response: { allowed_models: string[], default_model: string | null }
+export const getOrganizationModels = (id) =>
+  API.get(`/organizations/${id}/models`);
+export const updateOrganizationModels = (id, data) =>
+  API.put(`/organizations/${id}/models`, data);
+
 export const getProjects = (orgId) =>
   API.get("/projects", { params: { org_id: orgId || undefined } });
 export const getProject = (id) => API.get(`/projects/${id}`);
 export const createProject = (data) => API.post("/projects/", data);
 export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
 export const deleteProject = (id) => API.delete(`/projects/${id}`);
+
+// Response: { allowed_models: string[], default_model: string | null }
+export const getProjectModels = (id) => API.get(`/projects/${id}/models`);
+export const updateProjectModels = (id, data) =>
+  API.put(`/projects/${id}/models`, data);
 
 // ─────────────────────── Budgets / API Keys ───────────────────────
 export const getBudgets = (orgId) =>
