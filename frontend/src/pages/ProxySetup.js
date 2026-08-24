@@ -694,78 +694,53 @@ function ModelsSection({ scope, id, catalog }) {
         )}
       </div>
 
-      <UnavailableModelsBanner
-        names={unavailableAllowed}
-        onRemove={removeUnavailable}
-      />
-
-      {catalog.length === 0 ? (
-        <EmptyCatalogNotice />
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-            marginBottom: 10,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--gray-500)",
-                marginBottom: 4,
-              }}
-            >
-              Allowed Models
-            </div>
-            <ModelMultiSelect
-              catalog={catalog}
-              selected={allowedModels}
-              onChange={(v) => {
-                setAllowedModels(v);
-                setDirty(true);
-              }}
-              disabled={loading}
-            />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Allowed Models
           </div>
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--gray-500)",
-                marginBottom: 4,
-              }}
-            >
-              Default Model
-            </div>
-            <ModelDefaultSelect
-              catalog={catalog}
-              allowed={allowedModels}
-              value={defaultModel}
-              onChange={(v) => {
-                setDefaultModel(v);
-                setDirty(true);
-              }}
-              disabled={loading}
-            />
-            {defaultUnavailable && !unavailableAllowed.includes(defaultModel) && (
-              <p style={{ fontSize: 11, color: "#ef4444", marginTop: 6 }}>
-                ⚠ "{defaultModel}" is no longer available — choose a new
-                default.
-              </p>
-            )}
-            {scope === "project" && (
-              <p
-                style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
-              >
-                Leave blank to inherit organization defaults.
-              </p>
-            )}
-          </div>
+          <ModelMultiSelect
+            catalog={catalog}
+            selected={allowedModels}
+            onChange={(v) => {
+              setAllowedModels(v);
+              setDirty(true);
+            }}
+            disabled={loading}
+          />
         </div>
-      )}
+        <div>
+          <div
+            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
+          >
+            Default Model
+          </div>
+          <ModelDefaultSelect
+            catalog={catalog}
+            allowed={allowedModels}
+            value={defaultModel}
+            onChange={(v) => {
+              setDefaultModel(v);
+              setDirty(true);
+            }}
+            disabled={loading}
+          />
+          {scope === "project" && (
+            <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}>
+              Leave blank to inherit organization defaults.
+            </p>
+          )}
+        </div>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button
