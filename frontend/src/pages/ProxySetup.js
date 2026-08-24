@@ -31,6 +31,86 @@ const INPUT_STYLE = {
 };
 
 const PROXY_BASE = import.meta.env.VITE_API_URL || "/api-proxy";
+
+// ─── Model catalog helpers (shared by Org/Project create + Models edit) ──────
+function EmptyCatalogNotice() {
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        color: "#92400e",
+        background: "rgba(245,158,11,0.1)",
+        border: "1px solid rgba(245,158,11,0.3)",
+        borderRadius: 6,
+        padding: "8px 12px",
+        marginBottom: 10,
+      }}
+    >
+      No models available — configure a provider API key first.
+    </div>
+  );
+}
+
+// Flags allowed/default model selections that were saved previously but no
+// longer appear in the live catalog (e.g. the provider key was removed),
+// instead of silently hiding them or letting a re-save fail unexplained.
+function UnavailableModelsBanner({ names, onRemove }) {
+  if (!names || names.length === 0) return null;
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        color: "#991b1b",
+        background: "rgba(239,68,68,0.06)",
+        border: "1px solid rgba(239,68,68,0.25)",
+        borderRadius: 6,
+        padding: "8px 12px",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ marginBottom: 6 }}>
+        ⚠ No longer available (remove before saving):
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {names.map((name) => (
+          <span
+            key={name}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "2px 8px",
+              borderRadius: 20,
+              background: "rgba(239,68,68,0.12)",
+              fontFamily: "monospace",
+              fontSize: 11,
+            }}
+          >
+            {name}
+            <button
+              type="button"
+              onClick={() => onRemove(name)}
+              title={`Remove ${name}`}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#991b1b",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 12,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Organization ────────────────────────────────────────────────────────────
 function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
   const [name, setName] = useState("");
