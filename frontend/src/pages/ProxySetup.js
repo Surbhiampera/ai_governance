@@ -704,6 +704,21 @@ function ModelsSection({ scope, id, catalog }) {
     load();
   }, [load]);
 
+  // Previously saved selections that have since dropped out of the catalog
+  // (e.g. the provider key was removed) — flag them instead of hiding them.
+  const unavailableAllowed = allowedModels.filter(
+    (name) => !(catalog || []).some((m) => m.model_name === name),
+  );
+  const defaultUnavailable =
+    !!defaultModel &&
+    !(catalog || []).some((m) => m.model_name === defaultModel);
+
+  const removeUnavailable = (name) => {
+    setAllowedModels((prev) => prev.filter((m) => m !== name));
+    if (defaultModel === name) setDefaultModel("");
+    setDirty(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setMsg("");
@@ -748,53 +763,78 @@ function ModelsSection({ scope, id, catalog }) {
         )}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Allowed Models
+      <UnavailableModelsBanner
+        names={unavailableAllowed}
+        onRemove={removeUnavailable}
+      />
+
+      {catalog.length === 0 ? (
+        <EmptyCatalogNotice />
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Allowed Models
+            </div>
+            <ModelMultiSelect
+              catalog={catalog}
+              selected={allowedModels}
+              onChange={(v) => {
+                setAllowedModels(v);
+                setDirty(true);
+              }}
+              disabled={loading}
+            />
           </div>
-          <ModelMultiSelect
-            catalog={catalog}
-            selected={allowedModels}
-            onChange={(v) => {
-              setAllowedModels(v);
-              setDirty(true);
-            }}
-            disabled={loading}
-          />
-        </div>
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Default Model
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Default Model
+            </div>
+            <ModelDefaultSelect
+              catalog={catalog}
+              allowed={allowedModels}
+              value={defaultModel}
+              onChange={(v) => {
+                setDefaultModel(v);
+                setDirty(true);
+              }}
+              disabled={loading}
+            />
+            {defaultUnavailable && !unavailableAllowed.includes(defaultModel) && (
+              <p style={{ fontSize: 11, color: "#ef4444", marginTop: 6 }}>
+                ⚠ "{defaultModel}" is no longer available — choose a new
+                default.
+              </p>
+            )}
+            {scope === "project" && (
+              <p
+                style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
+              >
+                Leave blank to inherit organization defaults.
+              </p>
+            )}
           </div>
-          <ModelDefaultSelect
-            catalog={catalog}
-            allowed={allowedModels}
-            value={defaultModel}
-            onChange={(v) => {
-              setDefaultModel(v);
-              setDirty(true);
-            }}
-            disabled={loading}
-          />
-          {scope === "project" && (
-            <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}>
-              Leave blank to inherit organization defaults.
-            </p>
-          )}
         </div>
-      </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button
