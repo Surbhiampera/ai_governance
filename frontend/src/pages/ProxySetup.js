@@ -61,6 +61,18 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
       .includes(name.toLowerCase()),
   );
 
+  // Only treat this as "editing the already-selected org" (and hide the
+  // create-time picker in favor of ModelsSection below) when the typed name
+  // still matches it — otherwise the user is composing a new org.
+  const selectedOrgObj = orgs.find((o) => o.id === selectedOrg);
+  const isEditingSelected =
+    selectedOrg &&
+    selectedOrgObj &&
+    name.trim().toLowerCase() ===
+      (
+        displayName(selectedOrgObj.org_name) || displayName(selectedOrgObj.id)
+      ).toLowerCase();
+
   const handleCreate = async () => {
     if (!name.trim()) return;
     setSaving(true);
@@ -215,46 +227,54 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
         </button>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Allowed Models
+      {!isEditingSelected && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Allowed Models
+            </div>
+            <ModelMultiSelect
+              catalog={catalog}
+              selected={allowedModels}
+              onChange={setAllowedModels}
+            />
           </div>
-          <ModelMultiSelect
-            catalog={catalog}
-            selected={allowedModels}
-            onChange={setAllowedModels}
-          />
-        </div>
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Default Model <span style={{ color: "#ef4444" }}>*</span>
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Default Model <span style={{ color: "#ef4444" }}>*</span>
+            </div>
+            <ModelDefaultSelect
+              catalog={catalog}
+              allowed={allowedModels}
+              value={defaultModel}
+              onChange={setDefaultModel}
+            />
+            <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}>
+              Required — pick at least one allowed model, then choose the
+              default.
+            </p>
           </div>
-          <ModelDefaultSelect
-            catalog={catalog}
-            allowed={allowedModels}
-            value={defaultModel}
-            onChange={setDefaultModel}
-          />
-          <p
-            style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
-          >
-            Required — pick at least one allowed model, then choose the
-            default.
-          </p>
         </div>
-      </div>
+      )}
 
       {msg && (
         <p
@@ -330,6 +350,19 @@ function ProjectStep({
       .toLowerCase()
       .includes(name.toLowerCase()),
   );
+
+  // Only treat this as "editing the already-selected project" (and hide the
+  // create-time picker in favor of ModelsSection below) when the typed name
+  // still matches it — otherwise the user is composing a new project.
+  const selectedProjectObj = projects.find((p) => p.id === selectedProject);
+  const isEditingSelected =
+    selectedProject &&
+    selectedProjectObj &&
+    name.trim().toLowerCase() ===
+      (
+        displayName(selectedProjectObj.project_name) ||
+        displayName(selectedProjectObj.id)
+      ).toLowerCase();
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -488,45 +521,53 @@ function ProjectStep({
         </button>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Allowed Models
+      {!isEditingSelected && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Allowed Models
+            </div>
+            <ModelMultiSelect
+              catalog={catalog}
+              selected={allowedModels}
+              onChange={setAllowedModels}
+            />
           </div>
-          <ModelMultiSelect
-            catalog={catalog}
-            selected={allowedModels}
-            onChange={setAllowedModels}
-          />
-        </div>
-        <div>
-          <div
-            style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 4 }}
-          >
-            Default Model
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--gray-500)",
+                marginBottom: 4,
+              }}
+            >
+              Default Model
+            </div>
+            <ModelDefaultSelect
+              catalog={catalog}
+              allowed={allowedModels}
+              value={defaultModel}
+              onChange={setDefaultModel}
+            />
+            <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}>
+              Leave blank to inherit organization defaults.
+            </p>
           </div>
-          <ModelDefaultSelect
-            catalog={catalog}
-            allowed={allowedModels}
-            value={defaultModel}
-            onChange={setDefaultModel}
-          />
-          <p
-            style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 6 }}
-          >
-            Leave blank to inherit organization defaults.
-          </p>
         </div>
-      </div>
+      )}
 
       {msg && (
         <p
