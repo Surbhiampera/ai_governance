@@ -334,15 +334,26 @@ function ProjectStep({
       .catch(() => {});
   }, [orgId, setProjects]);
 
-  // Sync input text when selectedProject changes from parent
+  // Sync input text when selectedProject changes from parent (e.g. picking
+  // a suggestion, or right after creation). Deliberately does NOT clear the
+  // name on deselect — that happens while the user is actively typing a new
+  // project name (see the input's onChange), and clearing here would wipe
+  // what they just typed.
   useEffect(() => {
     if (selectedProject && projects.length > 0) {
       const found = projects.find((p) => p.id === selectedProject);
       if (found)
         setName(displayName(found.project_name) || displayName(found.id));
     }
-    if (!selectedProject) setName("");
   }, [selectedProject, projects]);
+
+  // Reset the local form whenever the parent org changes (a fresh project
+  // context), since selectedProject/projects are reset by the parent too.
+  useEffect(() => {
+    setName("");
+    setAllowedModels([]);
+    setDefaultModel("");
+  }, [orgId]);
 
   useEffect(() => {
     load();
@@ -525,9 +536,7 @@ function ProjectStep({
         </button>
       </div>
 
-      {!isEditingSelected && catalog.length === 0 && <EmptyCatalogNotice />}
-
-      {!isEditingSelected && catalog.length > 0 && (
+      {!selectedProject && (
         <div
           style={{
             display: "grid",
