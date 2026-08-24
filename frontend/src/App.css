@@ -1105,6 +1105,10 @@ td {
     max-height 0.28s ease;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes chatbot-slide-up {
   from {
     opacity: 0;

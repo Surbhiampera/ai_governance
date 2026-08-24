@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
@@ -8,6 +8,7 @@ import {
   getProxyByModel, getProxyByProjectModel, getProxyRequests,
   getOrganizations, getBudgetUtilization, getProjects,
   createBudget, updateBudget, deleteBudget,
+  exportProjectReport,
 } from "../api";
 import { failureLabel, statusPillClass } from "../failureCodes";
 import { displayName } from "../utils/displayName";
@@ -37,6 +38,12 @@ function fmtTokens(n) {
 }
 function projLabel(r) { return displayName(r.project_name) || displayName(r.project_id) || "unassigned"; }
 function orgLabel(orgId, orgNameMap = {}) { return displayName(orgNameMap[orgId]) || displayName(orgId) || "—"; }
+function rangeFromDays(days) {
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 86400000);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return { start: fmt(start), end: fmt(end) };
+}
 
 const RANGE_OPTIONS = [
   { label: "7d", value: 7 }, { label: "14d", value: 14 },
@@ -60,6 +67,124 @@ function ChevronIcon({ open }) {
       style={{ transition: "transform 0.18s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>
       <polyline points="9 18 15 12 9 6" />
     </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      style={{ animation: "spin 0.8s linear infinite" }}>
+      <path d="M12 3a9 9 0 1 0 9 9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const REPORT_FORMATS = [
+  { value: "pdf",  label: "PDF" },
+  { value: "xlsx", label: "Excel" },
+  { value: "docx", label: "Word" },
+];
+
+function parseFilename(disposition, fallback) {
+  if (!disposition) return fallback;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match ? decodeURIComponent(match[1]) : fallback;
+}
+
+// ── Export menu: per-project report download (PDF / Excel / Word) ───────────
+function ExportMenu({ projectId, projectLabel, days }) {
+  const [open, setOpen]   = useState(false);
+  const [busy, setBusy]   = useState(false);
+  const [error, setError] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const handleExport = async (format) => {
+    setOpen(false);
+    setBusy(true);
+    setError("");
+    try {
+      const { start, end } = rangeFromDays(days);
+      const res = await exportProjectReport(projectId, format, start, end);
+      const fallback = `${(projectLabel || projectId || "project").replace(/[^a-z0-9-_]+/gi, "_")}-report.${format}`;
+      const filename = parseFilename(res.headers?.["content-disposition"], fallback);
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e?.response?.status === 404 ? "Project not found." : "Export failed.");
+      setTimeout(() => setError(""), 4000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div ref={ref} onClick={(e) => e.stopPropagation()} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        disabled={busy}
+        title="Export report"
+        aria-label="Export report"
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 28, height: 28, borderRadius: 6, border: "1px solid var(--border)",
+          background: "var(--surface,#fff)", cursor: busy ? "default" : "pointer",
+          color: "#9E2A97",
+        }}
+      >
+        {busy ? <SpinnerIcon /> : <DownloadIcon />}
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50,
+          background: "var(--surface,#fff)", border: "1px solid var(--border)",
+          borderRadius: 8, boxShadow: "0 4px 14px rgba(0,0,0,0.15)", minWidth: 110, overflow: "hidden",
+        }}>
+          {REPORT_FORMATS.map(f => (
+            <button key={f.value} type="button" onClick={() => handleExport(f.value)}
+              style={{
+                display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                fontSize: 12.5, border: "none", background: "transparent", cursor: "pointer", color: "var(--text)",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(158,42,151,0.08)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50,
+          background: "#fef2f2", border: "1px solid #fca5a5", color: "#ef4444",
+          fontSize: 11, padding: "6px 10px", borderRadius: 6, whiteSpace: "nowrap",
+        }}>
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -188,11 +313,12 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{projLabel(projData)}</h2>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4, fontFamily: "monospace" }}>{orgLabel(projData.org_id, orgNameMap)}</div>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             {projData.pii_hits > 0 && <span className="status-pill critical">{projData.pii_hits} PII hits</span>}
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", padding: "4px 12px", background: "rgba(255,255,255,0.12)", borderRadius: 20 }}>
               {pct(projData.total_cost, grandTotal)}% of total spend
             </span>
+            <ExportMenu projectId={pid} projectLabel={projLabel(projData)} days={days} />
           </div>
         </div>
 
@@ -1337,12 +1463,15 @@ function Cost() {
                           <StatCell label="Infra Cost"    value={money(infraCost)}       mono accent="#3FB6D4" />
                           <StatCell label="Total Cost"    value={money2(r.total_cost)}  mono bold accent="#9E2A97" />
                         </div>
-                        <div style={{ textAlign: "right", minWidth: 80 }}>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: "#9E2A97" }}>{share}%</div>
-                          <div style={{ marginTop: 4, height: 5, borderRadius: 4, background: "rgba(124,112,174,0.12)", overflow: "hidden" }}>
-                            <div style={{ width: `${share}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <div style={{ textAlign: "right", minWidth: 80 }}>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: "#9E2A97" }}>{share}%</div>
+                            <div style={{ marginTop: 4, height: 5, borderRadius: 4, background: "rgba(124,112,174,0.12)", overflow: "hidden" }}>
+                              <div style={{ width: `${share}%`, height: "100%", background: "#9E2A97", borderRadius: 4 }} />
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 4 }}>of total</div>
                           </div>
-                          <div style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 4 }}>of total</div>
+                          <ExportMenu projectId={pid} projectLabel={projLabel(r)} days={days} />
                         </div>
                       </div>
 

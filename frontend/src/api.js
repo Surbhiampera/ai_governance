@@ -487,4 +487,16 @@ export const rebuildOptimizationTips = (windowEnd) =>
     params: { window_end: windowEnd || undefined },
   });
 
+// ─────────────────────────── Reports ───────────────────────────
+export const getProjectReport = (projectId, start, end) =>
+  API.get(`/reports/projects/${projectId}`, {
+    params: { start: start || undefined, end: end || undefined },
+  });
+
+export const exportProjectReport = (projectId, format, start, end) =>
+  API.get(`/reports/projects/${projectId}/export`, {
+    params: { format, start: start || undefined, end: end || undefined },
+    responseType: "blob",
+  });
+
 export default API;
