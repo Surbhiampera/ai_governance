@@ -438,8 +438,22 @@ function ProjectStep({
             placeholder="Project name"
             value={name}
             onChange={(e) => {
-              setName(e.target.value);
+              const val = e.target.value;
+              setName(val);
               setShowSuggestions(true);
+              // Typing something that no longer matches the selected
+              // project means the user is composing a new one — deselect
+              // so the create-time model picker reappears (and the edit
+              // view below disappears) instead of showing both at once.
+              if (selectedProject) {
+                const cur = projects.find((p) => p.id === selectedProject);
+                const curLabel = cur
+                  ? displayName(cur.project_name) || displayName(cur.id)
+                  : "";
+                if (val.trim().toLowerCase() !== curLabel.toLowerCase()) {
+                  setSelectedProject("");
+                }
+              }
             }}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
