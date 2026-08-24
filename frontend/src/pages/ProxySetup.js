@@ -230,9 +230,7 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
         </button>
       </div>
 
-      {!isEditingSelected && catalog.length === 0 && <EmptyCatalogNotice />}
-
-      {!isEditingSelected && catalog.length > 0 && (
+      {!selectedOrg && (
         <div
           style={{
             display: "grid",
@@ -355,19 +353,6 @@ function ProjectStep({
       .toLowerCase()
       .includes(name.toLowerCase()),
   );
-
-  // Only treat this as "editing the already-selected project" (and hide the
-  // create-time picker in favor of ModelsSection below) when the typed name
-  // still matches it — otherwise the user is composing a new project.
-  const selectedProjectObj = projects.find((p) => p.id === selectedProject);
-  const isEditingSelected =
-    selectedProject &&
-    selectedProjectObj &&
-    name.trim().toLowerCase() ===
-      (
-        displayName(selectedProjectObj.project_name) ||
-        displayName(selectedProjectObj.id)
-      ).toLowerCase();
 
   const handleCreate = async () => {
     if (!name.trim()) return;
