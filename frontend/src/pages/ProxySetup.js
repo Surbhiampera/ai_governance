@@ -307,7 +307,9 @@ function OrgStep({ orgs, setOrgs, selectedOrg, setSelectedOrg, catalog }) {
         </button>
       </div>
 
-      {!isEditingSelected && (
+      {!isEditingSelected && catalog.length === 0 && <EmptyCatalogNotice />}
+
+      {!isEditingSelected && catalog.length > 0 && (
         <div
           style={{
             display: "grid",
@@ -601,7 +603,9 @@ function ProjectStep({
         </button>
       </div>
 
-      {!isEditingSelected && (
+      {!isEditingSelected && catalog.length === 0 && <EmptyCatalogNotice />}
+
+      {!isEditingSelected && catalog.length > 0 && (
         <div
           style={{
             display: "grid",
