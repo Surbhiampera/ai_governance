@@ -635,20 +635,14 @@ function ModelsSection({ scope, id, catalog }) {
     load();
   }, [load]);
 
-  // Previously saved selections that have since dropped out of the catalog
-  // (e.g. the provider key was removed) — flag them instead of hiding them.
-  const unavailableAllowed = allowedModels.filter(
-    (name) => !(catalog || []).some((m) => m.model_name === name),
-  );
-  const defaultUnavailable =
-    !!defaultModel &&
-    !(catalog || []).some((m) => m.model_name === defaultModel);
-
-  const removeUnavailable = (name) => {
-    setAllowedModels((prev) => prev.filter((m) => m !== name));
-    if (defaultModel === name) setDefaultModel("");
-    setDirty(true);
-  };
+  // Keep default model valid whenever the allowed-model set changes — e.g.
+  // the user removed a stale/unavailable model via ModelMultiSelect that
+  // happened to be the current default.
+  useEffect(() => {
+    if (defaultModel && !allowedModels.includes(defaultModel)) {
+      setDefaultModel("");
+    }
+  }, [allowedModels, defaultModel]);
 
   const handleSave = async () => {
     setSaving(true);
