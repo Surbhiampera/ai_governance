@@ -1420,16 +1420,17 @@ function Cost() {
           {/* 2 ── Project Breakdown (expandable table) */}
           {byProject.length > 0 && (
             <section className="panel">
-              <div className="section-head">
-                <div>
-                  <h3>Project Breakdown</h3>
-                  <p style={{ color: "var(--gray-500)", fontSize: 13 }}>Click a row to expand per-model details. Select a project above for the full deep-dive view.</p>
+              <div style={{ maxHeight: 1360, overflowY: "auto" }}>
+                <div className="section-head" style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--white)", paddingBottom: 12 }}>
+                  <div>
+                    <h3>Project Breakdown</h3>
+                    <p style={{ color: "var(--gray-500)", fontSize: 13 }}>Click a row to expand per-model details. Select a project above for the full deep-dive view.</p>
+                  </div>
+                  <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{byProject.length} project{byProject.length !== 1 ? "s" : ""}</span>
                 </div>
-                <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{byProject.length} project{byProject.length !== 1 ? "s" : ""}</span>
-              </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {byProject.map(r => {
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {byProject.map(r => {
                   const pid        = r.project_id || "unassigned";
                   const pm         = projectModelMap[pid] || {};
                   const share      = grandTotal > 0 ? ((r.total_cost / grandTotal) * 100).toFixed(1) : 0;
@@ -1565,6 +1566,7 @@ function Cost() {
                   <div style={{ textAlign: "right", minWidth: 80 }}>
                     <div style={{ fontSize: 18, fontWeight: 700, color: "#9E2A97" }}>100%</div>
                   </div>
+                </div>
                 </div>
               </div>
             </section>
