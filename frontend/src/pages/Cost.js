@@ -148,8 +148,8 @@ function ExportMenu({ projectId, projectLabel, days }) {
         aria-label="Export report"
         style={{
           display: "flex", alignItems: "center", justifyContent: "center",
-          width: 28, height: 28, borderRadius: 6, border: "1px solid var(--border)",
-          background: "var(--surface,#fff)", cursor: busy ? "default" : "pointer",
+          width: 28, height: 28, borderRadius: 6, border: "1px solid var(--border, #e2e8f0)",
+          background: "#fff", cursor: busy ? "default" : "pointer",
           color: "#9E2A97",
         }}
       >
@@ -158,14 +158,15 @@ function ExportMenu({ projectId, projectLabel, days }) {
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50,
-          background: "var(--surface,#fff)", border: "1px solid var(--border)",
+          background: "#fff", border: "1px solid var(--border, #e2e8f0)",
           borderRadius: 8, boxShadow: "0 4px 14px rgba(0,0,0,0.15)", minWidth: 110, overflow: "hidden",
         }}>
           {REPORT_FORMATS.map(f => (
             <button key={f.value} type="button" onClick={() => handleExport(f.value)}
               style={{
                 display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                fontSize: 12.5, border: "none", background: "transparent", cursor: "pointer", color: "var(--text)",
+                fontSize: 12.5, border: "none", background: "transparent", cursor: "pointer",
+                color: "var(--gray-700, #0f172a)", fontWeight: 500,
               }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(158,42,151,0.08)"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
