@@ -862,7 +862,7 @@ function AlertsSecurity() {
           {/* ── Row 1: Compact KPI strip ─────────────────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 8, flexShrink: 0 }}>
             {[
-              { label: "Total Requests", value: num(overview?.total_requests),         sub: `${days}d` },
+              { label: "Total Requests", value: num(overview?.total_requests),         sub: days === "all" ? "all time" : `${days}d` },
               { label: "Blocked",        value: num(overview?.blocked),                 sub: "violations" },
               { label: "PII Detections", value: num(overview?.pii_detections),         sub: "flagged" },
               { label: "Success Rate",   value: `${overview?.success_rate ?? 0}%`,     sub: "completion" },
