@@ -980,7 +980,7 @@ function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(124,112,174,0.1)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 11 }} />
+                <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 11 }} {...dateAxisTicks(trends.length)} />
                 <YAxis tick={{ fill: "#6d6782", fontSize: 11 }} tickFormatter={v => `$${Number(v).toFixed(4)}`} />
                 <Tooltip formatter={v => money(v)} />
                 <Area type="monotone" dataKey="total_cost" stroke="#9E2A97" fill="url(#dashCostFill)" strokeWidth={2.5} name="Cost" />

@@ -22,6 +22,7 @@ const RANGE_OPTIONS = [
   { label: "14d", value: 14 },
   { label: "30d", value: 30 },
   { label: "90d", value: 90 },
+  { label: "All", value: "all" },
 ];
 
 const ACTION_COLOR = {
@@ -36,7 +37,7 @@ const riskColor = (score) => {
 };
 
 function daysToStartDate(d) {
-  if (!d) return undefined;
+  if (!d || d === "all") return undefined;
   const dt = new Date();
   dt.setDate(dt.getDate() - d + 1);
   return dt.toISOString().split("T")[0];
