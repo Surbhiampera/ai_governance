@@ -781,7 +781,7 @@ function Dashboard() {
       {/* ── KPI Cards ────────────────────────────────────────────────────── */}
       <section className="stats-grid stats-grid-overview">
         {[
-          { label: "Total Cost",       value: money2(overview?.total_cost),           sub: `${days}d window`,
+          { label: "Total Cost",       value: money2(overview?.total_cost),           sub: rangeLabel(days),
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> },
           { label: "LLM Cost",         value: money2(overview?.llm_cost),             sub: "model inference",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg> },
@@ -843,7 +843,7 @@ function Dashboard() {
         <div className="section-head">
           <div>
             <h3>Key Insights</h3>
-            <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Automatically derived from your data for the last {days} days.</p>
+            <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Automatically derived from your data for {windowPhrase(days)}.</p>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
@@ -968,7 +968,7 @@ function Dashboard() {
 
       {/* ── Cost Trend ───────────────────────────────────────────────────── */}
       <section className="panel">
-        <div className="section-head"><div><h3>Cost Trend</h3><p style={{ fontSize: 13, color: "var(--gray-500)" }}>Daily cost over the last {days} days</p></div></div>
+        <div className="section-head"><div><h3>Cost Trend</h3><p style={{ fontSize: 13, color: "var(--gray-500)" }}>Daily cost over {windowPhrase(days)}</p></div></div>
         {trends.length > 0 ? (
           <div style={{ width: "100%", minHeight: 200 }}>
             <ResponsiveContainer width="100%" height={200}>
