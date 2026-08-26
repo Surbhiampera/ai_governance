@@ -466,7 +466,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(124,112,174,0.1)" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 9 }} />
+                    <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 9 }} {...dateAxisTicks(tokenTrend.length)} />
                     <YAxis tick={{ fill: "#6d6782", fontSize: 9 }} tickFormatter={v => `$${Number(v).toFixed(3)}`} />
                     <Tooltip formatter={v => money(v)} />
                     <Area type="monotone" dataKey="total_cost" stroke="#9E2A97" fill="url(#projCostFill)" strokeWidth={2} name="Cost" />
@@ -487,7 +487,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(124,112,174,0.1)" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 9 }} />
+                    <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 9 }} {...dateAxisTicks(tokenTrend.length)} />
                     <YAxis tick={{ fill: "#6d6782", fontSize: 9 }} tickFormatter={v => fmtTokens(v)} />
                     <Tooltip formatter={(v, n) => [fmtTokens(v), n]} />
                     <Area type="monotone" dataKey="prompt_tokens"     stroke="#7C70AE" fill="url(#inFill)"  strokeWidth={2} name="Input Tokens" />
@@ -1386,7 +1386,7 @@ function Cost() {
       {/* ── KPI Summary (always shown) ───────────────────────────────────── */}
       <section className="stats-grid stats-grid-overview">
         {[
-          { label: "Total Cost",        value: money2(effectiveOverview?.total_cost),     sub: selectedProject ? "this project" : `${days}d window` },
+          { label: "Total Cost",        value: money2(effectiveOverview?.total_cost),     sub: selectedProject ? "this project" : rangeLabel(days) },
           { label: "LLM Cost",          value: money2(effectiveOverview?.llm_cost),       sub: "model inference" },
           { label: "Total Requests",    value: num(effectiveOverview?.total_requests),    sub: `${num(effectiveOverview?.completed)} completed` },
           { label: "Avg Cost/Request",  value: money4((effectiveOverview?.total_cost || 0) / Math.max(effectiveOverview?.total_requests || 1, 1)), sub: "per proxied call" },
@@ -1599,7 +1599,7 @@ function Cost() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="rgba(124,112,174,0.12)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 11 }} />
+                  <XAxis dataKey="date" tick={{ fill: "#6d6782", fontSize: 11 }} {...dateAxisTicks(trends.length)} />
                   <YAxis tick={{ fill: "#6d6782", fontSize: 11 }} tickFormatter={v => `$${Number(v).toFixed(4)}`} />
                   <Tooltip formatter={v => money(v)} />
                   <Area type="monotone" dataKey="total_cost" stroke="#9E2A97" fill="url(#costFill)" strokeWidth={3} />
