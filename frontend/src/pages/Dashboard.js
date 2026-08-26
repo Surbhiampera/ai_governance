@@ -30,7 +30,20 @@ function projLabel(r, fallback = "Unassigned") {
 const RANGE_OPTIONS = [
   { label: "7d", value: 7 }, { label: "14d", value: 14 },
   { label: "30d", value: 30 }, { label: "90d", value: 90 },
+  { label: "All", value: "all" },
 ];
+
+function rangeLabel(days) {
+  return days === "all" ? "all time" : `${days}d window`;
+}
+
+// Caps the number of rendered date-axis ticks regardless of series length, so
+// an "All" range (which can span a handful of days or a year+) doesn't render
+// an unreadable wall of overlapping labels.
+function dateAxisTicks(length) {
+  if (!length || length <= 12) return { interval: 0 };
+  return { interval: Math.ceil(length / 10) - 1, angle: -35, textAnchor: "end", height: 46 };
+}
 
 // ── Key Insights engine ──────────────────────────────────────────────────────
 function computeInsights(byProject, byModel, trends, overview, piiSummary, days) {
