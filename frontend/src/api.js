@@ -396,6 +396,13 @@ export const createPiiPolicy = (payload) =>
   API.post("/proxy/pii-policies", payload);
 
 // ─────────────────────── Proxy — Reporting (proxy-only data) ────────────
+// `days` may be the string "all" (from an "All" range control) — in that case
+// we omit `days` and send `period=all` instead, which overrides it server-side.
+const daysOrPeriod = (days) => ({
+  days: days === "all" ? undefined : days,
+  period: days === "all" ? "all" : undefined,
+});
+
 export const getProxyOverview = (
   orgId,
   days = 30,
@@ -406,7 +413,7 @@ export const getProxyOverview = (
   API.get("/proxy/stats/overview", {
     params: {
       org_id: orgId || undefined,
-      days,
+      ...daysOrPeriod(days),
       project_id: projectId || undefined,
       provider: provider || undefined,
       model_name: modelName || undefined,
@@ -422,7 +429,7 @@ export const getProxyTrends = (
   API.get("/proxy/stats/trends", {
     params: {
       org_id: orgId || undefined,
-      days,
+      ...daysOrPeriod(days),
       project_id: projectId || undefined,
       provider: provider || undefined,
       model_name: modelName || undefined,
@@ -432,7 +439,7 @@ export const getProxyByProject = (orgId, days = 30, projectId) =>
   API.get("/costs/by-project", {
     params: {
       org_id: orgId || undefined,
-      days,
+      ...daysOrPeriod(days),
       project_id: projectId || undefined,
     },
   });
@@ -446,7 +453,7 @@ export const getProxyByModel = (
   API.get("/costs/by-model", {
     params: {
       org_id: orgId || undefined,
-      days,
+      ...daysOrPeriod(days),
       project_id: projectId || undefined,
       provider: provider || undefined,
       model_name: modelName || undefined,
@@ -466,7 +473,7 @@ export const getProxyPiiSummary = (
   API.get("/proxy/stats/pii", {
     params: {
       org_id: orgId || undefined,
-      days,
+      ...daysOrPeriod(days),
       project_id: projectId || undefined,
       provider: provider || undefined,
       model_name: modelName || undefined,
@@ -474,7 +481,7 @@ export const getProxyPiiSummary = (
   });
 export const getProxyByProjectModel = (orgId, days = 30) =>
   API.get("/proxy/stats/by-project-model", {
-    params: { org_id: orgId || undefined, days },
+    params: { org_id: orgId || undefined, ...daysOrPeriod(days) },
   });
 
 // ─────────────────────── Optimization Tips ───────────────────────

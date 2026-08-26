@@ -39,15 +39,29 @@ function fmtTokens(n) {
 function projLabel(r) { return displayName(r.project_name) || displayName(r.project_id) || "unassigned"; }
 function orgLabel(orgId, orgNameMap = {}) { return displayName(orgNameMap[orgId]) || displayName(orgId) || "—"; }
 function rangeFromDays(days) {
+  if (days === "all") return { start: undefined, end: undefined };
   const end = new Date();
   const start = new Date(end.getTime() - days * 86400000);
   const fmt = (d) => d.toISOString().slice(0, 10);
   return { start: fmt(start), end: fmt(end) };
 }
 
+function rangeLabel(days) {
+  return days === "all" ? "all time" : `${days}d window`;
+}
+
+// Caps the number of rendered date-axis ticks regardless of series length, so
+// an "All" range (which can span a handful of days or a year+) doesn't render
+// an unreadable wall of overlapping labels.
+function dateAxisTicks(length) {
+  if (!length || length <= 12) return { interval: 0 };
+  return { interval: Math.ceil(length / 10) - 1, angle: -35, textAnchor: "end", height: 46 };
+}
+
 const RANGE_OPTIONS = [
   { label: "7d", value: 7 }, { label: "14d", value: 14 },
   { label: "30d", value: 30 }, { label: "90d", value: 90 },
+  { label: "All", value: "all" },
 ];
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -310,7 +324,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Project Deep Dive · {days}d</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Project Deep Dive · {days === "all" ? "All time" : `${days}d`}</div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{projLabel(projData)}</h2>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4, fontFamily: "monospace" }}>{orgLabel(projData.org_id, orgNameMap)}</div>
           </div>
