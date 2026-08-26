@@ -37,6 +37,10 @@ function rangeLabel(days) {
   return days === "all" ? "all time" : `${days}d window`;
 }
 
+function windowPhrase(days) {
+  return days === "all" ? "all time" : `the last ${days} days`;
+}
+
 // Caps the number of rendered date-axis ticks regardless of series length, so
 // an "All" range (which can span a handful of days or a year+) doesn't render
 // an unreadable wall of overlapping labels.
@@ -79,7 +83,7 @@ function computeInsights(byProject, byModel, trends, overview, piiSummary, days)
     if (avgFirst > 0) {
       const change = Math.round(((avgSecond - avgFirst) / avgFirst) * 100);
       if (Math.abs(change) >= 5) insights.push({
-        text: `Cost ${change > 0 ? "increased" : "decreased"} ${Math.abs(change)}% in the latter half of the ${days}d window.`,
+        text: `Cost ${change > 0 ? "increased" : "decreased"} ${Math.abs(change)}% in the latter half of ${days === "all" ? "the selected window" : `the ${days}d window`}.`,
         level: change > 0 ? "warn" : "good",
       });
     }
@@ -231,7 +235,7 @@ function KpiModal({ cardKey, overview, byProject, byModel, piiSummary, days, onC
             <MRow label="External Tool Cost"    value={money2(overview?.external_cost)}  />
             <MRow label="Total Cost"            value={money2(overview?.total_cost)}     accent="#0f172a" />
           </MSection>
-          <MSection title={`Top Projects by Cost (${days}d)`}>
+          <MSection title={`Top Projects by Cost (${days === "all" ? "All time" : `${days}d`})`}>
             <div style={{ display: "grid", gap: 6 }}>
               {[...byProject].sort((a, b) => Number(b.total_cost || 0) - Number(a.total_cost || 0)).slice(0, 5).map(p => {
                 const share = grandTotal > 0 ? Math.round((Number(p.total_cost || 0) / grandTotal) * 100) : 0;
