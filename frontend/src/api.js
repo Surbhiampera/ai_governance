@@ -223,9 +223,12 @@ export const getRules = (orgId) =>
 export const createRule = (data) => API.post("/governance/rules", data);
 
 // ─────────────────────── Organizations / Projects ───────────────────────
-export const getOrganizations = () => API.get("/organizations/");
+export const getOrganizations = () => API.get("/organizations");
 export const getOrganization = (id) => API.get(`/organizations/${id}`);
-export const createOrganization = (data) => API.post("/organizations/", data);
+export const createOrganization = (data) =>
+  API.post("/organizations", data, {
+    headers: { "Cache-Control": "no-cache" },
+  });
 export const updateOrganization = (id, data) =>
   API.put(`/organizations/${id}`, data);
 export const deleteOrganization = (id) => API.delete(`/organizations/${id}`);
@@ -239,7 +242,10 @@ export const updateOrganizationModels = (id, data) =>
 export const getProjects = (orgId) =>
   API.get("/projects", { params: { org_id: orgId || undefined } });
 export const getProject = (id) => API.get(`/projects/${id}`);
-export const createProject = (data) => API.post("/projects/", data);
+export const createProject = (data) =>
+  API.post("/projects", data, {
+    headers: { "Cache-Control": "no-cache" },
+  });
 export const updateProject = (id, data) => API.put(`/projects/${id}`, data);
 export const deleteProject = (id) => API.delete(`/projects/${id}`);
 
