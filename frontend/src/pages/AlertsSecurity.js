@@ -1118,12 +1118,12 @@ function AlertsSecurity() {
                     <thead>
                       <tr>
                         <th>Request ID</th><th>Org</th><th>Project</th><th>Model</th>
-                        <th>PII Types</th><th>Provider</th><th>Route</th><th>Client IP</th><th>Received</th>
+                        <th>PII Types</th><th>Provider</th><th>Route</th><th>Reason</th><th>Client IP</th><th>Received</th>
                       </tr>
                     </thead>
                     <tbody>
                       {blockedRequests.length === 0
-                        ? <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No blocked requests in this period.</td></tr>
+                        ? <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--gray-500)", padding: "20px 0" }}>No blocked requests in this period.</td></tr>
                         : blockedRequests.map(row => (
                           <tr key={row.request_id}>
                             <td style={{ fontFamily: "monospace", fontSize: 10 }}>{row.request_id}</td>
@@ -1138,6 +1138,7 @@ function AlertsSecurity() {
                             </td>
                             <td style={{ fontSize: 12 }}>{row.provider || "—"}</td>
                             <td style={{ fontFamily: "monospace", fontSize: 10, color: "var(--gray-500)" }}>{row.entry_point || row.source_system || "—"}</td>
+                            <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.failure_reason || (row.failure_code ? failureLabel(row.failure_code) : "—")}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>{row.client_ip || "—"}</td>
                             <td style={{ fontSize: 11, color: "var(--gray-500)" }}>
                               {row.received_at ? new Date(row.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
