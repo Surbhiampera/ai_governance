@@ -287,6 +287,7 @@ function OptimizationTips() {
   const [error, setError]     = useState("");
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildMsg, setRebuildMsg] = useState("");
+  const [actionMsg, setActionMsg]   = useState("");
 
   useEffect(() => {
     getProjects().then((r) => setProjects(r.data || [])).catch(() => {});
@@ -327,6 +328,8 @@ function OptimizationTips() {
   useEffect(() => { setPage(0); }, [selectedProject, tipTypeFilter, severityFilter, statusFilter]);
 
   const applyStatusChange = (id, newStatus, updater) => {
+    setError("");
+    setActionMsg("");
     updater(id).then((res) => {
       // Once a tip leaves "open" it drops out of an open-only view; elsewhere just patch its status in place.
       if (statusFilter === "open" && newStatus !== "open") {
@@ -335,6 +338,7 @@ function OptimizationTips() {
       } else {
         setTips((prev) => prev.map((t) => (t.id === id ? res.data : t)));
       }
+      if (res.data?.applied_summary) setActionMsg(res.data.applied_summary);
       loadSummary();
     }).catch((err) => {
       setError(err?.response?.data?.detail || "Action failed.");
@@ -421,6 +425,7 @@ function OptimizationTips() {
 
           {error && <div className="error-message">{error}</div>}
           {rebuildMsg && <div className="list-meta">{rebuildMsg}</div>}
+          {actionMsg && <div className="list-meta">{actionMsg}</div>}
 
           {/* ── Header stat row ─────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
