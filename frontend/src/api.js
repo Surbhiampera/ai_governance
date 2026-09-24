@@ -20,6 +20,23 @@ API.interceptors.response.use(null, async (error) => {
   return API(config);
 });
 
+// ─────────────────────── Auth ───────────────────────
+// Session lives in an httpOnly cookie set by the backend — the token is never
+// readable from JS. withCredentials is scoped to these calls only so every
+// other request behaves exactly as before.
+const AUTH_OPTS = { withCredentials: true, timeout: 20000 };
+
+export const authLogin = (email, password) =>
+  API.post("/auth/login", { email, password }, AUTH_OPTS);
+export const authRegister = (name, email, password) =>
+  API.post("/auth/register", { name, email, password }, AUTH_OPTS);
+export const authMe = () => API.get("/auth/me", AUTH_OPTS);
+export const authLogout = () => API.post("/auth/logout", null, AUTH_OPTS);
+export const authForgotPassword = (email) =>
+  API.post("/auth/forgot-password", { email }, AUTH_OPTS);
+export const authResetPassword = (token, password) =>
+  API.post("/auth/reset-password", { token, password }, AUTH_OPTS);
+
 // ─────────────────────── Summary / Dashboard ───────────────────────
 export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
   API.get("/summary/overview", {

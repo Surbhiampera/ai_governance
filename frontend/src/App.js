@@ -1,11 +1,17 @@
 import React, { useEffect, useRef } from "react";
 import {
   BrowserRouter as Router,
+  Navigate,
   NavLink,
   Route,
   Routes,
   useLocation,
 } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
 import AlertsSecurity from "./pages/AlertsSecurity";
@@ -59,54 +65,108 @@ function ScrollReset({ contentRef }) {
   return null;
 }
 
-function App() {
+// Gates the dashboard behind a session when auth is enabled; a no-op otherwise.
+function RequireAuth({ children }) {
+  const { enabled, status } = useAuth();
+  const location = useLocation();
+  if (!enabled) return children;
+  if (status === "loading") {
+    return (
+      <div className="login-shell">
+        <div className="auth-loading" role="status">Checking your session…</div>
+      </div>
+    );
+  }
+  if (status !== "authenticated") {
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
+  return children;
+}
+
+function SidebarUser() {
+  const { enabled, user, logout } = useAuth();
+  if (!enabled || !user) return null;
+  return (
+    <div className="sidebar-user">
+      <div className="sidebar-user-name" title={user.email}>{user.name || user.email}</div>
+      {user.name && <div className="sidebar-user-email">{user.email}</div>}
+      <button type="button" className="sidebar-signout" onClick={() => logout()}>
+        Sign out
+      </button>
+    </div>
+  );
+}
+
+function DashboardShell() {
   const contentRef = useRef(null);
   return (
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand-block">
+          <p className="brand-kicker">AI Governance</p>
+          <p className="brand-copy">Cost Intelligence Hub</p>
+        </div>
+
+        <nav className="nav-stack">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                isActive ? "nav-link active" : "nav-link"
+              }
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {NAV_ICONS[item.to]}
+                {item.label}
+              </span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <span>Platform</span>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
+            {navItems.length} active module{navItems.length !== 1 ? "s" : ""}
+          </div>
+          <SidebarUser />
+        </div>
+      </aside>
+
+      <main className="content" ref={contentRef}>
+        <ScrollReset contentRef={contentRef} />
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/alerts-security" element={<AlertsSecurity />} />
+          <Route path="/cost" element={<Cost />} />
+          <Route path="/optimization-tips" element={<OptimizationTips />} />
+          <Route path="/proxy-setup" element={<ProxySetup />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+function App() {
+  return (
     <Router>
-      <div className="shell">
-        <aside className="sidebar">
-          <div className="brand-block">
-            <p className="brand-kicker">AI Governance</p>
-            <p className="brand-copy">Cost Intelligence Hub</p>
-          </div>
-
-          <nav className="nav-stack">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {NAV_ICONS[item.to]}
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="sidebar-footer">
-            <span>Platform</span>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
-              {navItems.length} active module{navItems.length !== 1 ? "s" : ""}
-            </div>
-          </div>
-        </aside>
-
-        <main className="content" ref={contentRef}>
-          <ScrollReset contentRef={contentRef} />
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/alerts-security" element={<AlertsSecurity />} />
-            <Route path="/cost" element={<Cost />} />
-            <Route path="/optimization-tips" element={<OptimizationTips />} />
-            <Route path="/proxy-setup" element={<ProxySetup />} />
-          </Routes>
-        </main>
-      </div>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/*"
+            element={
+              <RequireAuth>
+                <DashboardShell />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </AuthProvider>
 
       {/* <ChatBot /> */}
     </Router>
