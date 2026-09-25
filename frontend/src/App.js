@@ -72,7 +72,7 @@ function RequireAuth({ children }) {
   if (!enabled) return children;
   if (status === "loading") {
     return (
-      <div className="login-shell">
+      <div className="auth-shell">
         <div className="auth-loading" role="status">Checking your session…</div>
       </div>
     );

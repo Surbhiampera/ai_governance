@@ -84,60 +84,64 @@ export default function Register() {
     >
       <AuthAlert>{error}</AuthAlert>
       <form className="auth-form" onSubmit={onSubmit} noValidate>
-        <div className="field">
-          <label htmlFor="reg-name">Full name</label>
-          <input
-            id="reg-name"
-            name="name"
-            type="text"
-            autoComplete="name"
-            maxLength={NAME_MAX_LENGTH}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-invalid={show("name") ? "true" : undefined}
-            autoFocus
-            required
-          />
-          {show("name") && <span className="field-error">{show("name")}</span>}
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="reg-name">Full name</label>
+            <input
+              id="reg-name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              maxLength={NAME_MAX_LENGTH}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={show("name") ? "true" : undefined}
+              autoFocus
+              required
+            />
+            {show("name") && <span className="field-error">{show("name")}</span>}
+          </div>
+          <div className="field">
+            <label htmlFor="reg-email">Work email</label>
+            <input
+              id="reg-email"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="off"
+              spellCheck={false}
+              maxLength={EMAIL_MAX_LENGTH}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={show("email") ? "true" : undefined}
+              required
+            />
+            {show("email") && <span className="field-error">{show("email")}</span>}
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="reg-email">Work email</label>
-          <input
-            id="reg-email"
-            name="email"
-            type="email"
-            inputMode="email"
-            autoComplete="username"
-            autoCapitalize="off"
-            spellCheck={false}
-            maxLength={EMAIL_MAX_LENGTH}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            aria-invalid={show("email") ? "true" : undefined}
-            required
+        <div className="form-grid">
+          <PasswordField
+            label="Password"
+            name="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            maxLength={PASSWORD_MAX_LENGTH}
+            error={show("password")}
+            describedBy="reg-pw-rules"
           />
-          {show("email") && <span className="field-error">{show("email")}</span>}
+          <PasswordField
+            label="Confirm password"
+            name="confirm-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            maxLength={PASSWORD_MAX_LENGTH}
+            error={show("confirm")}
+          />
         </div>
-        <PasswordField
-          label="Password"
-          name="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          maxLength={PASSWORD_MAX_LENGTH}
-          error={show("password")}
-          describedBy="reg-pw-rules"
-        />
         {password && <PasswordChecklist result={pwCheck} id="reg-pw-rules" />}
-        <PasswordField
-          label="Confirm password"
-          name="confirm-password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          autoComplete="new-password"
-          maxLength={PASSWORD_MAX_LENGTH}
-          error={show("confirm")}
-        />
         <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? "Creating account…" : "Create account"}
         </button>

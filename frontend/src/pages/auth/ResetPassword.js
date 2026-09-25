@@ -107,27 +107,29 @@ export default function ResetPassword() {
       <form className="auth-form" onSubmit={onSubmit} noValidate>
         {/* Hidden username field lets password managers attach the new password to the right account. */}
         <input type="text" name="username" autoComplete="username" hidden readOnly value="" />
-        <PasswordField
-          label="New password"
-          name="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          maxLength={PASSWORD_MAX_LENGTH}
-          error={show("password")}
-          describedBy="reset-pw-rules"
-          autoFocus
-        />
+        <div className="form-grid">
+          <PasswordField
+            label="New password"
+            name="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            maxLength={PASSWORD_MAX_LENGTH}
+            error={show("password")}
+            describedBy="reset-pw-rules"
+            autoFocus
+          />
+          <PasswordField
+            label="Confirm new password"
+            name="confirm-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            maxLength={PASSWORD_MAX_LENGTH}
+            error={show("confirm")}
+          />
+        </div>
         {password && <PasswordChecklist result={pwCheck} id="reset-pw-rules" />}
-        <PasswordField
-          label="Confirm new password"
-          name="confirm-password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          autoComplete="new-password"
-          maxLength={PASSWORD_MAX_LENGTH}
-          error={show("confirm")}
-        />
         <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? "Saving…" : "Reset password"}
         </button>
