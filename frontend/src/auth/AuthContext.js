@@ -1,9 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { authLogin, authLogout, authMe, authRegister } from "../api";
 
-// Login gate is opt-in until the backend /auth endpoints are live, so the
-// dashboard keeps working exactly as before. Set VITE_AUTH_ENABLED=true to enforce.
-export const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === "true";
+// Sign-in is required by default. Set VITE_AUTH_ENABLED=false (at build/dev
+// start) only to run the dashboard against a backend without /auth endpoints.
+export const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
 const IDLE_MINUTES = Number(import.meta.env.VITE_AUTH_IDLE_MINUTES) || 30;
 const REVALIDATE_MS = 5 * 60 * 1000;

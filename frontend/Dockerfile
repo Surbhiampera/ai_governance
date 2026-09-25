@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# Vite bakes VITE_* values in at build time; pass --build-arg VITE_AUTH_ENABLED=false to skip sign-in.
+ARG VITE_AUTH_ENABLED=true
+ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED
 RUN npm run build
 
 FROM nginx:1.27-alpine

@@ -93,8 +93,9 @@ export function authErrorMessage(error, fallback = "Something went wrong. Please
     }
     return "Too many attempts. Please wait a few minutes and try again.";
   }
-  if (status >= 500) return "The server had a problem. Please try again shortly.";
   const detail = data?.detail;
+  if (status === 503 && /not configured/i.test(detail || "")) return detail;
+  if (status >= 500) return "The server had a problem. Please try again shortly.";
   if (typeof detail === "string" && detail.length < 200) return detail;
   if (Array.isArray(detail) && typeof detail[0]?.msg === "string") return detail[0].msg;
   return fallback;
