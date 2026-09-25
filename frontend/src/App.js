@@ -9,7 +9,6 @@ import {
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/auth/Login";
-import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 import Dashboard from "./pages/Dashboard";
@@ -17,6 +16,7 @@ import Cost from "./pages/Cost";
 import AlertsSecurity from "./pages/AlertsSecurity";
 import ProxySetup from "./pages/ProxySetup";
 import OptimizationTips from "./pages/OptimizationTips";
+import Users from "./pages/Users";
 // import ChatBot from "./components/ChatBot";
 
 const navItems = [
@@ -26,6 +26,9 @@ const navItems = [
   { to: "/optimization-tips", label: "Optimization Tips" },
   { to: "/proxy-setup", label: "Proxy Setup" },
 ];
+
+// Shown only to admins (see DashboardShell).
+const adminNavItems = [{ to: "/users", label: "Users" }];
 
 const NAV_ICONS = {
   "/": (
@@ -46,6 +49,11 @@ const NAV_ICONS = {
   "/proxy-setup": (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+    </svg>
+  ),
+  "/users": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
   ),
   "/optimization-tips": (
@@ -83,6 +91,12 @@ function RequireAuth({ children }) {
   return children;
 }
 
+// Admin-only screens. A UI guard only — the backend enforces admin on /admin/*.
+function RequireAdmin({ children }) {
+  const { isAdmin } = useAuth();
+  return isAdmin ? children : <Navigate to="/" replace />;
+}
+
 function SidebarUser() {
   const { enabled, user, logout } = useAuth();
   if (!enabled || !user) return null;
@@ -99,6 +113,8 @@ function SidebarUser() {
 
 function DashboardShell() {
   const contentRef = useRef(null);
+  const { isAdmin } = useAuth();
+  const visibleNav = isAdmin ? [...navItems, ...adminNavItems] : navItems;
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -108,7 +124,7 @@ function DashboardShell() {
         </div>
 
         <nav className="nav-stack">
-          {navItems.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -142,6 +158,14 @@ function DashboardShell() {
           <Route path="/cost" element={<Cost />} />
           <Route path="/optimization-tips" element={<OptimizationTips />} />
           <Route path="/proxy-setup" element={<ProxySetup />} />
+          <Route
+            path="/users"
+            element={
+              <RequireAdmin>
+                <Users />
+              </RequireAdmin>
+            }
+          />
         </Routes>
       </main>
     </div>
@@ -154,9 +178,11 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* No public sign-up — accounts are created by admins on the Users page. */}
+          <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/set-password" element={<ResetPassword mode="invite" />} />
           <Route
             path="/*"
             element={
