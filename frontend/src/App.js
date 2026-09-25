@@ -102,12 +102,34 @@ function SidebarUser() {
   if (!enabled || !user) return null;
   return (
     <div className="sidebar-user">
-      <div className="sidebar-user-name" title={user.email}>{user.name || user.email}</div>
-      {user.name && <div className="sidebar-user-email">{user.email}</div>}
+      <div className="sidebar-user-name" title={user.name || user.email}>{user.name || user.email}</div>
+      {user.name && <div className="sidebar-user-email" title={user.email}>{user.email}</div>}
       <button type="button" className="sidebar-signout" onClick={() => logout()}>
         Sign out
       </button>
     </div>
+  );
+}
+
+function SidebarNav({ items }) {
+  return (
+    <nav className="nav-stack">
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {NAV_ICONS[item.to]}
+            {item.label}
+          </span>
+        </NavLink>
+      ))}
+    </nav>
   );
 }
 
@@ -118,33 +140,12 @@ function DashboardShell() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand-block brand-block--logo">
-          <div className="brand-text">
-            <p className="brand-kicker">AI Governance</p>
-            <p className="brand-copy">Cost Intelligence Hub</p>
-          </div>
-          <span className="brand-logo">
-            <img src="/ampera-logo.png" alt="Ampera" width="762" height="201" />
-          </span>
+        <div className="brand-block">
+          <p className="brand-kicker">AI Governance</p>
+          <p className="brand-copy">Cost Intelligence Hub</p>
         </div>
 
-        <nav className="nav-stack">
-          {visibleNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {NAV_ICONS[item.to]}
-                {item.label}
-              </span>
-            </NavLink>
-          ))}
-        </nav>
+        <SidebarNav items={visibleNav} />
 
         <div className="sidebar-footer">
           <span>Platform</span>

@@ -1396,13 +1396,14 @@ td {
   border: 0;
 }
 
+/* ── Sidebar footer: signed-in user + sign out ── */
 .sidebar-user {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.sidebar-user-name {
+.sidebar-footer .sidebar-user-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--white);
@@ -1411,7 +1412,8 @@ td {
   white-space: nowrap;
 }
 
-.sidebar-user-email {
+.sidebar-footer .sidebar-user-email {
+  margin-top: 2px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   overflow: hidden;
@@ -1420,7 +1422,7 @@ td {
 }
 
 .sidebar-signout {
-  margin-top: 10px;
+  margin-top: 12px;
   width: 100%;
   padding: 9px 12px;
   border-radius: 12px;
@@ -1984,62 +1986,6 @@ td {
     min-width: 0;
     flex: 1;
   }
-}
-
-/* ── Brand block with Ampera logo (sidebar + sign-in) ── */
-.brand-block--logo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.brand-block--logo .brand-text {
-  min-width: 0;
-}
-
-.brand-block--logo .brand-copy {
-  margin-top: 8px;
-}
-
-/* White chip keeps the logo's purple lettering legible on the dark gradient. */
-.brand-logo {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  padding: 7px 9px;
-  border-radius: 12px;
-  background: var(--white);
-  box-shadow: 0 6px 18px rgba(13, 3, 30, 0.25);
-}
-
-.brand-logo img {
-  display: block;
-  height: 20px;
-  width: auto;
-}
-
-.sidebar .brand-block--logo {
-  padding: 18px 14px 18px 16px;
-  gap: 8px;
-}
-
-.sidebar .brand-block--logo .brand-kicker {
-  letter-spacing: 0.14em;
-}
-
-.sidebar .brand-block--logo .brand-copy {
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.sidebar .brand-logo {
-  padding: 6px 7px;
-  border-radius: 10px;
-}
-
-.sidebar .brand-logo img {
-  height: 16px;
 }
 
 /* Sign-in page: Ampera logo centered at the top of the form column. */
