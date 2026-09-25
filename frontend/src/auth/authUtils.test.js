@@ -7,7 +7,7 @@ describe("safeRedirectPath", () => {
     expect(safeRedirectPath("/alerts-security?x=1")).toBe("/alerts-security?x=1");
   });
   it("blocks open redirects and auth loops", () => {
-    for (const bad of ["//evil.com", "/\\evil.com", "https://evil.com", "javascript:alert(1)", "/login", "/reset-password?token=x", undefined, 42]) {
+    for (const bad of ["//evil.com", "/\\evil.com", "https://evil.com", "javascript:alert(1)", "/login", "/login?next=x", undefined, 42]) {
       expect(safeRedirectPath(bad)).toBe("/");
     }
   });

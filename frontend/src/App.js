@@ -146,10 +146,6 @@ function DashboardShell() {
         <SidebarNav items={visibleNav} />
 
         <div className="sidebar-footer">
-          <span>Platform</span>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
-            {navItems.length} active module{navItems.length !== 1 ? "s" : ""}
-          </div>
           <SidebarUser />
         </div>
       </aside>

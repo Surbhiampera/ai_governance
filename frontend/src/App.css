@@ -120,10 +120,11 @@ textarea {
 
 .sidebar-footer {
   margin-top: auto;
-  padding: 18px 20px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
 .sidebar-footer span {
@@ -1398,13 +1399,11 @@ td {
 
 /* ── Sidebar footer: signed-in user + sign out ── */
 .sidebar-user {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 0;
 }
 
 .sidebar-footer .sidebar-user-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--white);
   overflow: hidden;
@@ -1413,8 +1412,8 @@ td {
 }
 
 .sidebar-footer .sidebar-user-email {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 1px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.6);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1422,14 +1421,14 @@ td {
 }
 
 .sidebar-signout {
-  margin-top: 12px;
+  margin-top: 8px;
   width: 100%;
-  padding: 9px 12px;
-  border-radius: 12px;
+  padding: 5px 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
   color: var(--white);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: background 0.18s ease;
 }

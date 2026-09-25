@@ -19,7 +19,7 @@ import {
 } from "../auth/authUtils";
 import { PasswordChecklist, PasswordField } from "./auth/AuthLayout";
 
-// Used only if /lookups/user-roles is unavailable — mirrors ROLES in the backend's app/core/deps.py.
+// Used only if /lookups/user-roles is unavailable (backed by LOOKUP_USER_ROLES).
 const FALLBACK_ROLES = ["viewer", "security_reviewer", "admin"];
 
 const roleLabel = (role) =>
@@ -39,7 +39,12 @@ const isPending = (u) => u.status === "no_password";
 
 function adminError(err, fallback) {
   const code = err?.response?.status;
+  const detail = err?.response?.data?.detail;
   if (code === 401) return "Your session has expired. Please sign in again.";
+  // Prefer the backend's own reason — it reuses 403/404/409 for several different cases.
+  // Skip FastAPI's generic "Not Found"/"Method Not Allowed" so a missing route keeps the friendlier text.
+  const generic = detail === "Not Found" || detail === "Method Not Allowed";
+  if (typeof detail === "string" && !generic && detail.length < 200 && code < 500) return detail;
   if (code === 403) return "You need admin access to manage users.";
   if (code === 404 || code === 405) return "User management isn't available on this server yet.";
   if (code === 409) return "A user with this email already exists.";
