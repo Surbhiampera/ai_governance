@@ -30,21 +30,17 @@ export const authLogin = (email, password) =>
   API.post("/auth/login", { email, password }, AUTH_OPTS);
 export const authMe = () => API.get("/auth/me", AUTH_OPTS);
 export const authLogout = () => API.post("/auth/logout", null, AUTH_OPTS);
-export const authForgotPassword = (email) =>
-  API.post("/auth/forgot-password", { email }, AUTH_OPTS);
-export const authResetPassword = (token, password) =>
-  API.post("/auth/reset-password", { token, password }, AUTH_OPTS);
 
 // ─────────────────────── User management (admin only) ───────────────────────
-// Accounts are created by admins only — there is no public sign-up. New users
-// get an emailed invite link to set their own password.
+// Accounts are created by admins only — there is no public sign-up and no
+// email. The admin sets each user's password and shares it with them directly.
 export const adminListUsers = () => API.get("/admin/users", AUTH_OPTS);
-export const adminCreateUser = ({ name, email, role }) =>
-  API.post("/admin/users", { name, email, role }, AUTH_OPTS);
+export const adminCreateUser = ({ name, email, role, password }) =>
+  API.post("/admin/users", { name, email, role, password }, AUTH_OPTS);
 export const adminUpdateUser = (id, changes) =>
   API.patch(`/admin/users/${encodeURIComponent(id)}`, changes, AUTH_OPTS);
-export const adminResendInvite = (id) =>
-  API.post(`/admin/users/${encodeURIComponent(id)}/resend-invite`, null, AUTH_OPTS);
+export const adminSetUserPassword = (id, password) =>
+  API.put(`/admin/users/${encodeURIComponent(id)}/password`, { password }, AUTH_OPTS);
 export const adminDeleteUser = (id) =>
   API.delete(`/admin/users/${encodeURIComponent(id)}`, AUTH_OPTS);
 

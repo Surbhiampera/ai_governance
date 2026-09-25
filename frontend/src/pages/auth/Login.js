@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH, authErrorMessage, normalizeEmail, safeRedirectPath } from "../../auth/authUtils";
 import { AuthAlert, AuthLayout, PasswordField } from "./AuthLayout";
@@ -79,11 +79,7 @@ export default function Login() {
           autoComplete="current-password"
           maxLength={PASSWORD_MAX_LENGTH}
         />
-        <div className="auth-row-end">
-          <Link to="/forgot-password" state={{ email: normalizeEmail(email) }}>
-            Forgot password?
-          </Link>
-        </div>
+        <div className="auth-row-end">Forgot your password? Ask your administrator to reset it.</div>
         <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? "Signing in…" : "Sign in"}
         </button>

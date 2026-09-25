@@ -9,8 +9,6 @@ import {
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/auth/Login";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import ResetPassword from "./pages/auth/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
 import AlertsSecurity from "./pages/AlertsSecurity";
@@ -186,9 +184,6 @@ function App() {
           <Route path="/login" element={<Login />} />
           {/* No public sign-up — accounts are created by admins on the Users page. */}
           <Route path="/register" element={<Navigate to="/login" replace />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/set-password" element={<ResetPassword mode="invite" />} />
           <Route
             path="/*"
             element={

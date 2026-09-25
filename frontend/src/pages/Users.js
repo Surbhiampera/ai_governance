@@ -3,12 +3,21 @@ import {
   adminCreateUser,
   adminDeleteUser,
   adminListUsers,
-  adminResendInvite,
+  adminSetUserPassword,
   adminUpdateUser,
   getLookupUserRoles,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { EMAIL_MAX_LENGTH, NAME_MAX_LENGTH, authErrorMessage, isValidEmail, normalizeEmail } from "../auth/authUtils";
+import {
+  EMAIL_MAX_LENGTH,
+  NAME_MAX_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  authErrorMessage,
+  checkPassword,
+  isValidEmail,
+  normalizeEmail,
+} from "../auth/authUtils";
+import { PasswordChecklist, PasswordField } from "./auth/AuthLayout";
 
 // Used only if /lookups/user-roles is unavailable — mirrors ROLES in the backend's app/core/deps.py.
 const FALLBACK_ROLES = ["viewer", "security_reviewer", "admin"];
@@ -25,8 +34,8 @@ const formatDate = (value) => {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 };
 
-// Backend may send `status`, or just whether a password has been set.
-const isPending = (u) => u.status === "invited" || u.status === "pending" || u.has_password === false;
+// Backend sends status "active" or "no_password".
+const isPending = (u) => u.status === "no_password";
 
 function adminError(err, fallback) {
   const code = err?.response?.status;
@@ -64,49 +73,50 @@ function Modal({ title, onClose, children, maxWidth = 520 }) {
   );
 }
 
-// Shown when the backend returns the invite link itself (e.g. no SMTP), so the
-// admin can pass it on over a trusted channel.
-function InviteResult({ result, onDone }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(result.invite_link);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+// New password + confirmation with the strength checklist. Returns an error
+// map so the parent form can gate submit on it.
+function usePasswordPair({ email = "", name = "" } = {}) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const check = useMemo(() => checkPassword(password, { email, name }), [password, email, name]);
+  const errors = {
+    password: !check.valid ? "Password doesn't meet all requirements." : "",
+    confirm: !confirm || confirm !== password ? "Passwords don't match." : "",
   };
+  const reset = () => {
+    setPassword("");
+    setConfirm("");
+  };
+  return { password, setPassword, confirm, setConfirm, check, errors, reset };
+}
 
+function PasswordPairFields({ pair, show, idPrefix, labels = ["Password", "Confirm password"], autoFocus }) {
   return (
-    <div className="stack" style={{ gap: 14 }}>
-      {result.invite_sent !== false ? (
-        <div className="users-note users-note--success">
-          An invite was emailed to <strong>{result.email}</strong>. They'll choose their own password from the link.
-        </div>
-      ) : (
-        <div className="users-note users-note--warn">
-          The invite email couldn't be sent to <strong>{result.email}</strong>.
-          {result.invite_link ? " Share the link below with them directly." : " Check the server's email settings, then resend the invite."}
-        </div>
-      )}
-      {result.invite_link && (
-        <div className="field">
-          <label htmlFor="invite-link">One-time setup link</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input id="invite-link" readOnly value={result.invite_link} onFocus={(e) => e.target.select()} />
-            <button type="button" className="btn btn-secondary" onClick={copy} style={{ whiteSpace: "nowrap" }}>
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <span className="users-hint">
-            Anyone with this link can set this account's password. Share it only with the user, over a trusted channel. It expires and works once.
-          </span>
-        </div>
-      )}
-      <div className="action-row" style={{ justifyContent: "flex-end" }}>
-        <button type="button" className="btn btn-primary" onClick={onDone}>Done</button>
+    <>
+      <div className="form-grid">
+        <PasswordField
+          label={labels[0]}
+          name={`${idPrefix}-password`}
+          value={pair.password}
+          onChange={(e) => pair.setPassword(e.target.value)}
+          autoComplete="new-password"
+          maxLength={PASSWORD_MAX_LENGTH}
+          error={show("password")}
+          describedBy={`${idPrefix}-pw-rules`}
+          autoFocus={autoFocus}
+        />
+        <PasswordField
+          label={labels[1]}
+          name={`${idPrefix}-confirm`}
+          value={pair.confirm}
+          onChange={(e) => pair.setConfirm(e.target.value)}
+          autoComplete="new-password"
+          maxLength={PASSWORD_MAX_LENGTH}
+          error={show("confirm")}
+        />
       </div>
-    </div>
+      {pair.password && <PasswordChecklist result={pair.check} id={`${idPrefix}-pw-rules`} />}
+    </>
   );
 }
 
@@ -117,12 +127,14 @@ function AddUserModal({ roles, onClose, onCreated }) {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState(null);
+  const [created, setCreated] = useState("");
+  const pw = usePasswordPair({ email, name });
 
   const errors = {
     name: !name.trim() ? "Enter the user's name." : "",
     email: !isValidEmail(email) ? "Enter a valid email address." : "",
     role: !role ? "Choose a role." : "",
+    ...pw.errors,
   };
   const show = (k) => (touched ? errors[k] : "");
 
@@ -135,9 +147,10 @@ function AddUserModal({ roles, onClose, onCreated }) {
     setSaving(true);
     try {
       const cleanEmail = normalizeEmail(email);
-      const res = await adminCreateUser({ name: name.trim(), email: cleanEmail, role });
+      await adminCreateUser({ name: name.trim(), email: cleanEmail, role, password: pw.password });
+      pw.reset();
       onCreated();
-      setResult({ email: cleanEmail, ...res.data });
+      setCreated(cleanEmail);
     } catch (err) {
       setError(adminError(err, "Couldn't create the user. Please try again."));
     } finally {
@@ -146,13 +159,21 @@ function AddUserModal({ roles, onClose, onCreated }) {
   };
 
   return (
-    <Modal title={result ? "User added" : "Add user"} onClose={onClose}>
-      {result ? (
-        <InviteResult result={result} onDone={onClose} />
+    <Modal title={created ? "User created" : "Add user"} onClose={onClose}>
+      {created ? (
+        <div className="stack" style={{ gap: 14 }}>
+          <div className="users-note users-note--success">
+            User created. Share the email <strong>{created}</strong> and the password you set with them over a secure channel —
+            not in the same message, and never in a shared chat or ticket.
+          </div>
+          <div className="action-row" style={{ justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-primary" onClick={onClose}>Done</button>
+          </div>
+        </div>
       ) : (
         <form className="stack" style={{ gap: 14 }} onSubmit={submit} noValidate>
           <p className="users-hint" style={{ margin: 0 }}>
-            The user gets an email invite to set their own password — you never see or choose it.
+            You set the user's password here and share it with them yourself — no email is sent.
           </p>
           {error && <div className="users-note users-note--error" role="alert">{error}</div>}
           <div className="form-grid">
@@ -197,14 +218,63 @@ function AddUserModal({ roles, onClose, onCreated }) {
               <span className="users-hint">Admins can add, change and remove every user.</span>
             )}
           </div>
+          <PasswordPairFields pair={pw} show={show} idPrefix="new-user" />
           <div className="action-row" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Adding…" : "Add user & send invite"}
+              {saving ? "Adding…" : "Add user"}
             </button>
           </div>
         </form>
       )}
+    </Modal>
+  );
+}
+
+function SetPasswordModal({ user, isMe, onClose, onDone }) {
+  const [touched, setTouched] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const pw = usePasswordPair({ email: user.email, name: user.name });
+  const show = (k) => (touched ? pw.errors[k] : "");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    setTouched(true);
+    setError("");
+    if (Object.values(pw.errors).some(Boolean)) return;
+    setSaving(true);
+    try {
+      await adminSetUserPassword(user.id, pw.password);
+      pw.reset();
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(adminError(err, "Couldn't set the password. Please try again."));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Set password" onClose={onClose}>
+      <form className="stack" style={{ gap: 14 }} onSubmit={submit} noValidate>
+        {/* Hidden username field lets password managers attach the password to the right account. */}
+        <input type="text" name="username" autoComplete="username" hidden readOnly value={user.email} />
+        <p className="users-hint" style={{ margin: 0 }}>
+          {isMe
+            ? "Set a new password for your account. You'll stay signed in here; your other sessions will be signed out."
+            : <>Set a new password for <strong>{user.name || user.email}</strong>. They'll be signed out everywhere and must sign in with the new password, which you share with them securely.</>}
+        </p>
+        {error && <div className="users-note users-note--error" role="alert">{error}</div>}
+        <PasswordPairFields pair={pw} show={show} idPrefix="set-pw" labels={["New password", "Confirm new password"]} autoFocus />
+        <div className="action-row" style={{ justifyContent: "flex-end" }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? "Saving…" : "Set password"}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }
@@ -254,7 +324,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [removing, setRemoving] = useState(null);
-  const [inviteResult, setInviteResult] = useState(null);
+  const [settingPassword, setSettingPassword] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
@@ -296,24 +366,6 @@ export default function Users() {
       flash(`${u.name || u.email} is now ${roleLabel(role)}.`);
     } catch (err) {
       setError(adminError(err, "Couldn't change the role."));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const resend = async (u) => {
-    setBusyId(u.id);
-    setError("");
-    try {
-      const res = await adminResendInvite(u.id);
-      const data = res.data || {};
-      if (data.invite_link || data.invite_sent === false) {
-        setInviteResult({ email: u.email, ...data });
-      } else {
-        flash(isPending(u) ? `Invite re-sent to ${u.email}.` : `Password reset link sent to ${u.email}.`);
-      }
-    } catch (err) {
-      setError(adminError(err, "Couldn't send the email."));
     } finally {
       setBusyId(null);
     }
@@ -364,7 +416,7 @@ export default function Users() {
                 <h3>Team members</h3>
                 <p style={{ color: "var(--gray-500)", fontSize: 13 }}>
                   {users.length} user{users.length !== 1 ? "s" : ""} · {adminCount} admin{adminCount !== 1 ? "s" : ""}
-                  {pendingCount > 0 && ` · ${pendingCount} invite${pendingCount !== 1 ? "s" : ""} pending`}
+                  {pendingCount > 0 && ` · ${pendingCount} without a password`}
                 </p>
               </div>
             </div>
@@ -420,14 +472,14 @@ export default function Users() {
                           </td>
                           <td>
                             <span className={`status-pill ${pending ? "warning" : "success"}`} style={{ padding: "4px 10px", fontSize: 11 }}>
-                              {pending ? "Invite pending" : "Active"}
+                              {pending ? "No password set" : "Active"}
                             </span>
                           </td>
                           <td style={{ color: "var(--gray-500)", fontSize: 13 }}>{formatDate(u.created_at)}</td>
                           <td>
                             <div className="users-actions">
-                              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => resend(u)}>
-                                {pending ? "Resend invite" : "Send reset link"}
+                              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setSettingPassword(u)}>
+                                Set password
                               </button>
                               {!isMe && (
                                 <button type="button" className="btn btn-ghost btn-sm users-remove" disabled={busy} onClick={() => setRemoving(u)}>
@@ -460,10 +512,16 @@ export default function Users() {
           }}
         />
       )}
-      {inviteResult && (
-        <Modal title="Invite link" onClose={() => setInviteResult(null)}>
-          <InviteResult result={inviteResult} onDone={() => setInviteResult(null)} />
-        </Modal>
+      {settingPassword && (
+        <SetPasswordModal
+          user={settingPassword}
+          isMe={!!me && (settingPassword.id === me.id || settingPassword.email === me.email)}
+          onClose={() => setSettingPassword(null)}
+          onDone={() => {
+            flash(`Password updated for ${settingPassword.name || settingPassword.email}.`);
+            load();
+          }}
+        />
       )}
     </>
   );
