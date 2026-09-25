@@ -978,42 +978,114 @@ td {
   display: flex;
   align-items: safe center;
   justify-content: center;
-  padding: 32px 24px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--white);
 }
 
+/* Full-screen split: project info (left) + sign-in form (right). */
 .auth-split {
   width: 100%;
-  max-width: 1040px;
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1.1fr) minmax(460px, 0.9fr);
   background: var(--white);
-  border: 1px solid var(--gray-200);
-  box-shadow: var(--shadow);
 }
 
 .auth-aside {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 32px;
+  gap: 40px;
+  padding: 40px 64px;
   color: var(--white);
-  background: linear-gradient(180deg, #1a0a2e 0%, #2d1b4e 60%, #9e2a97 100%);
+  background: linear-gradient(160deg, #1a0a2e 0%, #2d1b4e 55%, #9e2a97 100%);
+}
+
+/* Soft glow accents, echoing the hero cards. */
+.auth-aside::before,
+.auth-aside::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.auth-aside::before {
+  width: 520px;
+  height: 520px;
+  right: -180px;
+  top: -160px;
+  background: radial-gradient(circle, rgba(219, 234, 254, 0.1), transparent 70%);
+}
+
+.auth-aside::after {
+  width: 460px;
+  height: 460px;
+  left: -160px;
+  bottom: -200px;
+  background: radial-gradient(circle, rgba(240, 171, 252, 0.18), transparent 70%);
+}
+
+.auth-aside > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Info panel content sits in one centered column so the brand title,
+   headline, cards and footer all share the same left edge. */
+.auth-aside > .brand-block,
+.auth-aside-body,
+.auth-aside-foot {
+  width: 100%;
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Brand title — plain text with an accent bar, no box. */
+.auth-aside .brand-block {
+  padding: 2px 0 2px 16px;
+  border: 0;
+  border-left: 3px solid #f0abfc;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+}
+
+.auth-aside .brand-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #f0abfc;
+  opacity: 1;
+}
+
+.auth-aside .brand-copy {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.auth-aside-body {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .auth-aside-body h2 {
-  margin: 0 0 12px;
-  font-size: 26px;
-  line-height: 1.25;
+  margin: 0 0 16px;
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 
 .auth-aside-body > p {
-  margin: 0 0 24px;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.6;
-  font-size: 14px;
+  margin: 0 0 36px;
+  max-width: 540px;
+  color: rgba(255, 255, 255, 0.74);
+  line-height: 1.7;
+  font-size: 16px;
 }
 
 .auth-points {
@@ -1021,30 +1093,36 @@ td {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .auth-points li {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
 }
 
 .auth-point-icon {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(219, 234, 254, 0.1);
   border: 1px solid rgba(219, 234, 254, 0.18);
 }
 
 .auth-points strong {
   display: block;
-  font-size: 14px;
-  margin-bottom: 2px;
+  font-size: 15px;
+  margin-bottom: 4px;
 }
 
 .auth-points span {
@@ -1054,7 +1132,6 @@ td {
 }
 
 .auth-aside-foot {
-  margin-top: auto;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -1064,18 +1141,28 @@ td {
 .auth-main {
   display: flex;
   align-items: center;
-  padding: 40px 48px;
+  padding: 48px 64px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
 }
 
 .auth-main-inner {
   width: 100%;
-  max-width: 520px;
+  max-width: 460px;
   margin: 0 auto;
 }
 
+/* Keep browser autofill from tinting inputs blue. */
+.auth-main .field input:-webkit-autofill,
+.auth-main .field input:-webkit-autofill:hover,
+.auth-main .field input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--white) inset;
+  -webkit-text-fill-color: var(--gray-700);
+  caret-color: var(--gray-700);
+}
+
 .auth-main h1 {
-  margin: 0 0 6px;
-  font-size: 28px;
+  margin: 0 0 8px;
+  font-size: 32px;
   color: var(--black);
 }
 
@@ -1091,8 +1178,10 @@ td {
   gap: 16px;
 }
 
+/* The full-height form column has room to stack fields; side-by-side
+   inputs would be cramped at this width. */
 .auth-form .form-grid {
-  align-items: start;
+  grid-template-columns: 1fr;
 }
 
 .auth-main .field input[aria-invalid="true"] {
@@ -1270,10 +1359,15 @@ td {
   margin: 10px 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 16px;
+  gap: 4px;
   font-size: 12.5px;
   color: var(--gray-500);
+}
+
+.auth-rules li {
+  display: flex;
+  gap: 6px;
+  line-height: 1.45;
 }
 
 .auth-rules li.ok {
@@ -1281,8 +1375,8 @@ td {
 }
 
 .auth-rules li span[aria-hidden] {
-  display: inline-block;
-  width: 14px;
+  flex-shrink: 0;
+  width: 12px;
 }
 
 .auth-loading {
@@ -1342,10 +1436,25 @@ td {
   background: rgba(255, 255, 255, 0.14);
 }
 
+@media (max-width: 1100px) {
+  .auth-aside {
+    padding: 36px 40px;
+  }
+
+  .auth-points {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-main {
+    padding: 40px;
+  }
+}
+
 @media (max-width: 900px) {
   .auth-split {
     grid-template-columns: 1fr;
-    max-width: 560px;
+    min-height: 100vh;
+    grid-template-rows: auto 1fr;
   }
 
   .auth-aside {
@@ -1353,19 +1462,23 @@ td {
     gap: 0;
   }
 
+  .auth-aside::before,
+  .auth-aside::after,
   .auth-aside-body,
   .auth-aside-foot {
     display: none;
   }
 
   .auth-main {
-    padding: 28px 24px 32px;
+    align-items: flex-start;
+    padding: 32px 24px;
   }
 }
 
 @media (max-width: 560px) {
-  .auth-shell {
-    padding: 16px;
+  .auth-aside .brand-block {
+    min-width: 0;
+    width: 100%;
   }
 
   .auth-form .form-grid,
@@ -1870,5 +1983,76 @@ td {
   .users-search {
     min-width: 0;
     flex: 1;
+  }
+}
+
+/* ── Brand block with Ampera logo (sidebar + sign-in) ── */
+.brand-block--logo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.brand-block--logo .brand-text {
+  min-width: 0;
+}
+
+.brand-block--logo .brand-copy {
+  margin-top: 8px;
+}
+
+/* White chip keeps the logo's purple lettering legible on the dark gradient. */
+.brand-logo {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 7px 9px;
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 6px 18px rgba(13, 3, 30, 0.25);
+}
+
+.brand-logo img {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+.sidebar .brand-block--logo {
+  padding: 18px 14px 18px 16px;
+  gap: 8px;
+}
+
+.sidebar .brand-block--logo .brand-kicker {
+  letter-spacing: 0.14em;
+}
+
+.sidebar .brand-block--logo .brand-copy {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sidebar .brand-logo {
+  padding: 6px 7px;
+  border-radius: 10px;
+}
+
+.sidebar .brand-logo img {
+  height: 16px;
+}
+
+/* Sign-in page: Ampera logo centered at the top of the form column. */
+.auth-form-logo {
+  display: block;
+  height: 56px;
+  width: auto;
+  margin: 0 auto 36px;
+}
+
+@media (max-width: 560px) {
+  .auth-form-logo {
+    height: 40px;
+    margin-bottom: 24px;
   }
 }

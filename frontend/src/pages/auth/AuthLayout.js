@@ -41,6 +41,7 @@ export function AuthLayout({ title, subtitle, children, footer }) {
 
         <main className="auth-main">
           <div className="auth-main-inner">
+            <img className="auth-form-logo" src="/ampera-logo.png" alt="Ampera" width="762" height="201" />
             <h1>{title}</h1>
             {subtitle && <p className="auth-subtitle">{subtitle}</p>}
             {children}
@@ -70,6 +71,15 @@ const ASIDE_POINTS = [
     icon: (
       <svg {...ICON_PROPS}>
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Governance rules & budgets",
+    copy: "Budgets, rate limits and policies applied to every request.",
+    icon: (
+      <svg {...ICON_PROPS}>
+        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
     ),
   },
@@ -148,8 +158,11 @@ export function PasswordChecklist({ result, id }) {
       <ul className="auth-rules">
         {rules.map((r) => (
           <li key={r.key} className={r.ok ? "ok" : ""}>
-            <span aria-hidden="true">{r.ok ? "✓" : "•"}</span> {r.label}
-            <span className="sr-only">{r.ok ? " (met)" : " (not met)"}</span>
+            <span aria-hidden="true">{r.ok ? "✓" : "•"}</span>
+            <span>
+              {r.label}
+              <span className="sr-only">{r.ok ? " (met)" : " (not met)"}</span>
+            </span>
           </li>
         ))}
       </ul>

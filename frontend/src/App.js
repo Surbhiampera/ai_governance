@@ -118,9 +118,14 @@ function DashboardShell() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand-block">
-          <p className="brand-kicker">AI Governance</p>
-          <p className="brand-copy">Cost Intelligence Hub</p>
+        <div className="brand-block brand-block--logo">
+          <div className="brand-text">
+            <p className="brand-kicker">AI Governance</p>
+            <p className="brand-copy">Cost Intelligence Hub</p>
+          </div>
+          <span className="brand-logo">
+            <img src="/ampera-logo.png" alt="Ampera" width="762" height="201" />
+          </span>
         </div>
 
         <nav className="nav-stack">
