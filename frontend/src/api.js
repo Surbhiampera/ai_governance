@@ -28,14 +28,25 @@ const AUTH_OPTS = { withCredentials: true, timeout: 20000 };
 
 export const authLogin = (email, password) =>
   API.post("/auth/login", { email, password }, AUTH_OPTS);
-export const authRegister = (name, email, password) =>
-  API.post("/auth/register", { name, email, password }, AUTH_OPTS);
 export const authMe = () => API.get("/auth/me", AUTH_OPTS);
 export const authLogout = () => API.post("/auth/logout", null, AUTH_OPTS);
 export const authForgotPassword = (email) =>
   API.post("/auth/forgot-password", { email }, AUTH_OPTS);
 export const authResetPassword = (token, password) =>
   API.post("/auth/reset-password", { token, password }, AUTH_OPTS);
+
+// ─────────────────────── User management (admin only) ───────────────────────
+// Accounts are created by admins only — there is no public sign-up. New users
+// get an emailed invite link to set their own password.
+export const adminListUsers = () => API.get("/admin/users", AUTH_OPTS);
+export const adminCreateUser = ({ name, email, role }) =>
+  API.post("/admin/users", { name, email, role }, AUTH_OPTS);
+export const adminUpdateUser = (id, changes) =>
+  API.patch(`/admin/users/${encodeURIComponent(id)}`, changes, AUTH_OPTS);
+export const adminResendInvite = (id) =>
+  API.post(`/admin/users/${encodeURIComponent(id)}/resend-invite`, null, AUTH_OPTS);
+export const adminDeleteUser = (id) =>
+  API.delete(`/admin/users/${encodeURIComponent(id)}`, AUTH_OPTS);
 
 // ─────────────────────── Summary / Dashboard ───────────────────────
 export const getGovernanceOverview = (orgId, days = 14, range = "all") =>
@@ -360,6 +371,7 @@ export const getTracingProjects = (orgId) =>
     params: { org_id: orgId || undefined },
   });
 export const getLookupAuthTypes = () => API.get("/lookups/auth-types");
+export const getLookupUserRoles = () => API.get("/lookups/user-roles");
 export const getLookupIngestionModes = () =>
   API.get("/lookups/ingestion-modes");
 export const getLookupConnectorStatuses = () =>

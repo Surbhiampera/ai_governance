@@ -1,9 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { authLogin, authLogout, authMe, authRegister } from "../api";
+import { authLogin, authLogout, authMe } from "../api";
 
 // Sign-in is required by default. Set VITE_AUTH_ENABLED=false (at build/dev
 // start) only to run the dashboard against a backend without /auth endpoints.
 export const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
+
+export const ADMIN_ROLE = "admin";
 
 const IDLE_MINUTES = Number(import.meta.env.VITE_AUTH_IDLE_MINUTES) || 30;
 const REVALIDATE_MS = 5 * 60 * 1000;
@@ -108,19 +110,6 @@ export function AuthProvider({ children }) {
     return u;
   }, [refresh]);
 
-  const register = useCallback(async (name, email, password) => {
-    const res = await authRegister(name, email, password);
-    const u = asUser(res.data) || (await refresh());
-    if (u) {
-      setUser(u);
-      setStatus("authenticated");
-      setSignOutReason("");
-      lastActivityRef.current = Date.now();
-      broadcast({ type: "login" });
-    }
-    return u;
-  }, [refresh]);
-
   const logout = useCallback(async (reason = "") => {
     try {
       await authLogout(); // server clears the httpOnly cookie
@@ -166,8 +155,18 @@ export function AuthProvider({ children }) {
   }, [status, logout]);
 
   const value = useMemo(
-    () => ({ user, status, signOutReason, enabled: AUTH_ENABLED, login, register, logout, refresh }),
-    [user, status, signOutReason, login, register, logout, refresh],
+    () => ({
+      user,
+      status,
+      signOutReason,
+      enabled: AUTH_ENABLED,
+      // UI hint only — the backend must enforce admin on every /admin/* call.
+      isAdmin: user?.role === ADMIN_ROLE,
+      login,
+      logout,
+      refresh,
+    }),
+    [user, status, signOutReason, login, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -73,7 +73,7 @@ export const STRENGTH_LABELS = ["Very weak", "Weak", "Fair", "Strong", "Very str
 export function safeRedirectPath(path, fallback = "/") {
   if (typeof path !== "string" || !path.startsWith("/")) return fallback;
   if (path.startsWith("//") || path.startsWith("/\\") || /[\u0000-\u001f]/.test(path)) return fallback;
-  if (["/login", "/register", "/forgot-password", "/reset-password"].some((p) => path.startsWith(p))) {
+  if (["/login", "/register", "/forgot-password", "/reset-password", "/set-password"].some((p) => path.startsWith(p))) {
     return fallback;
   }
   return path;

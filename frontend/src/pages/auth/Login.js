@@ -49,11 +49,7 @@ export default function Login() {
     <AuthLayout
       title="Sign in"
       subtitle="Welcome back. Sign in to your governance dashboard."
-      footer={
-        <>
-          Don't have an account? <Link to="/register">Create one</Link>
-        </>
-      }
+      footer={<>Need access? Ask your administrator to create an account for you.</>}
     >
       <AuthAlert kind="info">{!error && notice}</AuthAlert>
       <AuthAlert>{error}</AuthAlert>
