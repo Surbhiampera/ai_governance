@@ -15,7 +15,29 @@ function readTokenFromUrl() {
   return /^[A-Za-z0-9._~+/=-]{16,2048}$/.test(token) ? token : "";
 }
 
-export default function ResetPassword() {
+// Same flow serves two links: a password reset (/reset-password) and an
+// admin-created account's invite (/set-password), which only differ in copy.
+const COPY = {
+  reset: {
+    title: "Choose a new password",
+    subtitle: "Your new password will sign you out everywhere else.",
+    invalid: "This password reset link is missing or malformed.",
+    expired: "This reset link is invalid, expired or already used. Request a new one.",
+    done: "Your password has been reset. Sign in with your new password.",
+    submit: "Reset password",
+  },
+  invite: {
+    title: "Set your password",
+    subtitle: "Your administrator created an account for you. Choose a password to finish setting it up.",
+    invalid: "This invite link is missing or malformed.",
+    expired: "This invite link is invalid, expired or already used. Ask your administrator to resend it, or request a reset link.",
+    done: "Your password is set. Sign in to get started.",
+    submit: "Set password",
+  },
+};
+
+export default function ResetPassword({ mode = "reset" }) {
+  const copy = COPY[mode] || COPY.reset;
   const navigate = useNavigate();
   const { status, logout } = useAuth();
   const [token] = useState(readTokenFromUrl);
@@ -62,12 +84,12 @@ export default function ResetPassword() {
       if (status === "authenticated") await logout();
       navigate("/login", {
         replace: true,
-        state: { notice: "Your password has been reset. Sign in with your new password." },
+        state: { notice: copy.done },
       });
     } catch (err) {
       const code = err?.response?.status;
       if (code === 400 || code === 401 || code === 403 || code === 410) {
-        setError("This reset link is invalid, expired or already used. Request a new one.");
+        setError(copy.expired);
       } else if (code === 404 || code === 405) {
         setError("Password reset isn't available on this server yet.");
       } else {
@@ -82,7 +104,7 @@ export default function ResetPassword() {
     return (
       <AuthLayout
         title="Link invalid"
-        subtitle="This password reset link is missing or malformed."
+        subtitle={copy.invalid}
         footer={<Link to="/login">Back to sign in</Link>}
       >
         <Link to="/forgot-password" className="btn btn-primary auth-link-btn">
@@ -94,12 +116,12 @@ export default function ResetPassword() {
 
   return (
     <AuthLayout
-      title="Choose a new password"
-      subtitle="Your new password will sign you out everywhere else."
+      title={copy.title}
+      subtitle={copy.subtitle}
       footer={<Link to="/login">Back to sign in</Link>}
     >
       <AuthAlert>{error}</AuthAlert>
-      {error.startsWith("This reset link") && (
+      {error === copy.expired && (
         <Link to="/forgot-password" className="btn btn-secondary auth-link-btn">
           Request a new link
         </Link>
@@ -131,7 +153,7 @@ export default function ResetPassword() {
         </div>
         {password && <PasswordChecklist result={pwCheck} id="reset-pw-rules" />}
         <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? "Saving…" : "Reset password"}
+          {submitting ? "Saving…" : copy.submit}
         </button>
       </form>
     </AuthLayout>
