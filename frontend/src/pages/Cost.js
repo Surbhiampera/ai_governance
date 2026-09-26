@@ -20,6 +20,14 @@ const money4 = (v) => `$${Number(v || 0).toFixed(4)}`;
 const money2 = (v) => { const n = Number(v || 0); return n > 0 && n < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`; };
 const num    = (v) => Number(v || 0).toLocaleString();
 const pct    = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) : "0.0";
+// INR amounts and rates come from the API as stored (each request converted at
+// its own day's rate) — format only, never convert here.
+const inr    = (v, dp = 4) => v == null ? "—" : `₹${Number(v).toLocaleString("en-IN", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
+const inr2   = (v) => { if (v == null) return "—"; const n = Number(v); return n > 0 && n < 0.01 ? inr(n, 6) : inr(n, 2); };
+const inrRateTitle = (item) =>
+  item.total_cost_inr == null ? "No USD→INR rate recorded"
+  : item.exchange_rate != null ? `@ ₹${Number(item.exchange_rate).toFixed(2)}/USD`
+  : "Calls converted at different daily USD→INR rates";
 
 const MODEL_COLOR_MAP = {
   "gpt-4o-mini": "#6366f1", "gpt-5-nano": "#8b5cf6",
@@ -528,6 +536,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                     <th style={{textAlign:"right"}}>Input Cost</th>
                     <th style={{textAlign:"right"}}>Output Cost</th>
                     <th style={{textAlign:"right"}}>Total Cost</th>
+                    <th style={{textAlign:"right"}}>Total Cost (₹)</th>
                     <th style={{textAlign:"right"}}>Cost Share (%)</th>
                     <th>Received At</th>
                   </tr>
@@ -592,6 +601,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                           <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(inCost)}</td>
                           <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12}}>{money(outCost)}</td>
                           <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#9E2A97"}}>{money(totCost)}</td>
+                          <td style={{textAlign:"right", fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#9E2A97"}} title={inrRateTitle(row)}>{inr(row.total_cost_inr)}</td>
                           <td style={{textAlign:"right"}}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
                               <div style={{ width: 50, height: 5, borderRadius: 3, background: "rgba(124,112,174,0.15)", overflow: "hidden" }}>
@@ -604,11 +614,11 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                         </tr>
                         {isGroup && isOpen && (
                           expState?.loading ? (
-                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>Loading calls…</td></tr>
+                            <tr><td colSpan={14} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>Loading calls…</td></tr>
                           ) : expState?.error ? (
-                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "#ef4444" }}>Failed to load calls.</td></tr>
+                            <tr><td colSpan={14} style={{ padding: "8px 18px", fontSize: 12, color: "#ef4444" }}>Failed to load calls.</td></tr>
                           ) : (expState?.children || []).length === 0 ? (
-                            <tr><td colSpan={13} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>No child calls found.</td></tr>
+                            <tr><td colSpan={14} style={{ padding: "8px 18px", fontSize: 12, color: "var(--gray-500)" }}>No child calls found.</td></tr>
                           ) : expState.children.map((child, ci) => {
                             const cInTok   = Number(child.prompt_tokens     || 0);
                             const cOutTok  = Number(child.completion_tokens || 0);
@@ -649,6 +659,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cInCost)}</td>
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11}}>{money(cOutCost)}</td>
                                 <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11, color:"#9E2A97"}}>{money(cTotCost)}</td>
+                                <td style={{textAlign:"right", fontFamily:"monospace", fontSize:11, color:"#9E2A97"}} title={inrRateTitle(child)}>{inr(child.total_cost_inr)}</td>
                                 <td />
                                 <td style={{ fontSize: 11, color: "var(--gray-500)", whiteSpace: "nowrap" }}>{child.received_at ? new Date(child.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                               </tr>
@@ -672,6 +683,7 @@ function ProjectDetailView({ projData, modelData, allProjects, trends, requests,
                     <td style={{textAlign:"right", fontFamily:"monospace", fontWeight:700}}>{money(requests.reduce((s,r)=>s+(Number(r.input_cost)||0),0))}</td>
                     <td style={{textAlign:"right", fontFamily:"monospace", fontWeight:700}}>{money(requests.reduce((s,r)=>s+(Number(r.output_cost)||0),0))}</td>
                     <td style={{textAlign:"right", fontFamily:"monospace", fontWeight:700, color:"#9E2A97"}}>{money2(projData.total_cost)}</td>
+                    <td style={{textAlign:"right", fontFamily:"monospace", fontWeight:700, color:"#9E2A97"}} title="Sum of each request's INR amount at its own day's rate">{inr2(projData.total_cost_inr)}</td>
                     <td style={{textAlign:"right", fontSize:11, color:"var(--gray-500)"}}>100%</td>
                   </tr>
                 </tfoot>
