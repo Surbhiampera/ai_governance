@@ -7,7 +7,15 @@ export const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
 export const ADMIN_ROLE = "admin";
 
-const IDLE_MINUTES = Number(import.meta.env.VITE_AUTH_IDLE_MINUTES) || 30;
+const IDLE_MINUTES = Number(import.meta.env.VITE_AUTH_IDLE_MINUTES) || 1440;
+
+function formatIdle(minutes) {
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  if (minutes % 1440 === 0) return plural(minutes / 1440, "day");
+  if (minutes % 60 === 0) return plural(minutes / 60, "hour");
+  return plural(minutes, "minute");
+}
+
 const REVALIDATE_MS = 5 * 60 * 1000;
 const CHANNEL_NAME = "aigov-auth";
 const ACTIVITY_EVENTS = ["mousedown", "keydown", "scroll", "touchstart", "mousemove"];
@@ -145,7 +153,7 @@ export function AuthProvider({ children }) {
     ACTIVITY_EVENTS.forEach((ev) => window.addEventListener(ev, mark, { passive: true }));
     const timer = setInterval(() => {
       if (Date.now() - lastActivityRef.current > IDLE_MINUTES * 60 * 1000) {
-        logout(`You were signed out after ${IDLE_MINUTES} minutes of inactivity.`);
+        logout(`You were signed out after ${formatIdle(IDLE_MINUTES)} of inactivity.`);
       }
     }, 30 * 1000);
     return () => {
