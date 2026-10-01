@@ -100,3 +100,7 @@ export function authErrorMessage(error, fallback = "Something went wrong. Please
   if (Array.isArray(detail) && typeof detail[0]?.msg === "string") return detail[0].msg;
   return fallback;
 }
+
+// Proxy Setup module flag from /auth/me. Strict === true so it stays off while
+// the flag is missing or the user is still loading.
+export const canSeeProxySetup = (user) => user?.modules?.proxy_setup === true;

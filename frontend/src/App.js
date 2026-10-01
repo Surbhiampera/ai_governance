@@ -8,6 +8,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { canSeeProxySetup } from "./auth/authUtils";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/Dashboard";
 import Cost from "./pages/Cost";
@@ -22,8 +23,10 @@ const navItems = [
   { to: "/alerts-security", label: "Alerts & Security" },
   { to: "/cost", label: "Cost" },
   { to: "/optimization-tips", label: "Optimization Tips" },
-  { to: "/proxy-setup", label: "Proxy Setup" },
 ];
+
+// Shown only when the user's modules.proxy_setup flag is true (see DashboardShell).
+const proxySetupNavItem = { to: "/proxy-setup", label: "Proxy Setup" };
 
 // Shown only to admins (see DashboardShell).
 const adminNavItems = [{ to: "/users", label: "Users" }];
@@ -95,6 +98,21 @@ function RequireAdmin({ children }) {
   return isAdmin ? children : <Navigate to="/" replace />;
 }
 
+// Proxy Setup is gated by the modules.proxy_setup flag from /auth/me. Viewers
+// are sent home rather than shown an error; a loader shows while unresolved.
+function RequireProxySetup({ children }) {
+  const { enabled, user, status } = useAuth();
+  if (!enabled) return children;
+  if (status === "loading") {
+    return (
+      <div className="auth-shell">
+        <div className="auth-loading" role="status">Checking your access…</div>
+      </div>
+    );
+  }
+  return canSeeProxySetup(user) ? children : <Navigate to="/" replace />;
+}
+
 function SidebarUser() {
   const { enabled, user, logout } = useAuth();
   if (!enabled || !user) return null;
@@ -133,8 +151,12 @@ function SidebarNav({ items }) {
 
 function DashboardShell() {
   const contentRef = useRef(null);
-  const { isAdmin } = useAuth();
-  const visibleNav = isAdmin ? [...navItems, ...adminNavItems] : navItems;
+  const { enabled, user, isAdmin } = useAuth();
+  const visibleNav = [
+    ...navItems,
+    ...(!enabled || canSeeProxySetup(user) ? [proxySetupNavItem] : []),
+    ...(isAdmin ? adminNavItems : []),
+  ];
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -157,7 +179,14 @@ function DashboardShell() {
           <Route path="/alerts-security" element={<AlertsSecurity />} />
           <Route path="/cost" element={<Cost />} />
           <Route path="/optimization-tips" element={<OptimizationTips />} />
-          <Route path="/proxy-setup" element={<ProxySetup />} />
+          <Route
+            path="/proxy-setup"
+            element={
+              <RequireProxySetup>
+                <ProxySetup />
+              </RequireProxySetup>
+            }
+          />
           <Route
             path="/users"
             element={
